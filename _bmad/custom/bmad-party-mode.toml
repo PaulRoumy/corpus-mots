@@ -1,0 +1,3 @@
+[workflow]
+output_dir = "{output_folder}/discussions"
+memory_dir = "{output_folder}/discussions/memoires"

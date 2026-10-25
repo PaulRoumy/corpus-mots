@@ -1,0 +1,2 @@
+[workflow]
+prd_output_path = "{planning_artifacts}/prd"

@@ -1,0 +1,14 @@
+# Réglages personnels (BMAD et Claude Code)
+_bmad/config.user.toml
+_bmad/custom/*.user.toml
+.claude/settings.local.json
+
+# Python / uv
+__pycache__/
+*.pyc
+.venv/
+
+# Système
+.DS_Store
+Thumbs.db
+desktop.ini
