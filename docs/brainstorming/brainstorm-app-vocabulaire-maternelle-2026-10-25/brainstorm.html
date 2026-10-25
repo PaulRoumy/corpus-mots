@@ -1,0 +1,870 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Le livre des mots</title>
+<meta name="description" content="Souvenir de la séance de brainstorming du 25 octobre 2026 sur une application qui aide les enseignants de maternelle à faire apprendre du vocabulaire avec des cartes mot-image.">
+<style>
+:root{
+  --paper:#fbf5e6; --paper-2:#f4ead2; --card:#fffdf6; --ink:#2a2733; --muted:#6c6574; --line:#e3d6b8;
+  --red:#d9472f; --yellow:#f2b31b; --blue:#2c6bd1; --green:#2f8f55; --purple:#8455c2; --pink:#e0688f;
+  --red-soft:#fbe1d9; --yellow-soft:#fdf0c8; --blue-soft:#dde8fb; --green-soft:#dcf0e2; --purple-soft:#ece1f8;
+  --shadow:0 2px 0 rgba(70,50,20,.08),0 8px 22px rgba(70,50,20,.12);
+  --dots:rgba(120,90,40,.10);
+  --script:"Segoe Script","Brush Script MT","Snell Roundhand","Apple Chancery",cursive;
+  --hand:"Segoe Print","Bradley Hand","Chalkboard SE","Comic Neue","Comic Sans MS",cursive;
+  --sans:ui-rounded,"SF Pro Rounded","Nunito","Segoe UI","Helvetica Neue",Arial,system-ui,sans-serif;
+  color-scheme:light;
+}
+@media (prefers-color-scheme:dark){
+  :root:not([data-theme="light"]){
+    --paper:#18241f; --paper-2:#1f2e28; --card:#24342d; --ink:#f0ede2; --muted:#a8b3aa; --line:#34483f;
+    --red:#ff8a73; --yellow:#ffd25e; --blue:#7fb0ff; --green:#73d39a; --purple:#c5a3f5; --pink:#ff9fbd;
+    --red-soft:#3d2a26; --yellow-soft:#3a3420; --blue-soft:#22324a; --green-soft:#21392b; --purple-soft:#33294a;
+    --shadow:0 2px 0 rgba(0,0,0,.25),0 10px 26px rgba(0,0,0,.35);
+    --dots:rgba(255,255,255,.05);
+    color-scheme:dark;
+  }
+}
+:root[data-theme="dark"]{
+  --paper:#18241f; --paper-2:#1f2e28; --card:#24342d; --ink:#f0ede2; --muted:#a8b3aa; --line:#34483f;
+  --red:#ff8a73; --yellow:#ffd25e; --blue:#7fb0ff; --green:#73d39a; --purple:#c5a3f5; --pink:#ff9fbd;
+  --red-soft:#3d2a26; --yellow-soft:#3a3420; --blue-soft:#22324a; --green-soft:#21392b; --purple-soft:#33294a;
+  --shadow:0 2px 0 rgba(0,0,0,.25),0 10px 26px rgba(0,0,0,.35);
+  --dots:rgba(255,255,255,.05);
+  color-scheme:dark;
+}
+*{box-sizing:border-box}
+html{-webkit-text-size-adjust:100%}
+body{
+  margin:0;background:var(--paper);color:var(--ink);font-family:var(--sans);line-height:1.55;font-size:17px;
+  background-image:radial-gradient(var(--dots) 1.2px,transparent 1.3px);background-size:22px 22px;
+  overflow-x:hidden;
+}
+.wrap{max-width:1040px;margin:0 auto;padding:0 16px}
+h1,h2,h3{line-height:1.15;margin:0}
+p{margin:.5em 0}
+.hand{font-family:var(--hand)}
+.script{font-family:var(--script);font-weight:400}
+.muted{color:var(--muted)}
+.fr{font-style:italic;font-family:var(--script);font-size:1.15em;color:var(--blue)}
+section.chapter{padding:56px 0 24px}
+.chapter-tab{display:inline-flex;align-items:center;gap:10px;font-family:var(--hand);font-size:15px;
+  background:var(--card);border:2px solid var(--ink);border-radius:999px;padding:4px 14px 4px 6px;box-shadow:var(--shadow)}
+.chapter-tab b{display:inline-grid;place-items:center;width:28px;height:28px;border-radius:50%;color:#fff;background:var(--c,var(--red));font-family:var(--sans)}
+.chapter h2{font-size:clamp(30px,6vw,52px);margin:14px 0 6px;letter-spacing:-.5px}
+.chapter h2 .script{color:var(--c,var(--red))}
+.lede{max-width:680px;font-size:18px;color:var(--muted)}
+h3{font-size:21px;margin:30px 0 10px}
+.sub{font-family:var(--hand);font-size:14px;letter-spacing:.3px;text-transform:uppercase;color:var(--muted);margin:30px 0 10px}
+
+/* ---------- cover ---------- */
+.cover{padding:36px 0 20px}
+.book{position:relative;background:var(--card);border:3px solid var(--ink);border-radius:18px 28px 28px 18px;
+  box-shadow:-10px 0 0 var(--red),-13px 0 0 var(--ink),var(--shadow);padding:34px 26px 30px 34px;margin-left:12px;overflow:hidden}
+.book::after{content:"";position:absolute;inset:auto -40px -60px auto;width:220px;height:220px;border-radius:50%;background:var(--yellow-soft);z-index:0}
+.book > *{position:relative;z-index:1}
+.cover .kicker{font-family:var(--hand);color:var(--muted);font-size:15px}
+.cover h1{font-size:clamp(38px,8.5vw,78px);letter-spacing:-1px;margin:8px 0 6px}
+.cover h1 .script{color:var(--blue);display:block;font-size:.75em;margin-top:4px}
+.cover .tagline{font-size:19px;max-width:620px}
+.meta{display:flex;flex-wrap:wrap;gap:8px;margin-top:18px}
+.chip{font-size:14px;border:2px solid var(--ink);border-radius:999px;padding:3px 12px;background:var(--paper)}
+.chip.y{background:var(--yellow-soft)}.chip.b{background:var(--blue-soft)}.chip.g{background:var(--green-soft)}.chip.r{background:var(--red-soft)}
+.letters{display:flex;gap:6px;flex-wrap:wrap;margin:22px 0 4px}
+.letters span{display:grid;place-items:center;width:44px;height:50px;border-radius:9px;font-weight:800;font-size:26px;color:#fff;border:2px solid var(--ink);box-shadow:0 3px 0 var(--ink)}
+.letters span:nth-child(4n+1){background:#d9472f;transform:rotate(-4deg)}
+.letters span:nth-child(4n+2){background:#f2b31b;transform:rotate(3deg);color:#2a2733}
+.letters span:nth-child(4n+3){background:#2c6bd1;transform:rotate(-2deg)}
+.letters span:nth-child(4n+4){background:#2f8f55;transform:rotate(4deg)}
+.toc{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin-top:24px}
+.toc a{display:block;text-decoration:none;color:var(--ink);background:var(--paper);border:2px dashed var(--line);border-radius:12px;padding:10px 12px;font-size:14px}
+.toc a b{display:block;font-family:var(--hand);font-size:13px;color:var(--muted);font-weight:400}
+.toc a:hover,.toc a:focus-visible{border-color:var(--ink);border-style:solid}
+
+/* ---------- JTBD: classroom job chart ---------- */
+.jobchart{background:var(--card);border:3px solid var(--ink);border-radius:16px;padding:18px 16px 10px;box-shadow:var(--shadow);position:relative}
+.jobchart-title{font-family:var(--hand);text-align:center;font-size:18px;margin-bottom:12px}
+.jobchart-title .script{color:var(--red);font-size:1.3em}
+.rope{height:4px;background:repeating-linear-gradient(90deg,var(--muted) 0 6px,transparent 6px 9px);border-radius:2px;margin:6px 0 0;opacity:.5}
+.jobs{display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:14px 12px;padding:4px 0 10px}
+.job{position:relative;background:var(--paper);border:2px solid var(--ink);border-radius:10px;padding:22px 12px 12px;font-size:15px}
+.job::before{content:"";position:absolute;top:-10px;left:50%;width:12px;height:24px;margin-left:-6px;border-radius:3px;background:var(--c);border:2px solid var(--ink)}
+.job:nth-child(odd){transform:rotate(-1deg)}.job:nth-child(even){transform:rotate(1.2deg)}
+.job .verb{display:block;font-weight:800;font-size:16px;color:var(--c)}
+.job.star{background:var(--yellow-soft)}
+.job.star::after{content:"née d'une douleur";position:absolute;right:8px;top:4px;font-family:var(--hand);font-size:11px;color:var(--muted)}
+.pains{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:18px;margin-top:8px}
+.plaster{position:relative;background:var(--red-soft);border:2px solid var(--ink);border-radius:40px;padding:16px 26px 16px 70px;transform:rotate(-1.2deg)}
+.plaster:nth-child(2){transform:rotate(1.4deg)}
+.plaster::before{content:"";position:absolute;left:14px;top:50%;width:40px;height:26px;margin-top:-13px;border-radius:8px;
+  background:radial-gradient(var(--red) 1.5px,transparent 2px) 0 0/8px 8px,var(--card);border:2px solid var(--ink)}
+.plaster b{display:block;font-family:var(--hand);font-size:13px;color:var(--red);text-transform:uppercase;letter-spacing:.5px}
+.today{display:flex;flex-wrap:wrap;align-items:center;gap:10px;margin-top:16px;font-size:15px}
+.today .file{display:inline-flex;align-items:center;gap:6px;border:2px solid var(--ink);border-radius:6px;padding:3px 10px;background:var(--card);font-weight:700}
+.today .file i{width:14px;height:16px;border-radius:2px;display:inline-block;background:var(--c)}
+.note-paul{font-family:var(--hand);background:var(--yellow-soft);border-left:6px solid var(--yellow);padding:10px 14px;border-radius:4px 12px 12px 4px;margin-top:16px}
+
+/* polysemy */
+.poly{display:grid;grid-template-columns:1fr auto 1fr;gap:12px;align-items:center;margin-top:8px}
+.flash{background:var(--card);border:3px solid var(--ink);border-radius:14px;box-shadow:var(--shadow);overflow:hidden;text-align:center}
+.flash .pic{height:120px;display:grid;place-items:center;background:var(--blue-soft);border-bottom:2px dashed var(--line)}
+.flash .pic svg{width:110px;height:100px}
+.flash .word{font-family:var(--script);font-size:30px;padding:8px 6px 0;color:var(--ink)}
+.flash .sense{font-size:13px;color:var(--muted);padding:0 8px 10px}
+.poly .bridge{font-family:var(--script);font-size:46px;color:var(--purple)}
+.criteria{display:flex;flex-wrap:wrap;gap:10px;margin-top:10px}
+.criteria span{border:2px solid var(--ink);border-radius:12px;padding:8px 14px;background:var(--green-soft);font-weight:700}
+.answered{font-size:14px;color:var(--muted);margin-top:8px}
+
+/* section ladder */
+.ladder{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;align-items:end;margin-top:10px}
+.step{background:var(--card);border:2px solid var(--ink);border-radius:12px;padding:12px;box-shadow:var(--shadow)}
+.step:nth-child(1){min-height:170px}.step:nth-child(2){min-height:210px}.step:nth-child(3){min-height:250px}
+.step .lvl{display:inline-block;font-weight:800;color:#fff;border-radius:6px;padding:1px 8px;font-size:13px;background:var(--c)}
+.step h4{margin:8px 0 4px;font-size:16px}
+.step p{font-size:14px;color:var(--muted)}
+.bisc{display:flex;gap:4px;margin-top:8px;flex-wrap:wrap}
+.bisc i{display:block;width:26px;height:26px;border:2px solid var(--ink);background:#e8b766}
+.bisc i.round{border-radius:50%}.bisc i.sq{border-radius:4px}.bisc i.rect{width:38px;height:20px;border-radius:4px}.bisc i.heart{border-radius:50% 50% 4px 50%;transform:rotate(45deg) scale(.85)}
+.bisc i.abs{background:transparent;border-style:dashed;border-radius:50%}
+.ladder-foot{display:flex;justify-content:space-between;font-family:var(--hand);font-size:13px;color:var(--muted);margin-top:6px}
+
+/* idea pills generic */
+.pills{display:flex;flex-wrap:wrap;gap:8px;margin:8px 0}
+.pill{background:var(--card);border:2px solid var(--line);border-radius:10px;padding:6px 12px;font-size:15px}
+.pill b{color:var(--c,var(--ink))}
+
+/* ---------- Persona: coat pegs ---------- */
+.pegs{position:relative;padding-top:26px}
+.pegs::before{content:"";position:absolute;left:0;right:0;top:0;height:16px;border-radius:8px;background:var(--paper-2);border:2px solid var(--ink)}
+.personas{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:18px}
+.persona{position:relative;background:var(--card);border:3px solid var(--ink);border-radius:16px;padding:18px 16px 16px;box-shadow:var(--shadow);margin-top:14px}
+.persona::before{content:"";position:absolute;top:-30px;left:50%;width:18px;height:30px;margin-left:-9px;border:3px solid var(--ink);border-top:none;border-radius:0 0 12px 12px;background:transparent}
+.persona .head{display:flex;align-items:center;gap:12px}
+.face{flex:none;width:58px;height:58px}
+.persona .name{font-family:var(--script);font-size:32px;line-height:1}
+.persona .role{font-size:13px;color:var(--muted)}
+.persona .tag{display:inline-block;margin-top:4px;font-size:12px;font-weight:800;color:#fff;background:var(--c);padding:1px 8px;border-radius:6px}
+.journey{list-style:none;margin:14px 0 0;padding:0 0 0 18px;border-left:3px dotted var(--c)}
+.journey li{position:relative;font-size:14.5px;margin:0 0 10px}
+.journey li::before{content:"";position:absolute;left:-26px;top:5px;width:13px;height:13px;border-radius:50%;background:var(--card);border:3px solid var(--c)}
+.journey li.risk::before{background:var(--red);border-color:var(--red)}
+.journey li.key::before{background:var(--c)}
+.journey .k{display:block;font-family:var(--hand);font-size:11.5px;text-transform:uppercase;letter-spacing:.4px;color:var(--muted)}
+.journey li.risk .k{color:var(--red)}
+.tabs-mock{display:flex;gap:4px;margin:6px 0 2px}
+.tabs-mock span{font-size:12.5px;border:2px solid var(--ink);border-bottom:none;border-radius:8px 8px 0 0;padding:2px 8px;background:var(--paper)}
+.tabs-mock span.on{background:var(--green-soft)}
+.nogate{margin-top:10px;font-size:13px;border:2px dashed var(--red);border-radius:10px;padding:6px 10px;color:var(--red)}
+.calendar{display:flex;gap:3px;margin-top:6px}
+.calendar span{flex:1;text-align:center;font-size:11px;border:1.5px solid var(--line);border-radius:4px;padding:2px 0;color:var(--muted)}
+.calendar span.fri{background:var(--c);color:#fff;border-color:var(--c);font-weight:800}
+
+/* ---------- Worst idea: flip cards ---------- */
+.naughty{background:repeating-linear-gradient(-45deg,var(--paper-2) 0 14px,var(--paper) 14px 28px);border:3px solid var(--ink);border-radius:18px;padding:20px 14px}
+.naughty-head{display:flex;flex-wrap:wrap;justify-content:space-between;gap:8px;align-items:baseline;margin-bottom:12px}
+.naughty-head .hand{font-size:15px;color:var(--muted)}
+.flips{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:14px}
+.flip{appearance:none;border:none;background:none;padding:0;font:inherit;color:inherit;text-align:left;cursor:pointer;perspective:900px;min-height:170px}
+.flip .inner{position:relative;display:block;height:100%;min-height:170px;transition:transform .6s cubic-bezier(.3,1.4,.5,1);transform-style:preserve-3d}
+.flip[aria-pressed="true"] .inner{transform:rotateY(180deg)}
+.flip .face-a,.flip .face-b{position:absolute;inset:0;display:flex;flex-direction:column;justify-content:space-between;border:3px solid var(--ink);border-radius:14px;padding:14px;backface-visibility:hidden;-webkit-backface-visibility:hidden;box-shadow:var(--shadow)}
+.flip .face-a{background:var(--red-soft)}
+.flip .face-a .bad{font-family:var(--hand);font-size:21px;line-height:1.2;transform:rotate(-2deg)}
+.flip .face-a .x{font-size:12px;font-weight:800;color:var(--red);text-transform:uppercase;letter-spacing:.6px}
+.flip .face-b{background:var(--green-soft);transform:rotateY(180deg)}
+.flip .face-b .good{font-size:15px;font-weight:700}
+.flip .face-b .src{font-size:12px;color:var(--muted)}
+.flip .hint{font-size:12px;color:var(--muted)}
+.flip:focus-visible{outline:3px solid var(--blue);outline-offset:4px;border-radius:14px}
+@media (prefers-reduced-motion:reduce){.flip .inner{transition:none}}
+
+/* shelf diagram */
+.diagram{background:var(--card);border:3px solid var(--ink);border-radius:16px;padding:14px;box-shadow:var(--shadow)}
+.diagram svg{width:100%;height:auto;display:block}
+.diagram .cap{font-size:14px;color:var(--muted);margin-top:6px}
+.svg-ink{stroke:var(--ink)}
+.svg-txt{fill:var(--ink);font-family:var(--sans)}
+.svg-mut{fill:var(--muted);font-family:var(--sans)}
+.defs{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:12px;margin-top:12px}
+.def{border:2px solid var(--ink);border-radius:12px;padding:10px 14px;background:var(--paper)}
+.def dt{font-family:var(--script);font-size:24px;color:var(--c)}
+.def dd{margin:0;font-size:14.5px}
+.entry{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin-top:10px}
+.entry .slot{border:2px solid var(--ink);border-radius:8px;padding:4px 10px;background:var(--card);font-size:14px}
+.entry .slot small{display:block;font-size:10.5px;color:var(--muted);text-transform:uppercase;letter-spacing:.4px}
+.entry .arrow{font-weight:800;color:var(--muted)}
+.entry .magic{background:var(--purple-soft);border-style:dashed}
+
+/* ---------- One feature: the one card ---------- */
+.onecard{display:grid;grid-template-columns:minmax(0,1.05fr) minmax(0,1fr);gap:22px;align-items:start}
+.phone{background:var(--ink);border-radius:34px;padding:14px 10px;max-width:340px;margin:0 auto;box-shadow:var(--shadow)}
+.screen{background:var(--paper);border-radius:24px;padding:16px 14px;min-height:430px;color:var(--ink)}
+.screen .bar{display:flex;justify-content:space-between;font-size:12px;color:var(--muted);margin-bottom:10px}
+.screen label{font-family:var(--hand);font-size:14px;display:block;margin-bottom:6px}
+.screen input{width:100%;font:inherit;font-family:var(--script);font-size:24px;padding:8px 12px;border:2px solid var(--ink);border-radius:12px;background:var(--card);color:var(--ink)}
+.screen input:focus{outline:3px solid var(--yellow);outline-offset:1px}
+.suggest{display:flex;gap:6px;flex-wrap:wrap;margin:8px 0 2px}
+.suggest button{font:inherit;font-size:13px;border:1.5px solid var(--line);border-radius:999px;padding:2px 10px;background:var(--card);color:var(--ink);cursor:pointer}
+.result{margin-top:12px;font-size:14px}
+.alert{border:2px solid var(--ink);border-radius:12px;padding:10px 12px;background:var(--yellow-soft)}
+.alert.new{background:var(--green-soft)}
+.alert b{display:block;font-size:15px}
+.thumbs{display:grid;grid-template-columns:repeat(2,1fr);gap:8px;margin-top:10px}
+.thumb{border:2px solid var(--ink);border-radius:10px;background:var(--card);overflow:hidden;font-size:11.5px}
+.thumb .ph{height:54px;display:grid;place-items:center;background:var(--blue-soft)}
+.thumb .ph svg{height:44px;width:60px}
+.thumb .tg{padding:4px 6px;display:flex;flex-wrap:wrap;gap:3px}
+.thumb .tg span{border-radius:4px;padding:0 4px;background:var(--paper-2)}
+.thumb.add .ph{background:transparent;border-bottom:2px dashed var(--line);font-size:26px;font-weight:800;color:var(--muted)}
+.demo-note{font-size:11.5px;color:var(--muted);margin-top:10px;text-align:center}
+.features{list-style:none;margin:0;padding:0;counter-reset:f}
+.features li{position:relative;padding:10px 12px 10px 48px;margin-bottom:10px;background:var(--card);border:2px solid var(--line);border-radius:12px;font-size:15px}
+.features li::before{counter-increment:f;content:counter(f);position:absolute;left:10px;top:9px;width:28px;height:28px;border-radius:50%;display:grid;place-items:center;background:var(--yellow);color:#2a2733;font-weight:800;border:2px solid var(--ink)}
+.features li.lead{border-color:var(--ink);background:var(--yellow-soft)}
+
+/* identity card */
+.idcard{position:relative;background:linear-gradient(135deg,var(--blue-soft),var(--purple-soft));border:3px solid var(--ink);border-radius:18px;padding:18px;box-shadow:var(--shadow);margin-top:10px;overflow:hidden}
+.idcard::before{content:"CARTE D'IDENTITÉ · IMAGE";position:absolute;right:-6px;top:10px;font-weight:800;font-size:11px;letter-spacing:2px;color:var(--muted);transform:rotate(0)}
+.idgrid{display:grid;grid-template-columns:150px 1fr;gap:16px;align-items:start}
+.idphoto{background:var(--card);border:2px solid var(--ink);border-radius:10px;aspect-ratio:3/4;display:grid;place-items:center}
+.idphoto svg{width:80%}
+.fields{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:8px}
+.field{background:var(--card);border:2px solid var(--ink);border-radius:10px;padding:6px 10px}
+.field small{display:block;font-size:10.5px;text-transform:uppercase;letter-spacing:.5px;color:var(--muted)}
+.field span{font-weight:700;font-size:15px}
+.field .w{font-family:var(--script);font-size:24px;font-weight:400}
+.secs{display:flex;gap:4px}
+.secs i{font-style:normal;font-size:12px;font-weight:800;border:2px solid var(--ink);border-radius:5px;padding:0 5px;opacity:.35}
+.secs i.on{opacity:1;background:var(--yellow)}
+.idcard .stamp{position:absolute;right:16px;bottom:12px;font-family:var(--hand);font-size:12px;color:var(--muted)}
+.gestures{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-top:10px}
+.gesture{text-align:center;background:var(--card);border:2px solid var(--ink);border-radius:14px;padding:12px 8px;box-shadow:var(--shadow)}
+.gesture .n{display:inline-grid;place-items:center;width:34px;height:34px;border-radius:50%;background:var(--c);color:#fff;font-weight:800;font-size:18px;border:2px solid var(--ink)}
+.gesture p{font-size:14px;margin:8px 0 0}
+.reality{margin-top:14px;font-size:15px;border:2px dashed var(--muted);border-radius:12px;padding:10px 14px}
+.reality s{color:var(--muted)}
+
+/* ---------- Rules poster ---------- */
+.poster{background:var(--card);border:3px solid var(--ink);border-radius:6px;padding:26px 20px 20px;box-shadow:var(--shadow);position:relative;transform:rotate(-.4deg)}
+.poster::before,.poster::after{content:"";position:absolute;top:-12px;width:80px;height:24px;background:rgba(242,179,27,.55);border:1px solid rgba(0,0,0,.08)}
+.poster::before{left:24px;transform:rotate(-6deg)}.poster::after{right:24px;transform:rotate(5deg)}
+.poster h3{margin-top:0;text-align:center;font-family:var(--hand);font-size:24px}
+.rules{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:14px;margin-top:14px}
+.rule{display:flex;gap:12px;align-items:flex-start}
+.rule .ico{flex:none;width:46px;height:46px;border-radius:12px;border:2px solid var(--ink);display:grid;place-items:center;background:var(--c)}
+.rule .ico svg{width:28px;height:28px}
+.rule b{display:block}
+.rule p{margin:2px 0 0;font-size:14.5px;color:var(--muted)}
+.access{display:flex;flex-wrap:wrap;gap:8px;justify-content:center;margin-top:18px;font-size:14px}
+.access span{border:2px solid var(--ink);border-radius:999px;padding:3px 12px}
+.access .yes{background:var(--green-soft)}
+.access .no{background:var(--paper);text-decoration:line-through;text-decoration-color:var(--red);text-decoration-thickness:2px;color:var(--muted)}
+
+/* ---------- Climax ---------- */
+.finale{position:relative;background:var(--ink);color:var(--paper);border-radius:28px;padding:40px 20px 30px;margin-top:20px;overflow:hidden}
+.finale::before{content:"";position:absolute;inset:0;background-image:radial-gradient(rgba(255,255,255,.07) 1.2px,transparent 1.3px);background-size:22px 22px}
+.finale > *{position:relative}
+.finale .chapter-tab{background:var(--paper);color:var(--ink);border-color:var(--paper)}
+.finale h2{font-size:clamp(32px,6.5vw,58px);margin:14px 0 6px}
+.finale h2 .script{color:var(--yellow)}
+.finale .lede{color:inherit;opacity:.8}
+.stars{display:grid;grid-template-columns:repeat(3,1fr);gap:16px;margin:28px 0 10px;align-items:end}
+.prio{background:var(--card);color:var(--ink);border:3px solid var(--paper);border-radius:18px;padding:56px 16px 18px;position:relative;text-align:center}
+.prio:nth-child(1){padding-top:64px;padding-bottom:34px}
+.prio .badge{position:absolute;top:-30px;left:50%;margin-left:-38px;width:76px;height:76px}
+.prio .badge text{font-family:var(--sans);font-weight:900;font-size:30px;fill:#2a2733}
+.prio h3{margin:0 0 6px;font-size:20px}
+.prio p{font-size:14.5px;color:var(--muted);margin:0}
+.pipeline{margin-top:30px;background:rgba(255,255,255,.04);border:2px dashed rgba(255,255,255,.25);border-radius:18px;padding:16px}
+.pipeline .label{font-family:var(--hand);text-align:center;font-size:15px;opacity:.8}
+.pipeline .slogan{text-align:center;font-family:var(--script);font-size:clamp(28px,5vw,42px);color:var(--yellow);margin:2px 0 6px}
+.pipeline svg{width:100%;height:auto;display:block}
+.pt{font-family:var(--sans);fill:#fbf5e6}
+.pt.dim{opacity:.7}
+.insights{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:14px;margin-top:26px}
+.insight{background:rgba(255,255,255,.06);border:2px solid rgba(255,255,255,.18);border-left:8px solid var(--c);border-radius:12px;padding:12px 14px;font-size:15px}
+.insight b{display:block;font-family:var(--hand);font-weight:400;font-size:13px;letter-spacing:.4px;text-transform:uppercase;color:var(--c);margin-bottom:4px}
+.questions{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:14px;margin-top:16px}
+.q{position:relative;background:var(--yellow);color:#2a2733;border-radius:4px;padding:18px 16px 14px;transform:rotate(-1.5deg);box-shadow:0 8px 18px rgba(0,0,0,.35)}
+.q:nth-child(2){transform:rotate(1.3deg);background:#ffb3c6}
+.q:nth-child(3){transform:rotate(-.6deg);background:#bfe6c9}
+.q .big{position:absolute;right:10px;top:-8px;font-family:var(--script);font-size:56px;line-height:1;opacity:.35}
+.q b{display:block;font-size:12px;text-transform:uppercase;letter-spacing:.6px;margin-bottom:4px}
+.q.done{opacity:.85}
+.later{display:flex;flex-wrap:wrap;gap:10px;margin-top:16px;align-items:center;font-size:14.5px}
+.later .box{border:2px dashed rgba(255,255,255,.4);border-radius:10px;padding:6px 12px}
+.theend{text-align:center;font-family:var(--script);font-size:clamp(40px,8vw,64px);margin:34px 0 0;color:var(--yellow)}
+.theend small{display:block;font-family:var(--hand);font-size:14px;color:inherit;opacity:.7}
+footer{padding:26px 0 40px;text-align:center;font-size:13px;color:var(--muted)}
+
+/* ---------- responsive ---------- */
+@media (max-width:760px){
+  body{font-size:16px}
+  .onecard{grid-template-columns:1fr}
+  .stars{grid-template-columns:1fr;gap:42px;margin-top:44px}
+  .prio:nth-child(1){padding-bottom:18px}
+  .idgrid{grid-template-columns:1fr}
+  .idphoto{max-width:130px;aspect-ratio:1}
+}
+@media (max-width:520px){
+  .poly{grid-template-columns:1fr}
+  .poly .bridge{text-align:center;font-size:34px}
+  .ladder{grid-template-columns:1fr}
+  .step:nth-child(n){min-height:0}
+  .gestures{grid-template-columns:1fr}
+  .book{padding:26px 16px 22px 22px}
+  .letters span{width:36px;height:42px;font-size:21px}
+  .idcard::before{display:none}
+}
+</style>
+</head>
+<body>
+
+<!-- ======================= COVER ======================= -->
+<header class="cover">
+  <div class="wrap">
+    <div class="book">
+      <div class="kicker">Souvenir de brainstorming · samedi 25 octobre 2026</div>
+      <div class="letters" aria-hidden="true"><span>M</span><span>O</span><span>T</span><span>S</span></div>
+      <h1>Chaque mot, une carte,<span class="script">réutilisée toute l'année</span></h1>
+      <p class="tagline">L'histoire d'une application qui aide les enseignants de maternelle à faire apprendre du vocabulaire aux enfants de 3 à 5 ans, avec des cartes mot-image tirées des albums jeunesse étudiés en classe.</p>
+      <div class="meta">
+        <span class="chip y">Objectif : lancer un produit</span>
+        <span class="chip b">Séance animée</span>
+        <span class="chip g">4 techniques</span>
+        <span class="chip r">Statut : terminée</span>
+      </div>
+      <nav class="toc" aria-label="Chapitres">
+        <a href="#jtbd"><b>Chapitre 1</b>Job to Be Done</a>
+        <a href="#personas"><b>Chapitre 2</b>Persona Journey</a>
+        <a href="#worst"><b>Chapitre 3</b>Worst Possible Idea</a>
+        <a href="#one"><b>Chapitre 4</b>One Feature Only</a>
+        <a href="#rules"><b>Règles de la classe</b>Contraintes</a>
+        <a href="#finale"><b>Fin</b>Synthèse</a>
+      </nav>
+    </div>
+  </div>
+</header>
+
+<main class="wrap">
+
+<!-- ======================= CHAPTER 1: JTBD ======================= -->
+<section class="chapter" id="jtbd" style="--c:var(--red)">
+  <span class="chapter-tab"><b>1</b>Job to Be Done <span class="muted">· le besoin réel</span></span>
+  <h2>Pour quelle tâche l'enseignant <span class="script">fait-il vraiment appel</span> à l'appli&nbsp;?</h2>
+  <p class="lede">Le besoin vient tout droit de la classe : Paul est lui-même enseignant, et tout part de sa pratique d'étude d'albums jeunesse avec ses élèves.</p>
+
+  <div class="jobchart">
+    <div class="jobchart-title">Le <span class="script">tableau des responsabilités</span> : les tâches de l'enseignant</div>
+    <div class="rope" aria-hidden="true"></div>
+    <div class="jobs">
+      <div class="job" style="--c:var(--red)"><span class="verb">Repérer</span>le vocabulaire nécessaire à la compréhension de l'album étudié</div>
+      <div class="job" style="--c:var(--blue)"><span class="verb">Illustrer</span>chaque mot par une image ou une vidéo courte (moins de 30 s)</div>
+      <div class="job" style="--c:var(--green)"><span class="verb">Centraliser</span>toutes les associations mot-image/vidéo sur l'année, à travers plusieurs albums</div>
+      <div class="job" style="--c:var(--yellow)"><span class="verb">Ajouter</span>facilement de nouvelles associations mot-média au fil de l'année</div>
+      <div class="job" style="--c:var(--purple)"><span class="verb">Gérer</span>sa banque mot-média dans une seule application</div>
+      <div class="job" style="--c:var(--pink)"><span class="verb">Projeter</span>les images et vidéos de vocabulaire en classe</div>
+      <div class="job" style="--c:var(--red)"><span class="verb">Imprimer</span>les images (cartes de vocabulaire)</div>
+      <div class="job" style="--c:var(--blue)"><span class="verb">Créer</span>des fiches d'activité à partir des associations mot-image</div>
+      <div class="job star" style="--c:var(--green)"><span class="verb">Savoir instantanément</span>si un mot existe déjà dans la banque, et dans quel album</div>
+      <div class="job star" style="--c:var(--purple)"><span class="verb">Trouver vite</span>une illustration adaptée au contexte de l'album et aux enfants de maternelle</div>
+    </div>
+  </div>
+
+  <div class="today">
+    <span class="muted">Les outils actuels :</span>
+    <span class="file" style="--c:#c4462a"><i></i>PowerPoint</span>
+    <span class="file" style="--c:#2c6bd1"><i></i>Word</span>
+    <span class="muted">pour les fiches et les projections.</span>
+  </div>
+
+  <p class="sub">Là où ça coince</p>
+  <div class="pains">
+    <div class="plaster"><b>Douleur n°1</b>Ne pas savoir si un mot existe déjà dans un autre album : du temps perdu à vérifier.</div>
+    <div class="plaster"><b>Douleur n°2</b>Du temps perdu à chercher une illustration adaptée au contexte de l'album et à l'âge de l'enfant.</div>
+  </div>
+  <p class="note-paul">Principe directeur : réutiliser au maximum la même image pour un mot d'un album à l'autre. La cohérence aide les enfants.</p>
+
+  <h3>Un mot, plusieurs sens</h3>
+  <p class="muted">Avec la polysémie, un même mot peut nécessiter plusieurs illustrations. Chaque sens a sa propre image et est rattaché aux albums où il apparaît.</p>
+  <div class="poly">
+    <div class="flash">
+      <div class="pic" aria-hidden="true">
+        <svg viewBox="0 0 110 100"><line x1="5" y1="85" x2="105" y2="85" stroke="currentColor" class="svg-ink" stroke-width="3"/><circle cx="24" cy="74" r="10" fill="var(--yellow)" class="svg-ink" stroke-width="3"/><path d="M34 76 L82 78" class="svg-ink" stroke-width="7" stroke-linecap="round" fill="none" style="stroke:var(--red)"/><path d="M50 77 L46 62 M62 78 L70 64 M82 78 L96 72 M82 78 L98 84" class="svg-ink" stroke-width="3" stroke-linecap="round" fill="none"/><path d="M40 52 l4 6 M54 48 l0 7 M66 52 l-4 6" class="svg-ink" stroke-width="2.5" stroke-linecap="round"/></svg>
+      </div>
+      <div class="word">étalé</div>
+      <div class="sense">la chute : étalé de tout son long par terre</div>
+    </div>
+    <div class="bridge" aria-hidden="true">≠</div>
+    <div class="flash">
+      <div class="pic" aria-hidden="true">
+        <svg viewBox="0 0 110 100"><rect x="18" y="40" width="74" height="44" rx="12" fill="#e8b766" class="svg-ink" stroke-width="3"/><path d="M26 48 Q55 36 84 48 L84 58 Q55 50 26 58 Z" fill="#fff4b0" class="svg-ink" stroke-width="2.5"/><path d="M70 30 L96 10" class="svg-ink" stroke-width="4" stroke-linecap="round"/><path d="M60 40 L74 28 L80 34 L66 44 Z" fill="var(--card)" class="svg-ink" stroke-width="2.5"/></svg>
+      </div>
+      <div class="word">étalé</div>
+      <div class="sense">la cuisine : étalé comme le beurre sur le pain</div>
+    </div>
+  </div>
+
+  <h3>Qu'est-ce qui fait une « bonne » image pour un enfant de 3 à 5 ans ?</h3>
+  <div class="criteria"><span>Simple</span><span>Claire</span><span>Peu de détails</span></div>
+  <p class="answered">Une question ouverte pendant la séance, à laquelle Paul a répondu peu après.</p>
+
+  <h3>Partager avec les collègues, et pourquoi une seule image ne suffit pas</h3>
+  <p class="muted">Partager la banque avec les collègues de l'école a fait apparaître une friction : une seule image par mot ne convient pas à toutes les sections (PS / MS / GS). Un mot peut donc porter plusieurs illustrations selon la section, du plus concret au plus abstrait.</p>
+  <div class="ladder">
+    <div class="step" style="--c:var(--green)">
+      <span class="lvl">PS</span>
+      <h4>L'image de l'album</h4>
+      <p>Concrète et contextualisée : l'image tirée de l'album étudié, importée directement.</p>
+      <div class="bisc" aria-hidden="true"><i class="round"></i></div>
+    </div>
+    <div class="step" style="--c:var(--blue)">
+      <span class="lvl">GS</span>
+      <h4>Plusieurs exemples variés</h4>
+      <p>Une planche de plusieurs exemples d'un même mot, pour travailler la catégorisation.</p>
+      <div class="bisc" aria-hidden="true"><i class="round"></i><i class="sq"></i><i class="rect"></i><i class="heart"></i></div>
+    </div>
+    <div class="step" style="--c:var(--purple)">
+      <span class="lvl">GS</span>
+      <h4>Une représentation plus abstraite</h4>
+      <p>L'idée du mot, sans objet précis.</p>
+      <div class="bisc" aria-hidden="true"><i class="abs"></i></div>
+    </div>
+  </div>
+  <div class="ladder-foot"><span>concret, contextualisé</span><span>mot d'exemple : <span class="fr">biscuit</span></span><span>abstrait</span></div>
+</section>
+
+<!-- ======================= CHAPTER 2: PERSONAS ======================= -->
+<section class="chapter" id="personas" style="--c:var(--blue)">
+  <span class="chapter-tab" style="--c:var(--blue)"><b>2</b>Persona Journey <span class="muted">· le parcours de chacun</span></span>
+  <h2>Quatre manteaux aux <span class="script">portemanteaux de la classe</span></h2>
+  <p class="lede">Se mettre à la place de chacun autour des cartes de mots : l'enfant qui apprend, le parent à la maison, la collègue d'à côté et l'ATSEM qui anime les petits groupes.</p>
+
+  <div class="pegs">
+    <div class="personas">
+      <!-- Léo -->
+      <article class="persona" style="--c:var(--red)">
+        <div class="head">
+          <svg class="face" viewBox="0 0 60 60" aria-hidden="true"><circle cx="30" cy="32" r="22" fill="#f6d3b3" class="svg-ink" stroke-width="3"/><path d="M10 28 Q14 8 30 9 Q48 8 50 28 Q42 18 30 20 Q18 18 10 28Z" fill="#c2662f" class="svg-ink" stroke-width="2.5"/><circle cx="22" cy="33" r="2.5" class="svg-txt"/><circle cx="38" cy="33" r="2.5" class="svg-txt"/><path d="M22 42 Q30 49 38 42" fill="none" class="svg-ink" stroke-width="2.5" stroke-linecap="round"/></svg>
+          <div><div class="name">Léo</div><div class="role">l'enfant, 3 à 5 ans</div><span class="tag">apprend les mots</span></div>
+        </div>
+        <ul class="journey">
+          <li class="key"><span class="k">Moment</span>Il rencontre un mot d'action ou d'état, comme <span class="fr">étalé</span> : une vidéo courte l'aide bien mieux qu'une image fixe.</li>
+          <li><span class="k">Idée</span>Privilégier la vidéo courte pour les verbes d'action et les mots de mouvement.</li>
+          <li><span class="k">Idée</span>Mémoriser par le mime : il rejoue le mot avec son corps.</li>
+          <li><span class="k">Idée</span>Revoir la vidéo plusieurs fois dans la semaine (répétition espacée).</li>
+        </ul>
+      </article>
+
+      <!-- Sophie -->
+      <article class="persona" style="--c:var(--purple)">
+        <div class="head">
+          <svg class="face" viewBox="0 0 60 60" aria-hidden="true"><path d="M8 40 Q6 10 30 9 Q54 10 52 40 Q52 52 46 54 L14 54 Q8 52 8 40Z" fill="#3b2a24" class="svg-ink" stroke-width="2.5"/><circle cx="30" cy="32" r="18" fill="#e9b894" class="svg-ink" stroke-width="3"/><circle cx="24" cy="32" r="2.3" class="svg-txt"/><circle cx="36" cy="32" r="2.3" class="svg-txt"/><path d="M24 40 Q30 45 36 40" fill="none" class="svg-ink" stroke-width="2.5" stroke-linecap="round"/></svg>
+          <div><div class="name">Sophie</div><div class="role">une maman</div><span class="tag">reçoit, à la maison</span></div>
+        </div>
+        <ul class="journey">
+          <li class="key"><span class="k">Moment</span>La maîtresse envoie les mots et vidéos de la semaine à la maison, pour que Léo les revoie avec elle.</li>
+          <li><span class="k">Constat</span>Les parents deviennent un 2e utilisateur du produit : un récepteur.</li>
+          <li><span class="k">Idée</span>Des messages courts et simples. La vidéo se lance en un clic, sans compte ni installation.</li>
+          <li class="risk"><span class="k">Risque</span>Elle décroche si les messages sont trop nombreux ou trop longs.</li>
+          <li><span class="k">Idée</span>Limiter la fréquence des envois : un récapitulatif groupé, chaque semaine, le vendredi pour le week-end.
+            <div class="calendar" aria-label="Envoi hebdomadaire le vendredi"><span>Lun</span><span>Mar</span><span>Mer</span><span>Jeu</span><span class="fri">Ven</span><span>Sam</span><span>Dim</span></div>
+          </li>
+        </ul>
+      </article>
+
+      <!-- Claire -->
+      <article class="persona" style="--c:var(--green)">
+        <div class="head">
+          <svg class="face" viewBox="0 0 60 60" aria-hidden="true"><circle cx="30" cy="32" r="21" fill="#f3cfae" class="svg-ink" stroke-width="3"/><path d="M9 30 Q10 9 30 9 Q50 9 51 30 L46 26 Q30 14 14 26Z" fill="#e2b13c" class="svg-ink" stroke-width="2.5"/><circle cx="51" cy="20" r="6" fill="#e2b13c" class="svg-ink" stroke-width="2.5"/><circle cx="16" cy="32" r="7" fill="none" class="svg-ink" stroke-width="2"/><circle cx="32" cy="32" r="7" fill="none" class="svg-ink" stroke-width="2"/><circle cx="16" cy="32" r="2" class="svg-txt"/><circle cx="32" cy="32" r="2" class="svg-txt"/><path d="M22 43 Q28 47 36 43" fill="none" class="svg-ink" stroke-width="2.5" stroke-linecap="round"/></svg>
+          <div><div class="name">Claire</div><div class="role">une collègue enseignante</div><span class="tag">partage, avec prudence</span></div>
+        </div>
+        <ul class="journey">
+          <li class="key"><span class="k">Moment</span>Elle importe facilement ses anciens fichiers Word / PowerPoint (mots + images) dans l'appli.</li>
+          <li><span class="k">Constat</span>La reprise de l'existant est le déclencheur de bascule.</li>
+          <li class="risk"><span class="k">Risque</span>L'import mélange ses mots et images avec ceux des autres : elle perd ses repères et le sentiment que c'est son travail.</li>
+          <li><span class="k">Idée</span>Deux espaces séparés :
+            <div class="tabs-mock"><span class="on">Mes mots</span><span>Banque de l'école</span></div>
+            ses mots personnels, et la banque partagée de l'école.</li>
+          <li><span class="k">Idée</span>Partage volontaire : c'est elle qui choisit quel mot rejoint la banque de l'école. Pas de conflit : plusieurs images d'un même mot coexistent.</li>
+        </ul>
+      </article>
+
+      <!-- Nadia -->
+      <article class="persona" style="--c:var(--yellow)">
+        <div class="head">
+          <svg class="face" viewBox="0 0 60 60" aria-hidden="true"><circle cx="30" cy="32" r="21" fill="#a8704b" class="svg-ink" stroke-width="3"/><path d="M8 32 Q6 8 30 8 Q54 8 52 32 Q46 16 30 17 Q14 16 8 32Z" fill="#1f1714" class="svg-ink" stroke-width="2.5"/><path d="M12 14 Q30 2 48 14" fill="none" stroke="var(--red)" stroke-width="5" stroke-linecap="round"/><circle cx="23" cy="33" r="2.4" class="svg-txt" style="fill:#1f1714"/><circle cx="37" cy="33" r="2.4" class="svg-txt" style="fill:#1f1714"/><path d="M22 42 Q30 48 38 42" fill="none" stroke="#1f1714" stroke-width="2.5" stroke-linecap="round"/></svg>
+          <div><div class="name">Nadia</div><div class="role">l'ATSEM</div><span class="tag" style="color:#2a2733">anime les ateliers</span></div>
+        </div>
+        <ul class="journey">
+          <li class="key"><span class="k">Moment</span>Elle anime des ateliers de vocabulaire en petits groupes à partir de la banque.</li>
+          <li class="risk"><span class="k">Contrainte</span>Les ATSEM n'ont pas accès à l'application : seul l'enseignant l'utilise.</li>
+          <li><span class="k">Idée</span>L'enseignant génère en un clic des fiches imprimées (images + mots) à remettre à Nadia pour ses ateliers.</li>
+        </ul>
+        <div class="nogate">Pas de compte pour Nadia : le papier est son interface.</div>
+      </article>
+    </div>
+  </div>
+</section>
+
+<!-- ======================= CHAPTER 3: WORST IDEA ======================= -->
+<section class="chapter" id="worst" style="--c:var(--purple)">
+  <span class="chapter-tab" style="--c:var(--purple)"><b>3</b>Worst Possible Idea <span class="muted">· la pire idée</span></span>
+  <h2>Le <span class="script">coin des bêtises</span></h2>
+  <p class="lede">D'abord, imaginer la pire application possible. Puis retourner chaque bêtise pour voir quelle bonne idée se cachait dessous.</p>
+
+  <div class="naughty">
+    <div class="naughty-head">
+      <strong>Huit idées épouvantables</strong>
+      <span class="hand">touchez une carte pour la retourner</span>
+    </div>
+    <div class="flips">
+      <button class="flip" aria-pressed="false"><span class="inner">
+        <span class="face-a"><span class="x">Pire idée</span><span class="bad">Des pubs partout</span><span class="hint">retourne-moi</span></span>
+        <span class="face-b"><span class="good">Pas un produit commercial : pas de modèle de revenus, pas de pub.</span><span class="src">Orientation fixée par Paul</span></span>
+      </span></button>
+      <button class="flip" aria-pressed="false"><span class="inner">
+        <span class="face-a"><span class="x">Pire idée</span><span class="bad">Beaucoup trop de texte</span><span class="hint">retourne-moi</span></span>
+        <span class="face-b"><span class="good">L'image d'abord, et des messages courts et simples, surtout pour les parents.</span><span class="src">Fait écho au Persona Journey</span></span>
+      </span></button>
+      <button class="flip" aria-pressed="false"><span class="inner">
+        <span class="face-a"><span class="x">Pire idée</span><span class="bad">Des images compliquées</span><span class="hint">retourne-moi</span></span>
+        <span class="face-b"><span class="good">Des images simples, claires, avec peu de détails.</span><span class="src">Fait écho au Job to Be Done</span></span>
+      </span></button>
+      <button class="flip" aria-pressed="false"><span class="inner">
+        <span class="face-a"><span class="x">Pire idée</span><span class="bad">Impossible d'imprimer</span><span class="hint">retourne-moi</span></span>
+        <span class="face-b"><span class="good">Des fiches imprimées en un clic : cartes de vocabulaire, fiches d'activité, fiches thématiques.</span><span class="src">Devenue la priorité n°3</span></span>
+      </span></button>
+      <button class="flip" aria-pressed="false"><span class="inner">
+        <span class="face-a"><span class="x">Pire idée</span><span class="bad">Trop compliquée à utiliser</span><span class="hint">retourne-moi</span></span>
+        <span class="face-b"><span class="good">Un flux de saisie rapide : taper les mots, l'album, un module, un thème, et l'appli fait le reste.</span><span class="src">Idée née de ce tour</span></span>
+      </span></button>
+      <button class="flip" aria-pressed="false"><span class="inner">
+        <span class="face-a"><span class="x">Pire idée</span><span class="bad">Un utilisateur peut casser le travail d'un autre</span><span class="hint">retourne-moi</span></span>
+        <span class="face-b"><span class="good">Les images coexistent, rien n'est écrasé. Espace personnel et banque partagée restent séparés.</span><span class="src">Fait écho au parcours de Claire</span></span>
+      </span></button>
+      <button class="flip" aria-pressed="false"><span class="inner">
+        <span class="face-a"><span class="x">Pire idée</span><span class="bad">Banque polluée par un utilisateur ou un tiers</span><span class="hint">retourne-moi</span></span>
+        <span class="face-b"><span class="good">Seuls les enseignants inscrits peuvent ajouter du contenu.</span><span class="src">Idée née de ce tour</span></span>
+      </span></button>
+      <button class="flip" aria-pressed="false"><span class="inner">
+        <span class="face-a"><span class="x">Pire idée</span><span class="bad">Aucune possibilité de modération</span><span class="hint">retourne-moi</span></span>
+        <span class="face-b"><span class="good">Un rôle d'administrateur qui peut supprimer des éléments ou des utilisateurs.</span><span class="src">Idée née de ce tour</span></span>
+      </span></button>
+    </div>
+  </div>
+
+  <h3>D'où viennent les images ?</h3>
+  <div class="pills">
+    <span class="pill" style="--c:var(--blue)"><b>Aujourd'hui :</b> images libres de droits trouvées sur internet</span>
+    <span class="pill" style="--c:var(--blue)"><b>Aujourd'hui :</b> photos prises par l'enseignant</span>
+    <span class="pill" style="--c:var(--green)"><b>Idée :</b> ajouter directement ses propres photos prises au téléphone comme illustrations</span>
+    <span class="pill" style="--c:var(--red)"><b>Tension :</b> images des albums (souhaitées en PS) contre partage avec l'école et les parents : quid des droits d'auteur ?</span>
+  </div>
+
+  <h3>Saisir, une seule fois</h3>
+  <p class="muted">Le flux de saisie rapide : l'enseignant tape, l'appli propose.</p>
+  <div class="entry">
+    <span class="slot"><small>mots</small>les mots de l'album</span><span class="arrow">+</span>
+    <span class="slot"><small>album</small>son titre</span><span class="arrow">+</span>
+    <span class="slot"><small>module</small>un nom de module</span><span class="arrow">+</span>
+    <span class="slot"><small>thème</small>un thème</span><span class="arrow">→</span>
+    <span class="slot magic"><small>l'appli propose</small>des images pour chaque mot</span>
+    <span class="slot magic"><small>l'appli propose</small>des mots déjà illustrés (réutilisation, doublons détectés)</span>
+  </div>
+
+  <h3>Comment la banque est rangée</h3>
+  <div class="diagram">
+    <svg viewBox="0 0 720 300" role="img" aria-label="Les albums sont découpés en modules successifs ; des thèmes transversaux relient des mots de plusieurs albums">
+      <!-- shelves -->
+      <g fill="none" class="svg-ink" stroke-width="3">
+        <line x1="20" y1="268" x2="700" y2="268"/>
+      </g>
+      <!-- album 1 -->
+      <g>
+        <rect x="40" y="40" width="190" height="218" rx="10" fill="var(--red-soft)" class="svg-ink" stroke-width="3"/>
+        <rect x="40" y="40" width="16" height="218" rx="6" fill="var(--red)" class="svg-ink" stroke-width="3"/>
+        <text x="143" y="70" text-anchor="middle" class="svg-txt" font-size="17" font-weight="800">Album</text>
+        <rect x="70" y="88" width="146" height="40" rx="8" fill="var(--card)" class="svg-ink" stroke-width="2"/><text x="143" y="113" text-anchor="middle" class="svg-txt" font-size="14">Module 1</text>
+        <rect x="70" y="140" width="146" height="40" rx="8" fill="var(--card)" class="svg-ink" stroke-width="2"/><text x="143" y="165" text-anchor="middle" class="svg-txt" font-size="14">Module 2</text>
+        <rect x="70" y="192" width="146" height="40" rx="8" fill="var(--card)" class="svg-ink" stroke-width="2"/><text x="143" y="217" text-anchor="middle" class="svg-txt" font-size="14">Module 3</text>
+        <path d="M60 108 v104" class="svg-ink" stroke-width="2" stroke-dasharray="3 4"/>
+      </g>
+      <!-- album 2 -->
+      <g>
+        <rect x="265" y="40" width="190" height="218" rx="10" fill="var(--blue-soft)" class="svg-ink" stroke-width="3"/>
+        <rect x="265" y="40" width="16" height="218" rx="6" fill="var(--blue)" class="svg-ink" stroke-width="3"/>
+        <text x="368" y="70" text-anchor="middle" class="svg-txt" font-size="17" font-weight="800">Album</text>
+        <rect x="295" y="88" width="146" height="40" rx="8" fill="var(--card)" class="svg-ink" stroke-width="2"/><text x="368" y="113" text-anchor="middle" class="svg-txt" font-size="14">Module 1</text>
+        <rect x="295" y="140" width="146" height="40" rx="8" fill="var(--card)" class="svg-ink" stroke-width="2"/><text x="368" y="165" text-anchor="middle" class="svg-txt" font-size="14">Module 2</text>
+      </g>
+      <!-- album 3 -->
+      <g>
+        <rect x="490" y="40" width="190" height="218" rx="10" fill="var(--green-soft)" class="svg-ink" stroke-width="3"/>
+        <rect x="490" y="40" width="16" height="218" rx="6" fill="var(--green)" class="svg-ink" stroke-width="3"/>
+        <text x="593" y="70" text-anchor="middle" class="svg-txt" font-size="17" font-weight="800">Album</text>
+        <rect x="520" y="88" width="146" height="40" rx="8" fill="var(--card)" class="svg-ink" stroke-width="2"/><text x="593" y="113" text-anchor="middle" class="svg-txt" font-size="14">Module 1</text>
+        <rect x="520" y="140" width="146" height="40" rx="8" fill="var(--card)" class="svg-ink" stroke-width="2"/><text x="593" y="165" text-anchor="middle" class="svg-txt" font-size="14">Module 2</text>
+        <rect x="520" y="192" width="146" height="40" rx="8" fill="var(--card)" class="svg-ink" stroke-width="2"/><text x="593" y="217" text-anchor="middle" class="svg-txt" font-size="14">Module 3</text>
+      </g>
+      <!-- theme threads -->
+      <path d="M10 118 C 120 100, 200 175, 300 160 S 470 100, 560 112 S 690 150, 712 140" fill="none" stroke="var(--yellow)" stroke-width="7" stroke-linecap="round" opacity=".9"/>
+      <path d="M10 222 C 140 230, 220 150, 330 112 S 520 200, 600 214 S 690 200, 712 196" fill="none" stroke="var(--purple)" stroke-width="7" stroke-linecap="round" opacity=".85"/>
+      <g font-size="13" font-weight="800">
+        <rect x="8" y="10" width="124" height="22" rx="11" fill="var(--yellow)"/><text x="70" y="26" text-anchor="middle" fill="#2a2733">thème : automne</text>
+        <rect x="140" y="10" width="132" height="22" rx="11" fill="var(--purple)"/><text x="206" y="26" text-anchor="middle" fill="#fff">thème : émotions</text>
+      </g>
+      <text x="700" y="290" text-anchor="end" class="svg-mut" font-size="13">album &gt; modules (en séquence) · les thèmes traversent les albums</text>
+    </svg>
+    <p class="cap">Les albums sont découpés en modules qui se suivent ; les thèmes sont des fils qui relient des mots de plusieurs albums.</p>
+  </div>
+  <dl class="defs">
+    <div class="def" style="--c:var(--red)"><dt>module</dt><dd>Un découpage pédagogique d'un album décidé par l'équipe enseignante, comme des chapitres. Les modules sont définis collectivement et partagés à l'école.</dd></div>
+    <div class="def" style="--c:var(--yellow)"><dt>thème</dt><dd>Une catégorie transversale (l'automne, la cuisine, les émotions…). Elle permet de générer une fiche thématique, par exemple tous les mots de l'automne, tous albums confondus.</dd></div>
+    <div class="def" style="--c:var(--blue)"><dt>catégorie</dt><dd>Chaque mot reçoit une catégorie grammaticale (nom, verbe, adjectif…) pour pouvoir classer et trier les mots.</dd></div>
+  </dl>
+</section>
+
+<!-- ======================= CHAPTER 4: ONE FEATURE ======================= -->
+<section class="chapter" id="one" style="--c:var(--yellow)">
+  <span class="chapter-tab" style="--c:#d29a0f"><b>4</b>One Feature Only <span class="muted">· une seule fonctionnalité</span></span>
+  <h2>Si l'appli ne devait faire <span class="script" style="color:#d29a0f">qu'une seule chose</span>…</h2>
+  <p class="lede">La fonctionnalité unique retenue : une banque mot-image centralisée anti-doublons. C'est le cœur du produit.</p>
+
+  <div class="onecard">
+    <div class="phone">
+      <div class="screen">
+        <div class="bar"><span>Mes mots</span><span>Banque de l'école</span></div>
+        <label for="w">Tapez un mot de l'album</label>
+        <input id="w" type="text" autocomplete="off" spellcheck="false" placeholder="ex. : étalé">
+        <div class="suggest" aria-label="Essayez un mot">
+          <button type="button" data-w="étalé">étalé</button>
+          <button type="button" data-w="biscuit">biscuit</button>
+          <button type="button" data-w="citrouille">citrouille</button>
+        </div>
+        <div class="result" id="result" aria-live="polite"></div>
+        <div class="demo-note">Maquette d'illustration : exemples fictifs, pas de vraies données.</div>
+      </div>
+    </div>
+
+    <div>
+      <ol class="features">
+        <li class="lead">Dès la saisie d'un mot : alerte immédiate s'il existe déjà, avec la liste des albums où il apparaît. <b>La fonctionnalité phare.</b></li>
+        <li>Pour un mot existant : afficher toutes les images déjà utilisées pour ce mot, les miennes et celles des collègues, pour choisir.</li>
+        <li>Depuis un mot existant : ajouter une nouvelle image qui coexiste avec les précédentes.</li>
+        <li>Chaque image affiche son sens (pour les mots polysémiques), la section visée (PS / MS / GS) et son album d'origine.</li>
+        <li>Filtrer les images d'un mot par sens, section et album.</li>
+      </ol>
+    </div>
+  </div>
+
+  <h3>Chaque image a sa carte d'identité</h3>
+  <div class="idcard">
+    <div class="idgrid">
+      <div class="idphoto" aria-hidden="true">
+        <svg viewBox="0 0 110 100"><rect x="18" y="40" width="74" height="44" rx="12" fill="#e8b766" stroke="#2a2733" stroke-width="3"/><path d="M26 48 Q55 36 84 48 L84 58 Q55 50 26 58 Z" fill="#fff4b0" stroke="#2a2733" stroke-width="2.5"/><path d="M70 30 L96 10" stroke="#2a2733" stroke-width="4" stroke-linecap="round"/><path d="M60 40 L74 28 L80 34 L66 44 Z" fill="#fff" stroke="#2a2733" stroke-width="2.5"/></svg>
+      </div>
+      <div class="fields">
+        <div class="field"><small>mot</small><span class="w">étalé</span></div>
+        <div class="field"><small>sens</small><span>étalé (cuisine)</span></div>
+        <div class="field"><small>section</small><span class="secs"><i>PS</i><i class="on">MS</i><i class="on">GS</i></span></div>
+        <div class="field"><small>album</small><span>l'album d'origine</span></div>
+        <div class="field"><small>module</small><span>défini par l'équipe</span></div>
+        <div class="field"><small>thème</small><span>cuisine</span></div>
+        <div class="field"><small>catégorie grammaticale</small><span>adjectif</span></div>
+      </div>
+    </div>
+    <div class="stamp">valeurs d'exemple</div>
+  </div>
+
+  <h3>Ajouter depuis le téléphone, en trois gestes</h3>
+  <div class="gestures">
+    <div class="gesture" style="--c:var(--red)"><span class="n">1</span><p>Prendre la photo avec le téléphone</p></div>
+    <div class="gesture" style="--c:var(--blue)"><span class="n">2</span><p>Taper le mot</p></div>
+    <div class="gesture" style="--c:var(--green)"><span class="n">3</span><p>Cocher les sections</p></div>
+  </div>
+  <p class="muted">L'appli doit être utilisable sur téléphone, pas seulement sur ordinateur.</p>
+  <div class="reality"><s>Prendre la photo en classe, devant les enfants</s> : scénario jugé irréaliste par Paul. Les photos sont prises en dehors de ce contexte.</div>
+</section>
+
+<!-- ======================= RULES ======================= -->
+<section class="chapter" id="rules" style="--c:var(--green)">
+  <div class="poster">
+    <h3>Nos <span class="script" style="color:var(--green)">règles de classe</span></h3>
+    <p class="muted" style="text-align:center;margin-top:0">Les orientations et contraintes fixées au fil de la séance.</p>
+    <div class="rules">
+      <div class="rule" style="--c:var(--blue-soft)">
+        <span class="ico"><svg viewBox="0 0 28 28" aria-hidden="true"><rect x="6" y="12" width="16" height="12" rx="3" fill="none" class="svg-ink" stroke-width="2.5"/><path d="M9 12 V9 a5 5 0 0 1 10 0 V12" fill="none" class="svg-ink" stroke-width="2.5"/></svg></span>
+        <div><b>Réservée aux enseignants</b><p>Seul l'enseignant utilise l'appli. ATSEM, parents et enfants n'y ont pas accès directement : ils reçoivent ce que l'enseignant envoie ou imprime.</p></div>
+      </div>
+      <div class="rule" style="--c:var(--yellow-soft)">
+        <span class="ico"><svg viewBox="0 0 28 28" aria-hidden="true"><circle cx="14" cy="14" r="10" fill="none" class="svg-ink" stroke-width="2.5"/><path d="M7 21 L21 7" class="svg-ink" stroke-width="2.5"/></svg></span>
+        <div><b>Pas à vendre</b><p>Pas un produit commercial : pas de modèle de revenus, pas de pub.</p></div>
+      </div>
+      <div class="rule" style="--c:var(--green-soft)">
+        <span class="ico"><svg viewBox="0 0 28 28" aria-hidden="true"><path d="M4 13 L14 5 L24 13 V24 H4Z" fill="none" class="svg-ink" stroke-width="2.5" stroke-linejoin="round"/><rect x="11" y="16" width="6" height="8" fill="none" class="svg-ink" stroke-width="2.5"/></svg></span>
+        <div><b>D'abord l'école de Paul</b><p>Lancement dans l'école de Paul ; extension éventuelle ensuite.</p></div>
+      </div>
+      <div class="rule" style="--c:var(--purple-soft)">
+        <span class="ico"><svg viewBox="0 0 28 28" aria-hidden="true"><rect x="8" y="3" width="12" height="22" rx="3" fill="none" class="svg-ink" stroke-width="2.5"/><circle cx="14" cy="21" r="1.5" class="svg-txt"/></svg></span>
+        <div><b>Dans la poche</b><p>Utilisable sur téléphone, pas seulement sur ordinateur.</p></div>
+      </div>
+    </div>
+    <div class="access" aria-label="Qui a accès">
+      <span class="yes">Enseignant</span><span class="yes">Admin (un enseignant)</span><span class="no">ATSEM</span><span class="no">Parents</span><span class="no">Enfants</span>
+    </div>
+  </div>
+</section>
+
+<!-- ======================= FINALE ======================= -->
+<section class="finale" id="finale" style="--c:var(--yellow)">
+  <span class="chapter-tab"><b style="background:#d29a0f">★</b>La fin… et le début</span>
+  <h2>Trois <span class="script">bons points</span></h2>
+  <p class="lede">Parmi tout ce qui est au tableau, Paul a retenu trois priorités. Ensemble, elles racontent une seule histoire.</p>
+
+  <div class="stars">
+    <div class="prio">
+      <svg class="badge" viewBox="0 0 76 76" aria-hidden="true"><path d="M38 3 L47.5 26 L72 27.5 L53 43 L59 67 L38 54 L17 67 L23 43 L4 27.5 L28.5 26Z" fill="#f2b31b" stroke="#2a2733" stroke-width="3" stroke-linejoin="round"/><text x="38" y="47" text-anchor="middle">1</text></svg>
+      <h3>La banque mot-image</h3>
+      <p>Centralisée et anti-doublons : la source unique de chaque mot, sens et image.</p>
+    </div>
+    <div class="prio">
+      <svg class="badge" viewBox="0 0 76 76" aria-hidden="true"><path d="M38 3 L47.5 26 L72 27.5 L53 43 L59 67 L38 54 L17 67 L23 43 L4 27.5 L28.5 26Z" fill="#f2b31b" stroke="#2a2733" stroke-width="3" stroke-linejoin="round"/><text x="38" y="47" text-anchor="middle">2</text></svg>
+      <h3>Le partage dans l'école</h3>
+      <p>Les collègues mettent en commun mots et images tout en gardant leur propre espace.</p>
+    </div>
+    <div class="prio">
+      <svg class="badge" viewBox="0 0 76 76" aria-hidden="true"><path d="M38 3 L47.5 26 L72 27.5 L53 43 L59 67 L38 54 L17 67 L23 43 L4 27.5 L28.5 26Z" fill="#f2b31b" stroke="#2a2733" stroke-width="3" stroke-linejoin="round"/><text x="38" y="47" text-anchor="middle">3</text></svg>
+      <h3>Les fiches imprimées</h3>
+      <p>Cartes et fiches générées pour la classe et pour les ateliers de l'ATSEM.</p>
+    </div>
+  </div>
+
+  <div class="pipeline">
+    <div class="label">La synthèse, en une ligne</div>
+    <div class="slogan">saisir une fois, réutiliser partout</div>
+    <svg viewBox="0 0 720 210" role="img" aria-label="Chaîne : la banque est la source, le partage atteint l'équipe, les fiches imprimées sont les sorties pour la classe et l'ATSEM">
+      <defs><marker id="ah" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0 L10 5 L0 10Z" fill="#f2b31b"/></marker></defs>
+      <!-- input -->
+      <g>
+        <rect x="6" y="78" width="110" height="54" rx="12" fill="none" stroke="rgba(251,245,230,.5)" stroke-width="2" stroke-dasharray="5 5"/>
+        <text x="61" y="101" text-anchor="middle" class="pt" font-size="14" font-weight="700">un mot</text>
+        <text x="61" y="120" text-anchor="middle" class="pt dim" font-size="12">saisi ou importé</text>
+      </g>
+      <path d="M118 105 H160" stroke="#f2b31b" stroke-width="4" marker-end="url(#ah)"/>
+      <!-- bank -->
+      <g>
+        <rect x="166" y="56" width="140" height="98" rx="16" fill="#d9472f" stroke="#fbf5e6" stroke-width="3"/>
+        <text x="236" y="88" text-anchor="middle" class="pt" font-size="12" font-weight="800">1 · SOURCE</text>
+        <text x="236" y="112" text-anchor="middle" class="pt" font-size="18" font-weight="800">La banque</text>
+        <text x="236" y="134" text-anchor="middle" class="pt dim" font-size="12">sans doublon</text>
+      </g>
+      <path d="M308 105 H350" stroke="#f2b31b" stroke-width="4" marker-end="url(#ah)"/>
+      <!-- sharing -->
+      <g>
+        <rect x="356" y="56" width="140" height="98" rx="16" fill="#2c6bd1" stroke="#fbf5e6" stroke-width="3"/>
+        <text x="426" y="88" text-anchor="middle" class="pt" font-size="12" font-weight="800">2 · ÉQUIPE</text>
+        <text x="426" y="112" text-anchor="middle" class="pt" font-size="18" font-weight="800">Partage</text>
+        <text x="426" y="134" text-anchor="middle" class="pt dim" font-size="12">sûr, volontaire</text>
+      </g>
+      <path d="M498 90 C 530 60, 540 42, 572 40" fill="none" stroke="#f2b31b" stroke-width="4" marker-end="url(#ah)"/>
+      <path d="M498 120 C 530 150, 540 168, 572 170" fill="none" stroke="#f2b31b" stroke-width="4" marker-end="url(#ah)"/>
+      <!-- outputs -->
+      <g>
+        <rect x="578" y="12" width="134" height="58" rx="10" fill="#2f8f55" stroke="#fbf5e6" stroke-width="3"/>
+        <text x="645" y="36" text-anchor="middle" class="pt" font-size="12" font-weight="800">3 · FICHES</text>
+        <text x="645" y="56" text-anchor="middle" class="pt" font-size="14" font-weight="700">pour la classe</text>
+        <rect x="578" y="140" width="134" height="58" rx="10" fill="#2f8f55" stroke="#fbf5e6" stroke-width="3"/>
+        <text x="645" y="164" text-anchor="middle" class="pt" font-size="12" font-weight="800">3 · FICHES</text>
+        <text x="645" y="184" text-anchor="middle" class="pt" font-size="14" font-weight="700">pour l'ATSEM</text>
+      </g>
+    </svg>
+  </div>
+
+  <div class="insights">
+    <div class="insight" style="--c:#f2b31b"><b>La carte d'identité, c'est le modèle</b>La carte d'identité de chaque image (mot, sens, section PS/MS/GS, album, module, thème, catégorie grammaticale) est le modèle de données qui rend possibles les 3 priorités : détection des doublons, coexistence des images partagées et filtrage pour les fiches.</div>
+    <div class="insight" style="--c:#7fb0ff"><b>Un partage en confiance</b>Le partage n'est adopté que s'il est sûr : espaces « Mes mots » et « Banque de l'école » séparés, partage volontaire, coexistence sans écrasement, enseignants inscrits seulement, un admin qui modère.</div>
+    <div class="insight" style="--c:#73d39a"><b>L'import remplit l'étagère vide</b>L'import des fichiers Word / PowerPoint existants résout le démarrage à vide de la banque partagée et favorise l'adoption par les collègues.</div>
+    <div class="insight" style="--c:#ff9fbd"><b>Pour plus tard, déjà compatible</b>L'envoi aux parents du vendredi et les vidéos pour les verbes sont des extensions post-V1, déjà compatibles avec le modèle de données.</div>
+  </div>
+
+  <div class="later">
+    <span style="opacity:.8">En réserve pour après la V1 :</span>
+    <span class="box">Récapitulatif du vendredi aux parents</span>
+    <span class="box">Vidéos courtes pour les verbes d'action</span>
+  </div>
+
+  <h3 style="margin-top:34px">Encore au tableau</h3>
+  <div class="questions">
+    <div class="q"><span class="big">?</span><b>À trancher</b>Droits d'auteur : les illustrations d'albums (souhaitées en PS) peuvent-elles aller dans une banque partagée, et être envoyées aux parents ?</div>
+    <div class="q"><span class="big">?</span><b>À trancher</b>Qui administre l'instance de l'école ?</div>
+    <div class="q done"><span class="big">✓</span><b>Réponse trouvée en séance</b>Qu'est-ce qui fait une bonne image pour un enfant de 3 à 5 ans ? Simple, claire, peu de détails.</div>
+  </div>
+
+  <p class="theend">Fin.<small>…du premier chapitre. Prochaine étape : la première page du produit.</small></p>
+</section>
+
+</main>
+
+<footer class="wrap">
+  Séance de brainstorming · 25 octobre 2026 · animée · techniques : Job to Be Done, Persona Journey, Worst Possible Idea, One Feature Only
+</footer>
+
+<script>
+(function(){
+  // flip cards
+  document.querySelectorAll('.flip').forEach(function(b){
+    b.addEventListener('click',function(){
+      b.setAttribute('aria-pressed', b.getAttribute('aria-pressed')==='true'?'false':'true');
+    });
+  });
+
+  // duplicate-detection demo (illustrative sample bank)
+  var bank = {
+    'etale': { word:'étalé', albums:['Album A','Album B'], imgs:[
+      {sense:'chute', sec:'PS', album:'Album A', by:'mine', pic:'fall'},
+      {sense:'cuisine', sec:'MS · GS', album:'Album B', by:'colleague', pic:'spread'}
+    ]},
+    'biscuit': { word:'biscuit', albums:['Album C'], imgs:[
+      {sense:'image de l\u2019album', sec:'PS', album:'Album C', by:'colleague', pic:'one'},
+      {sense:'exemples variés', sec:'GS', album:'Album C', by:'mine', pic:'many'}
+    ]}
+  };
+  var pics = {
+    fall:'<svg viewBox="0 0 110 100"><line x1="5" y1="85" x2="105" y2="85" stroke="#2a2733" stroke-width="4"/><circle cx="24" cy="74" r="10" fill="#f2b31b" stroke="#2a2733" stroke-width="3"/><path d="M34 76 L82 78" stroke="#d9472f" stroke-width="8" stroke-linecap="round"/></svg>',
+    spread:'<svg viewBox="0 0 110 100"><rect x="18" y="40" width="74" height="44" rx="12" fill="#e8b766" stroke="#2a2733" stroke-width="3"/><path d="M26 48 Q55 36 84 48 L84 58 Q55 50 26 58 Z" fill="#fff4b0" stroke="#2a2733" stroke-width="2.5"/></svg>',
+    one:'<svg viewBox="0 0 110 100"><circle cx="55" cy="55" r="30" fill="#e8b766" stroke="#2a2733" stroke-width="3"/></svg>',
+    many:'<svg viewBox="0 0 110 100"><circle cx="28" cy="40" r="16" fill="#e8b766" stroke="#2a2733" stroke-width="3"/><rect x="58" y="24" width="32" height="32" rx="5" fill="#e8b766" stroke="#2a2733" stroke-width="3"/><rect x="24" y="66" width="62" height="22" rx="5" fill="#e8b766" stroke="#2a2733" stroke-width="3"/></svg>'
+  };
+  function norm(s){
+    try{ s = s.normalize('NFD').replace(/[̀-ͯ]/g,''); }catch(e){}
+    return s.trim().toLowerCase();
+  }
+  function esc(s){ return s.replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];}); }
+  var input = document.getElementById('w'), out = document.getElementById('result');
+  function render(){
+    var raw = input.value, k = norm(raw);
+    if(!k){ out.innerHTML=''; return; }
+    var e = bank[k];
+    if(e){
+      var h = '<div class="alert"><b>Déjà dans la banque !</b>« '+esc(e.word)+' » apparaît dans '+e.albums.length+' album'+(e.albums.length>1?'s':'')+': '+e.albums.map(esc).join(', ')+'.</div><div class="thumbs">';
+      e.imgs.forEach(function(i){
+        h += '<div class="thumb"><div class="ph">'+pics[i.pic]+'</div><div class="tg"><span>'+esc(i.sense)+'</span><span>'+esc(i.sec)+'</span><span>'+esc(i.album)+'</span><span>'+(i.by==='mine'?'moi':'collègue')+'</span></div></div>';
+      });
+      h += '<div class="thumb add"><div class="ph">+</div><div class="tg"><span>ajouter une autre image</span></div></div></div>';
+      out.innerHTML = h;
+    } else {
+      out.innerHTML = '<div class="alert new"><b>Nouveau mot</b>Aucun doublon trouvé pour « '+esc(raw.trim())+' ». Ajoutez-le avec une image, son sens, ses sections, son album, son module, son thème et sa catégorie.</div>';
+    }
+  }
+  input.addEventListener('input',render);
+  document.querySelectorAll('.suggest button').forEach(function(b){
+    b.addEventListener('click',function(){ input.value=b.getAttribute('data-w'); render(); });
+  });
+})();
+</script>
+</body>
+</html>
