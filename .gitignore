@@ -12,3 +12,7 @@ __pycache__/
 .DS_Store
 Thumbs.db
 desktop.ini
+
+# Fichiers de travail BMAD (UX)
+.memlog.md
+.working/
