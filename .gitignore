@@ -15,4 +15,5 @@ desktop.ini
 
 # Fichiers de travail BMAD (UX)
 .memlog.md
-.working/
+**/.working/*
+!**/.working/*.html
