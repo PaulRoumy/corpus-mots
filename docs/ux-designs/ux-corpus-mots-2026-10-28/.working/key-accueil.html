@@ -1,0 +1,353 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Accueil Préparations</title>
+<meta name="description" content="corpus-mots — maquette fidèle de l'accueil Préparations (Claire, MS), menu du bouton « + », accueil mobile et Dialogue « Nouvelle préparation ».">
+<style>
+/* =====================================================================
+   MAQUETTE FIDÈLE — ACCUEIL (Préparations en cours)
+   Spines qui gouvernent cet écran :
+   - DESIGN.md › Colors (rôles clairs, Sections ● ▲ ■, types d'image), Typography,
+     Layout & Spacing (barre latérale 248 px, page 1280 px, seuil mobile 600 px,
+     gouttière 16 px), Elevation & Depth, Shapes,
+     Components › Structure et navigation, Accueil, Téléphone,
+     Dialogue « Nouvelle préparation », Champ à étiquettes
+   - EXPERIENCE.md › Information Architecture (barre supérieure, 3 rubriques,
+     Surfaces : Préparations, Dialogue « Nouvelle préparation », Accueil mobile),
+     Voice and Tone, Component Patterns (Barre supérieure, Navigation des
+     rubriques, Champ de recherche, Bouton « + », Notifications, Menu de profil,
+     Carte de Préparation, Carte « Import en cours », Dialogue « Nouvelle
+     préparation », Champ à étiquettes, Bouton « Ajouter une photo »),
+     State Patterns (Préparations, Dialogue « Nouvelle préparation »),
+     Key Flows UJ-1 étape 1, UJ-2 (échec : Import interrompu), UJ-3 étape 1
+   - Base visuelle : .working/directions-1.html (direction 3 « Cahier Material ») ;
+     repères : .working/color-themes-1.html (variante « Repères »)
+   ===================================================================== */
+:root{
+  --bg:#fbf5e6;--lo:#f7eedb;--sc:#f2e7cf;--hi:#ecdfc3;--sf:#fffdf6;
+  --on:#2a2733;--onv:#625b6b;--ol:#8a8070;--ov:#e3d6b8;
+  --pri:#2c6bd1;--onpri:#ffffff;--pc:#dde8fb;--opc:#123a7a;
+  --sec:#fdf0c8;--osec:#5a4300;--ter:#dcf0e2;--oter:#1d5f37;
+  --err:#b3261e;--onerr:#ffffff;--errc:#fbe1d9;--oerrc:#7a1a12;
+  --ps:#d9472f;--ms:#b07d00;--gs:#8455c2;
+  --lib:#2f8f55;--pho:#0b7a86;--alb:#c2456f;--inc:#8a8070;
+  --todo-bg:#fdf0c8;--todo-fg:#5a4300;--todo-bd:#ad820f;
+  --e1:0 1px 2px rgba(70,50,20,.14),0 1px 3px 1px rgba(70,50,20,.08);
+  --e2:0 1px 2px rgba(70,50,20,.16),0 3px 8px 2px rgba(70,50,20,.10);
+  --sans:"Nunito",ui-rounded,"SF Pro Rounded","Segoe UI",system-ui,sans-serif;
+  --script:"Segoe Script","Playwrite FR Moderne",cursive;
+  --emoji:"Segoe UI Emoji","Apple Color Emoji","Noto Color Emoji",sans-serif;
+  color-scheme:light;
+}
+*{box-sizing:border-box}
+html{-webkit-text-size-adjust:100%}
+body{margin:0;background:#e9e2d2;color:var(--on);font-family:var(--sans);font-size:14.5px;line-height:1.45;overflow-x:hidden}
+button{font:inherit;color:inherit;cursor:default}
+svg.ic{width:20px;height:20px;flex:none;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+
+/* ---- Page de présentation (pas l'application) ---- */
+.page{max-width:1328px;margin:0 auto;padding:24px 16px 48px}
+.page h1{font-size:28px;font-weight:900;margin:0 0 4px;line-height:1.2}
+.page .lead{margin:0 0 8px;color:var(--onv);font-size:14px}
+.cap{font-size:12px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:var(--onv);margin:28px 0 8px}
+.fit{max-width:100%}
+.browser{width:1296px;border-radius:12px;overflow:hidden;background:#fff;border:1px solid rgba(0,0,0,.18);box-shadow:0 18px 40px rgba(60,40,10,.18)}
+.chrome{display:flex;align-items:center;gap:10px;padding:9px 12px;background:#e9e5de;border-bottom:1px solid rgba(0,0,0,.12)}
+.chrome i{width:11px;height:11px;border-radius:50%;background:#e5675a;display:inline-block}
+.chrome i:nth-child(2){background:#eebd46}.chrome i:nth-child(3){background:#5fbf62}
+.chrome .url{flex:1;min-width:0;background:#fff;border-radius:999px;padding:3px 14px;font-size:12.5px;color:#5b5563;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-family:"Segoe UI",system-ui,sans-serif}
+/* Mise à l'échelle sans défilement horizontal de la page */
+@media (max-width:1330px){.fit.desk{zoom:.9}}
+@media (max-width:1200px){.fit.desk{zoom:.8}}
+@media (max-width:1060px){.fit.desk{zoom:.7}}
+@media (max-width:920px){.fit.desk{zoom:.6}}
+@media (max-width:800px){.fit.desk{zoom:.5}}
+@media (max-width:660px){.fit.desk{zoom:.4}}
+@media (max-width:540px){.fit.desk{zoom:.3}}
+@media (max-width:410px){.fit.desk{zoom:.26}}
+.row2{display:flex;flex-wrap:wrap;gap:32px;align-items:flex-start}
+
+/* ---- Application : structure ---- */
+.app{width:1294px;display:grid;grid-template-columns:248px minmax(0,1fr);background:var(--bg);color:var(--on);min-height:640px}
+.nav{background:var(--lo);padding:18px 12px;display:flex;flex-direction:column;gap:4px}
+.nav .brand{font-weight:900;font-size:19px;padding:6px 16px 18px}
+.nav .brand span{color:var(--pri)}
+.nav a{display:flex;align-items:center;gap:12px;height:48px;padding:0 16px;border-radius:24px;color:var(--onv);text-decoration:none;font-weight:700;font-size:14.5px}
+.nav a.on{background:var(--sec);color:var(--osec);font-weight:900}
+.main{padding:16px 24px 32px;min-width:0}
+
+/* Barre supérieure */
+.top{display:flex;align-items:center;gap:12px}
+.search{flex:1;max-width:440px;height:44px;border-radius:9999px;background:var(--sc);display:flex;align-items:center;gap:10px;padding:0 16px;color:var(--onv)}
+.top .sp{flex:1}
+.plus{height:48px;width:48px;border-radius:24px;border:none;background:var(--pri);color:var(--onpri);display:grid;place-items:center;box-shadow:var(--e1)}
+.plus svg.ic{width:24px;height:24px}
+.plus.open{outline:2px solid var(--pri);outline-offset:2px}
+.iconbtn{position:relative;width:40px;height:40px;border-radius:50%;display:grid;place-items:center;color:var(--onv)}
+.badge-n{position:absolute;top:4px;right:3px;min-width:16px;height:16px;padding:0 4px;border-radius:8px;background:var(--err);color:var(--onerr);font-size:10.5px;font-weight:900;line-height:16px;text-align:center}
+.avatar{width:36px;height:36px;border-radius:50%;background:var(--ter);color:var(--oter);display:grid;place-items:center;font-weight:900;font-size:15px}
+
+/* Menu Material */
+.menu{position:absolute;background:var(--sc);border-radius:8px;box-shadow:var(--e2);padding:8px 0;min-width:240px;z-index:2}
+.menu a{display:flex;align-items:center;gap:12px;height:48px;padding:0 16px;color:var(--on);font-weight:700;text-decoration:none}
+.menu a svg.ic{color:var(--onv)}
+.menu a.hl{background:rgba(42,39,51,.08)}
+
+/* Titre de rubrique */
+.h-rub{font-size:28px;font-weight:900;line-height:1.2;margin:22px 0 16px}
+
+/* Cartes de l'accueil */
+.cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(232px,1fr));gap:12px}
+.prep{background:var(--sf);border-radius:16px;box-shadow:var(--e1);overflow:hidden;display:flex;flex-direction:column}
+.prep .cover{height:128px;display:grid;place-items:center;position:relative}
+.prep .cover svg.ill{width:84px;height:84px}
+.prep .cover .em{font-family:var(--emoji);font-size:64px;line-height:1}
+.prep .more{position:absolute;top:6px;right:6px;width:40px;height:40px;border-radius:50%;display:grid;place-items:center;color:var(--on);background:rgba(255,253,246,.7)}
+.prep .body{padding:12px 14px 14px}
+.prep .t{font-size:16px;font-weight:800;line-height:1.3}
+.prep .meta{display:flex;align-items:center;gap:8px;margin-top:6px;flex-wrap:wrap}
+.prep .cnt{font-size:13px;font-weight:600;color:var(--onv);margin-top:6px}
+.mod{font-size:13px;font-weight:600;color:var(--onv)}
+
+.imp{background:var(--pc);color:var(--opc);border-radius:16px;padding:16px;display:flex;flex-direction:column;gap:6px}
+.imp .hd{display:flex;align-items:center;gap:10px;font-size:16px;font-weight:800}
+.imp .files{font-size:13px;font-weight:600}
+.imp .files span{display:flex;align-items:center;gap:6px}
+.imp .n{font-size:13px;font-weight:600}
+.imp .btn{margin-top:auto;align-self:flex-start}
+
+/* Boutons */
+.btn{display:inline-flex;align-items:center;gap:8px;height:40px;padding:0 22px;border-radius:20px;border:none;font-size:14px;font-weight:800;line-height:1.2;white-space:nowrap}
+.btn.filled{background:var(--pri);color:var(--onpri);box-shadow:var(--e1)}
+.btn.tonal{background:var(--pc);color:var(--opc)}
+.btn.text{background:transparent;color:var(--pri);padding:0 12px}
+
+/* Repères de Section ● ▲ ■ (variante « Repères ») */
+.sb{display:inline-flex;align-items:center;height:22px;padding:0 8px;border-radius:8px;font-size:12px;font-weight:800;letter-spacing:.03em;background:var(--sf);color:var(--on);border:2px solid;white-space:nowrap}
+.sb .shp{display:inline-block;width:9px;height:9px;margin-right:5px}
+.sb.ps{border-color:var(--ps)}.sb.ps .shp{border-radius:50%;background:var(--ps)}
+.sb.ms{border-color:var(--ms)}.sb.ms .shp{width:0;height:0;border-left:5.5px solid transparent;border-right:5.5px solid transparent;border-bottom:10px solid var(--ms)}
+.sb.gs{border-color:var(--gs)}.sb.gs .shp{background:var(--gs);border-radius:1px}
+
+/* ---- Accueil mobile ---- */
+.phone{width:360px;max-width:100%;background:#1e1c22;border-radius:38px;padding:12px 10px;box-shadow:0 14px 34px rgba(0,0,0,.25);flex:none}
+.phone .scr{border-radius:28px;overflow:hidden;min-height:620px;background:var(--bg);color:var(--on)}
+.sbar{display:flex;justify-content:space-between;font-size:11.5px;padding:8px 18px 4px;font-family:"Segoe UI",system-ui,sans-serif;font-weight:600}
+.m-top{display:flex;align-items:center;justify-content:space-between;padding:8px 16px}
+.m-top .brand{font-weight:900;font-size:18px}
+.m-top .brand span{color:var(--pri)}
+.m-body{padding:24px 16px}
+.addphoto{width:100%;height:96px;border:none;border-radius:24px;background:var(--pri);color:var(--onpri);display:flex;align-items:center;justify-content:center;gap:12px;font-size:16px;font-weight:800;line-height:1.3;box-shadow:var(--e1)}
+.addphoto svg.ic{width:28px;height:28px}
+
+/* ---- Dialogue « Nouvelle préparation » ---- */
+.scrim{background:rgba(42,39,51,.32);border-radius:16px;padding:32px 16px;display:flex;justify-content:center;flex:1;min-width:0}
+.dlg{width:480px;max-width:100%;background:var(--sf);border-radius:24px;box-shadow:var(--e2);padding:24px}
+.dlg h2{margin:0 0 16px;font-size:22px;font-weight:900;line-height:1.2}
+.lbl{font-size:12px;font-weight:800;color:var(--onv);margin:16px 0 6px}
+.ff{background:var(--hi);border-radius:12px 12px 0 0;border-bottom:2px solid var(--pri);padding:6px 14px 8px}
+.ff.rest{border-bottom:1px solid var(--ol)}
+.ff small{display:block;font-size:12px;font-weight:800;color:var(--pri)}
+.ff.rest small{color:var(--onv)}
+.ff .v{display:flex;align-items:center;gap:8px;font-size:15px;font-weight:700;min-height:24px}
+.ff .v .caret{width:2px;height:20px;background:var(--pri);margin-left:-6px}
+.ff .v .end{margin-left:auto;color:var(--onv)}
+.drop{background:var(--sc);border-radius:0 0 8px 8px;box-shadow:var(--e2);padding:6px 0}
+.drop a{display:flex;align-items:center;gap:10px;min-height:44px;padding:4px 14px;color:var(--on);text-decoration:none;font-weight:700}
+.drop a.hl{background:rgba(42,39,51,.08)}
+.drop a small{font-size:13px;font-weight:600;color:var(--onv);margin-left:auto}
+.drop a.create{color:var(--pri);border-top:1px solid var(--ov)}
+.segs{display:flex;gap:8px}
+.segs span{flex:1;height:40px;border-radius:12px;display:flex;align-items:center;justify-content:center;gap:6px;font-weight:800;border:1px solid var(--ol);background:var(--sf);color:var(--on)}
+.segs span .shp{display:inline-block;width:10px;height:10px}
+.segs .ps .shp{border-radius:50%;background:var(--ps)}
+.segs .ms .shp{width:0;height:0;border-left:6px solid transparent;border-right:6px solid transparent;border-bottom:11px solid var(--ms)}
+.segs .gs .shp{background:var(--gs);border-radius:1px}
+.segs span.on{background:var(--sec);color:var(--osec);border-color:transparent}
+.segs span.on::before{content:"✓";font-weight:900}
+.chipfield{display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+.chip{display:inline-flex;align-items:center;gap:6px;height:28px;padding:0 6px 0 10px;border-radius:8px;background:var(--sec);color:var(--osec);font-size:13px;font-weight:800}
+.chip svg.ic{width:16px;height:16px}
+.dlg .acts{display:flex;justify-content:flex-end;gap:8px;margin-top:24px}
+.help{font-size:12px;color:var(--onv);font-weight:600;margin-top:4px;padding-left:14px}
+</style>
+</head>
+<body>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <symbol id="i-prep" viewBox="0 0 24 24"><rect x="5" y="4" width="14" height="17" rx="2"/><path d="M9 4V3h6v1"/><path d="M8.5 10h7M8.5 14h7M8.5 18h4"/></symbol>
+  <symbol id="i-banque" viewBox="0 0 24 24"><path d="M3 10 12 4l9 6"/><path d="M5 10v9h14v-9"/><path d="M10 19v-5h4v5"/></symbol>
+  <symbol id="i-fiche" viewBox="0 0 24 24"><rect x="4" y="3" width="16" height="18" rx="2"/><rect x="7" y="6" width="4" height="4" rx="1"/><rect x="13" y="6" width="4" height="4" rx="1"/><path d="M7 14h10M7 17h6"/></symbol>
+  <symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="6.5"/><path d="m16 16 4.5 4.5"/></symbol>
+  <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
+  <symbol id="i-bell" viewBox="0 0 24 24"><path d="M6 16V11a6 6 0 0 1 12 0v5l1.5 2h-15z"/><path d="M10 20.5a2 2 0 0 0 4 0"/></symbol>
+  <symbol id="i-import" viewBox="0 0 24 24"><path d="M12 15V4M7.5 8.5 12 4l4.5 4.5"/><path d="M4 15v4h16v-4"/></symbol>
+  <symbol id="i-img" viewBox="0 0 24 24"><rect x="3.5" y="4.5" width="17" height="15" rx="2.5"/><circle cx="9" cy="10" r="1.8"/><path d="m4 18 5.5-5 4 3.5 2.5-2 4.5 4"/></symbol>
+  <symbol id="i-cam" viewBox="0 0 24 24"><path d="M4 8h3.5L9 5.5h6L16.5 8H20v11H4z"/><circle cx="12" cy="13" r="3.5"/></symbol>
+  <symbol id="i-more" viewBox="0 0 24 24"><circle cx="12" cy="5.5" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="12" cy="18.5" r="1"/></symbol>
+  <symbol id="i-doc" viewBox="0 0 24 24"><path d="M6 3h8l4 4v14H6z"/><path d="M14 3v4h4"/></symbol>
+  <symbol id="i-close" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></symbol>
+  <symbol id="i-down" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></symbol>
+  <symbol id="i-book" viewBox="0 0 24 24"><path d="M4 5c3-1 6-1 8 1 2-2 5-2 8-1v14c-3-1-6-1-8 1-2-2-5-2-8-1z"/><path d="M12 6v14"/></symbol>
+  <symbol id="galette" viewBox="0 0 100 100"><circle cx="50" cy="52" r="38" fill="#e8b766" stroke="#2a2733" stroke-width="4"/><circle cx="50" cy="52" r="30" fill="none" stroke="#c98f3a" stroke-width="2" stroke-dasharray="4 6"/><circle cx="38" cy="46" r="4.5" fill="#2a2733"/><circle cx="62" cy="46" r="4.5" fill="#2a2733"/><path d="M36 62q14 12 28 0" fill="none" stroke="#2a2733" stroke-width="4" stroke-linecap="round"/></symbol>
+</svg>
+
+<div class="page">
+  <h1>Accueil · Préparations</h1>
+  <p class="lead">Claire, enseignante de MS, sur ordinateur (1280 px), déjà connectée. Un Import interrompu attend d'être repris.</p>
+
+  <!-- ============ 1. Accueil ordinateur au repos ============ -->
+  <div class="cap">1 · Accueil ordinateur, au repos</div>
+  <div class="fit desk">
+  <div class="browser">
+    <div class="chrome"><i></i><i></i><i></i><div class="url">corpus-mots.ecole / preparations</div></div>
+    <div class="app">
+      <nav class="nav" aria-label="Rubriques">
+        <div class="brand">corpus<span>·</span>mots</div>
+        <a class="on"><svg class="ic"><use href="#i-prep"/></svg>Préparations</a>
+        <a><svg class="ic"><use href="#i-banque"/></svg>Banque</a>
+        <a><svg class="ic"><use href="#i-fiche"/></svg>Fiches</a>
+      </nav>
+      <main class="main">
+        <div class="top">
+          <div class="search"><svg class="ic"><use href="#i-search"/></svg>Chercher un mot</div>
+          <span class="sp"></span>
+          <button class="plus" aria-label="Ajouter"><svg class="ic"><use href="#i-plus"/></svg></button>
+          <span class="iconbtn" aria-label="Notifications, 2 non lues"><svg class="ic"><use href="#i-bell"/></svg><span class="badge-n">2</span></span>
+          <span class="avatar" aria-label="Menu de profil">C</span>
+        </div>
+
+        <div class="h-rub">Préparations</div>
+
+        <div class="cards">
+          <!-- Carte « Import en cours » : en tête des cartes -->
+          <div class="imp">
+            <div class="hd"><svg class="ic"><use href="#i-import"/></svg>Import en cours</div>
+            <div class="files">
+              <span><svg class="ic" style="width:16px;height:16px"><use href="#i-doc"/></svg>Imagier automne.docx</span>
+              <span><svg class="ic" style="width:16px;height:16px"><use href="#i-doc"/></svg>Loup.pptx</span>
+            </div>
+            <div class="n">12 paires à vérifier</div>
+            <button class="btn filled">Reprendre</button>
+          </div>
+
+          <div class="prep">
+            <div class="cover" style="background:linear-gradient(160deg,#f2b31b,#d9472f)"><svg class="ill"><use href="#galette"/></svg><span class="more"><svg class="ic"><use href="#i-more"/></svg></span></div>
+            <div class="body">
+              <div class="t">Roule galette</div>
+              <div class="meta"><span class="sb ms"><i class="shp"></i>MS</span><span class="mod">Module 1</span></div>
+              <div class="cnt">14 mots · 1 à illustrer</div>
+            </div>
+          </div>
+
+          <div class="prep">
+            <div class="cover" style="background:linear-gradient(160deg,#fdf0c8,#e8b766)"><span class="em">🐔</span><span class="more"><svg class="ic"><use href="#i-more"/></svg></span></div>
+            <div class="body">
+              <div class="t">La petite poule rousse</div>
+              <div class="meta"><span class="sb ms"><i class="shp"></i>MS</span><span class="mod">Module 2</span></div>
+              <div class="cnt">9 mots · 3 à illustrer</div>
+            </div>
+          </div>
+
+          <div class="prep">
+            <div class="cover" style="background:linear-gradient(160deg,#dcf0e2,#8455c2)"><span class="em">🐺</span><span class="more"><svg class="ic"><use href="#i-more"/></svg></span></div>
+            <div class="body">
+              <div class="t">Le loup qui voulait changer de couleur</div>
+              <div class="meta"><span class="sb ms"><i class="shp"></i>MS</span><span class="mod">Module 1</span></div>
+              <div class="cnt">11 mots · 0 à illustrer</div>
+            </div>
+          </div>
+        </div>
+      </main>
+    </div>
+  </div>
+  </div>
+
+  <!-- ============ 2. Menu du bouton « + » ouvert ============ -->
+  <div class="cap">2 · Bouton « + » : menu ouvert</div>
+  <div class="fit desk">
+  <div class="browser">
+    <div class="chrome"><i></i><i></i><i></i><div class="url">corpus-mots.ecole / preparations</div></div>
+    <div class="app" style="min-height:300px">
+      <nav class="nav" aria-label="Rubriques">
+        <div class="brand">corpus<span>·</span>mots</div>
+        <a class="on"><svg class="ic"><use href="#i-prep"/></svg>Préparations</a>
+        <a><svg class="ic"><use href="#i-banque"/></svg>Banque</a>
+        <a><svg class="ic"><use href="#i-fiche"/></svg>Fiches</a>
+      </nav>
+      <main class="main" style="position:relative">
+        <div class="top">
+          <div class="search"><svg class="ic"><use href="#i-search"/></svg>Chercher un mot</div>
+          <span class="sp"></span>
+          <button class="plus open" aria-label="Ajouter" aria-expanded="true"><svg class="ic"><use href="#i-plus"/></svg></button>
+          <span class="iconbtn"><svg class="ic"><use href="#i-bell"/></svg><span class="badge-n">2</span></span>
+          <span class="avatar">C</span>
+        </div>
+        <div class="menu" role="menu" style="top:70px;right:112px">
+          <a class="hl"><svg class="ic"><use href="#i-prep"/></svg>Nouvelle préparation</a>
+          <a><svg class="ic"><use href="#i-img"/></svg>Ajouter une image</a>
+          <a><svg class="ic"><use href="#i-import"/></svg>Importer des fichiers</a>
+        </div>
+        <div class="h-rub" style="opacity:.55">Préparations</div>
+      </main>
+    </div>
+  </div>
+  </div>
+
+  <!-- ============ 3. Accueil mobile + 4. Dialogue ============ -->
+  <div class="row2">
+    <div>
+      <div class="cap">3 · Accueil mobile (largeur &lt; 600 px)</div>
+      <div class="phone"><div class="scr">
+        <div class="sbar"><span>9:41</span><span>●●● 4G</span></div>
+        <div class="m-top"><span class="brand">corpus<span>·</span>mots</span><span class="avatar">C</span></div>
+        <div class="m-body">
+          <button class="addphoto"><svg class="ic"><use href="#i-cam"/></svg>Ajouter une photo</button>
+        </div>
+      </div></div>
+    </div>
+
+    <div style="flex:1;min-width:0;display:flex;flex-direction:column">
+      <div class="cap">4 · Dialogue « Nouvelle préparation » (UJ-1, étape 1)</div>
+      <div class="scrim">
+        <div class="dlg" role="dialog" aria-label="Nouvelle préparation">
+          <h2>Nouvelle préparation</h2>
+
+          <div class="ff">
+            <small>Album</small>
+            <div class="v"><svg class="ic" style="color:var(--onv)"><use href="#i-search"/></svg>Roule gal<span class="caret"></span></div>
+          </div>
+          <div class="drop" role="listbox">
+            <a class="hl"><svg class="ic" style="color:var(--onv)"><use href="#i-book"/></svg>Roule galette<small>3 modules</small></a>
+            <a class="create"><svg class="ic"><use href="#i-plus"/></svg>Créer l'album « Roule gal »</a>
+          </div>
+
+          <div class="lbl">Section</div>
+          <div class="segs">
+            <span class="ps"><i class="shp"></i>PS</span>
+            <span class="ms on"><i class="shp"></i>MS</span>
+            <span class="gs"><i class="shp"></i>GS</span>
+          </div>
+
+          <div class="ff rest" style="margin-top:16px">
+            <small>Module</small>
+            <div class="v">Module 1<span class="end"><svg class="ic"><use href="#i-down"/></svg></span></div>
+          </div>
+
+          <div class="ff rest" style="margin-top:16px">
+            <small>Thème par défaut (facultatif)</small>
+            <div class="v chipfield"><span class="chip">cuisine<svg class="ic"><use href="#i-close"/></svg></span></div>
+          </div>
+
+          <div class="acts">
+            <button class="btn text">Annuler</button>
+            <button class="btn filled">Créer</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+</body>
+</html>

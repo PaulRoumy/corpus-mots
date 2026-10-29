@@ -1,0 +1,420 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Vérification de l'Import</title>
+<meta name="description" content="corpus-mots — maquette fidèle : écran de vérification de l'Import (UJ-2), sélection et complétion en lot, puis validation partielle.">
+<style>
+/* =====================================================================
+   MAQUETTE FIDÈLE — Écran de vérification de l'Import (UJ-2, Claire, MS)
+   Spines qui gouvernent cet écran :
+   - DESIGN.md › Colors (jetons clairs, types d'image, états), Typography,
+     Layout & Spacing, Elevation, Shapes ; Components › Structure et
+     navigation, Import (Carte de vérification d'Import), Images et Banque
+     (Case de sélection, Barre d'actions en lot, Repère de Section, Badge de
+     type d'image, Champ à étiquettes, Sélecteur de licence), Retours
+     (Bandeau d'erreur), Repère de qualité
+   - EXPERIENCE.md › Information Architecture (Surfaces : Import ;
+     Référentiels : Album, Licence), Component Patterns (Carte de
+     vérification d'Import, Case de sélection, Barre d'actions en lot,
+     Champ à étiquettes, Sélecteur de licence, Bandeau d'erreur, Repère de
+     qualité), State Patterns › Import, Interaction Primitives (Sélection
+     puis action en lot), Key Flows › UJ-2, Voice and Tone
+   - Base visuelle : .working/directions-1.html, direction 3 « Cahier Material »
+   - Sections ● ▲ ■ et bordures de type : .working/color-themes-1.html, « Repères »
+   ===================================================================== */
+/* ---------- Jetons DESIGN.md (mode clair) ---------- */
+:root{
+  --bg:#fbf5e6;--lo:#f7eedb;--sc:#f2e7cf;--hi:#ecdfc3;--sf:#fffdf6;
+  --on:#2a2733;--onv:#625b6b;--outline:#8a8070;--ov:#e3d6b8;
+  --pri:#2c6bd1;--onpri:#ffffff;--pc:#dde8fb;--opc:#123a7a;
+  --sec:#fdf0c8;--osec:#5a4300;--ter:#dcf0e2;--oter:#1d5f37;
+  --err:#b3261e;--onerr:#ffffff;--errc:#fbe1d9;--oerrc:#7a1a12;
+  --ps:#d9472f;--ms:#b07d00;--gs:#8455c2;
+  --lib:#2f8f55;--pho:#0b7a86;--alb:#c2456f;--inc:#8a8070;
+  --todo-bg:#fdf0c8;--todo-fg:#5a4300;--todo-bd:#ad820f;
+  --ret-bg:#fbe1d9;--ret-fg:#7a1a12;--ver-bg:#dcf0e2;--ver-fg:#1d5f37;
+  --page:#ffffff;
+  --e1:0 1px 2px rgba(70,50,20,.14),0 1px 3px 1px rgba(70,50,20,.08);
+  --e2:0 1px 2px rgba(70,50,20,.16),0 3px 8px 2px rgba(70,50,20,.10);
+  --sans:"Nunito",ui-rounded,"SF Pro Rounded","Segoe UI",system-ui,-apple-system,sans-serif;
+  --cursive:"Segoe Script","Playwrite FR Moderne",cursive;
+  color-scheme:light;
+}
+*{box-sizing:border-box}
+html{-webkit-text-size-adjust:100%}
+body{margin:0;background:#efe8d8;color:var(--on);font-family:var(--sans);font-size:14.5px;line-height:1.45;overflow-x:hidden}
+button{font:inherit;color:inherit;cursor:default}
+svg.ic{width:20px;height:20px;flex:none;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+.cur{font-family:var(--cursive);font-weight:400}
+
+/* ---------- Page de maquette (hors application) ---------- */
+.doc{max-width:1330px;margin:0 auto;padding:24px 16px 48px}
+.doc h1{font-size:clamp(22px,4vw,30px);font-weight:900;margin:0 0 4px}
+.doc .lede{margin:0 0 20px;color:var(--onv);font-size:14px}
+.sec-t{font-size:12px;font-weight:800;letter-spacing:.6px;text-transform:uppercase;color:var(--onv);margin:32px 0 8px}
+.sec-t:first-of-type{margin-top:8px}
+
+/* Cadre navigateur ~1280 px, réduit pour tenir à l'écran (aucun défilement horizontal de page) */
+.fit{width:1282px;zoom:1}
+@media (max-width:1330px){.fit{zoom:.9}}
+@media (max-width:1190px){.fit{zoom:.8}}
+@media (max-width:1060px){.fit{zoom:.7}}
+@media (max-width:930px){.fit{zoom:.6}}
+@media (max-width:800px){.fit{zoom:.5}}
+@media (max-width:672px){.fit{zoom:.42}}
+@media (max-width:570px){.fit{zoom:.34}}
+@media (max-width:468px){.fit{zoom:.27}}
+@media (max-width:378px){.fit{zoom:.24}}
+@media (max-width:340px){.fit{zoom:.22}}
+.browser{border-radius:12px;overflow:hidden;background:#fff;border:1px solid rgba(0,0,0,.18);box-shadow:0 18px 40px rgba(60,40,10,.18)}
+.chrome{display:flex;align-items:center;gap:10px;padding:9px 12px;background:#e9e5de;border-bottom:1px solid rgba(0,0,0,.12)}
+.chrome i{width:11px;height:11px;border-radius:50%;background:#e5675a;display:inline-block}
+.chrome i:nth-child(2){background:#eebd46}.chrome i:nth-child(3){background:#5fbf62}
+.chrome .url{flex:1;min-width:0;background:#fff;border-radius:999px;padding:3px 14px;font-size:12.5px;color:#5b5563;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-family:"Segoe UI",system-ui,sans-serif}
+
+/* ---------- Coquille : Navigation des rubriques + Barre supérieure ---------- */
+.app{width:1280px;display:grid;grid-template-columns:248px minmax(0,1fr);background:var(--bg);color:var(--on);min-height:780px}
+.nav{background:var(--lo);padding:18px 12px;display:flex;flex-direction:column;gap:4px}
+.nav .brand{font-weight:900;font-size:19px;padding:0 16px 14px}
+.nav .brand span{color:var(--pri)}
+.nav a{display:flex;align-items:center;gap:12px;height:48px;padding:0 16px;border-radius:24px;color:var(--onv);text-decoration:none;font-weight:700;font-size:14px}
+.nav a.on{background:var(--sec);color:var(--osec);font-weight:900}
+.main{padding:12px 24px 28px;min-width:0}
+.top{display:flex;align-items:center;gap:12px;height:56px}
+.top .search{flex:1;max-width:520px;height:44px;border-radius:9999px;background:var(--sc);display:flex;align-items:center;gap:10px;padding:0 18px;color:var(--onv);font-size:14.5px}
+.top .sp{flex:1}
+.top .plus{width:48px;height:48px;border-radius:24px;background:var(--pri);color:var(--onpri);display:grid;place-items:center;box-shadow:var(--e1);border:none}
+.top .plus svg{width:24px;height:24px}
+.top .bell{position:relative;width:44px;height:44px;border-radius:50%;display:grid;place-items:center;color:var(--onv)}
+.top .bell .dot{position:absolute;top:9px;right:10px;width:9px;height:9px;border-radius:50%;background:var(--err);border:2px solid var(--bg)}
+.top .avatar{width:36px;height:36px;border-radius:50%;background:var(--ter);color:var(--oter);display:grid;place-items:center;font-weight:900;font-size:14px}
+
+/* ---------- Typographie ---------- */
+.headline{font-size:28px;font-weight:900;line-height:1.2;margin:0}
+.title{font-size:16px;font-weight:800;line-height:1.3;margin:0}
+.body-sm{font-size:13px;font-weight:600;line-height:1.4;color:var(--onv)}
+.label-sm{font-size:12px;font-weight:800;line-height:1.2;color:var(--onv)}
+.k{font-size:12.5px;font-weight:700;color:var(--onv)}
+
+/* ---------- Boutons ---------- */
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;height:40px;padding:0 22px;border-radius:20px;font-weight:800;font-size:14px;line-height:1.2;border:none;white-space:nowrap}
+.btn.filled{background:var(--pri);color:var(--onpri);box-shadow:var(--e1)}
+.btn.tonal{background:var(--pc);color:var(--opc)}
+.btn.text{background:transparent;color:var(--pri);padding:0 12px}
+.btn.sm{height:32px;padding:0 14px;font-size:13px}
+.btn.text.sm{padding:0 8px}
+.btn[disabled]{background:rgba(42,39,51,.12);color:rgba(42,39,51,.38);box-shadow:none}
+.btn.text[disabled]{background:transparent}
+.btn svg{width:18px;height:18px}
+
+/* ---------- Puce de filtre ---------- */
+.chip{display:inline-flex;align-items:center;gap:6px;height:32px;padding:0 12px;border-radius:8px;background:var(--sf);border:1px solid var(--ov);font-size:13px;font-weight:700;color:var(--on);white-space:nowrap}
+.chip.on{background:var(--sec);color:var(--osec);border-color:transparent;font-weight:800}
+.chip.on::before{content:"";width:12px;height:7px;border-left:2.4px solid currentColor;border-bottom:2.4px solid currentColor;transform:translateY(-2px) rotate(-45deg);margin-right:2px}
+.chip .dd{width:16px;height:16px}
+.chips{display:flex;flex-wrap:wrap;gap:8px}
+
+/* ---------- Repère de Section (forme + couleur + libellé) ---------- */
+.sb{display:inline-flex;align-items:center;height:22px;padding:0 7px;border-radius:8px;font-size:12px;font-weight:800;letter-spacing:.03em;background:var(--sf);color:var(--on);border:2px solid}
+.sb .shp{display:inline-block;width:9px;height:9px;margin-right:5px}
+.sb.ps{border-color:var(--ps)}.sb.ps .shp{border-radius:50%;background:var(--ps)}
+.sb.ms{border-color:var(--ms)}.sb.ms .shp{width:0;height:0;border-left:5.5px solid transparent;border-right:5.5px solid transparent;border-bottom:10px solid var(--ms)}
+.sb.gs{border-color:var(--gs)}.sb.gs .shp{background:var(--gs);border-radius:1px}
+.chip .shp{display:inline-block;width:10px;height:10px}
+.chip .shp.ps{border-radius:50%;background:var(--ps)}
+.chip .shp.ms{width:0;height:0;border-left:6px solid transparent;border-right:6px solid transparent;border-bottom:11px solid var(--ms)}
+.chip .shp.gs{background:var(--gs);border-radius:1px}
+
+/* ---------- Badge de type d'image (icône + style de bordure + couleur) ---------- */
+.it,.st,.du{display:inline-flex;align-items:center;gap:4px;height:22px;padding:0 7px;border-radius:8px;font-size:12px;font-weight:800;white-space:nowrap;background:var(--sf);color:var(--on)}
+.it svg,.st svg,.du svg{width:14px;height:14px;flex:none}
+.it.lib{border:2px solid var(--lib)} .it.pho{border:3px double var(--pho)} .it.alb{border:2px dashed var(--alb)} .it.inc{border:2px dotted var(--inc)}
+/* Badge d'état */
+.st.todo{background:var(--todo-bg);color:var(--todo-fg);border:1px dashed var(--todo-bd)}
+.st.ret{background:var(--ret-bg);color:var(--ret-fg)}
+.st.ver{background:var(--ver-bg);color:var(--ver-fg)}
+
+/* ---------- Champs Material (remplis) ---------- */
+.field{background:var(--hi);border-radius:12px 12px 0 0;border-bottom:1px solid var(--outline);padding:6px 14px 7px;min-width:0}
+.field.focus{border-bottom:2px solid var(--pri);padding-bottom:6px}
+.field .lab{display:block;font-size:12px;font-weight:800;color:var(--onv);line-height:1.2}
+.field.focus .lab{color:var(--pri)}
+.field .val{display:flex;align-items:center;gap:6px;font-size:14.5px;font-weight:600;min-height:22px}
+.field .val .dd{margin-left:auto;width:18px;height:18px;color:var(--onv)}
+.field .val .muted{color:var(--onv);font-weight:600}
+.field.err{border-bottom:2px solid var(--err)}
+.field.err .lab{color:var(--err)}
+.helper{font-size:12px;font-weight:600;color:var(--onv);padding:3px 14px 0}
+.helper.err{color:var(--err)}
+.tag{display:inline-flex;align-items:center;gap:4px;height:24px;padding:0 8px;border-radius:8px;background:var(--sec);color:var(--osec);font-size:12.5px;font-weight:800}
+.tag svg{width:13px;height:13px}
+
+/* ---------- Case de sélection ---------- */
+.cb{position:absolute;top:6px;left:6px;width:40px;height:40px;display:grid;place-items:center;z-index:2}
+.cb i{width:18px;height:18px;border-radius:3px;border:2px solid var(--outline);background:var(--sf);display:grid;place-items:center}
+.cb.on i{background:var(--pri);border-color:var(--pri);color:var(--onpri)}
+.cb.on i svg{width:14px;height:14px;stroke-width:3}
+
+/* ---------- Bandeau d'erreur ---------- */
+.banner-err{display:flex;align-items:center;gap:12px;background:var(--errc);color:var(--oerrc);border-radius:12px;padding:10px 14px;font-size:13px;font-weight:600}
+.banner-err svg.ic{color:var(--err)}
+.banner-err .btn{margin-left:auto;color:var(--err)}
+
+/* ---------- Repère de qualité ---------- */
+.quality{font-size:13px;font-weight:600;color:var(--onv)}
+
+/* Images de démonstration */
+.emo{font-size:46px;line-height:1}
+
+/* ---------- Vérification de l'Import ---------- */
+.pagehd{display:flex;align-items:flex-end;gap:16px;margin-top:10px}
+.pagehd .sp{flex:1}
+.files{display:flex;flex-wrap:wrap;gap:8px;margin-top:8px;align-items:center}
+.fchip{display:inline-flex;align-items:center;gap:6px;height:28px;padding:0 10px;border-radius:8px;background:var(--lo);font-size:13px;font-weight:700}
+.fchip svg{width:16px;height:16px;color:var(--onv)}
+.cnt{font-size:13px;font-weight:600;color:var(--onv)}
+.cnt b{color:var(--on);font-weight:800}
+.bulk{margin-top:14px;background:var(--hi);border-radius:16px;padding:10px 12px 12px}
+.bulk .bh{display:flex;align-items:center;gap:8px}
+.bulk .bh .n{font-size:15px;font-weight:900;margin-right:4px}
+.bulk .bh .sp{flex:1}
+.bulk .x{width:40px;height:40px;border-radius:50%;display:grid;place-items:center;color:var(--onv)}
+.bulk .bf{display:grid;grid-template-columns:1.6fr 1fr 1.2fr 1.4fr;gap:8px;margin-top:8px}
+.bulk .field{background:var(--sf)}
+.bulk .chips{flex-wrap:nowrap}
+.flab{display:flex;align-items:center;gap:8px;margin:18px 0 8px;font-size:13px;font-weight:800;color:var(--onv)}
+.flab svg{width:16px;height:16px}
+.vgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:12px}
+.vc{position:relative;background:var(--sf);border-radius:16px;box-shadow:var(--e1);padding:8px;display:flex;flex-direction:column;gap:6px}
+.vc .img{height:92px;border-radius:12px;background:var(--lo);display:grid;place-items:center;font-size:50px;line-height:1}
+.vc .fld{background:var(--hi);border-radius:8px 8px 0 0;border-bottom:1px solid var(--outline);padding:3px 10px 4px}
+.vc .fld small{display:block;font-size:11px;font-weight:800;color:var(--onv);line-height:1.2}
+.vc .fld span{display:flex;align-items:center;font-size:15px;font-weight:700;min-height:21px}
+.vc .fld.focus{border-bottom:2px solid var(--pri);padding-bottom:3px}
+.vc .fld.focus small{color:var(--pri)}
+.vc .fld .caret{display:inline-block;width:2px;height:18px;background:var(--pri);margin-left:1px}
+.vc .meta{display:flex;flex-wrap:wrap;gap:4px}
+.vc .det{display:flex;align-items:flex-start;gap:4px;font-size:12px;font-weight:600;color:var(--onv);line-height:1.3}
+.vc .det svg{width:14px;height:14px;flex:none;margin-top:1px;color:var(--opc)}
+.vc .det b{color:var(--on);font-weight:800}
+.vc.sel{background:var(--pc);outline:2px solid var(--pri)}
+.vc.sel .fld{background:var(--sf)}
+.vc.prob{background:var(--errc);color:var(--oerrc);box-shadow:none}
+.vc.prob .img{background:var(--sf)}
+.vc.prob .fld{background:var(--sf);border-bottom:2px solid var(--err);padding-bottom:3px}
+.vc.prob .fld small{color:var(--err)}
+.vc .flag{display:flex;align-items:center;gap:4px;font-size:12px;font-weight:800;color:var(--oerrc)}
+.vc .flag svg{width:14px;height:14px;color:var(--err)}
+.vc .acts{display:flex;justify-content:flex-end;margin:-2px -4px -4px}
+.vc .acts .btn{color:var(--oerrc)}
+.footbar{display:flex;align-items:center;gap:12px;margin-top:18px;background:var(--lo);border-radius:16px;padding:12px 16px}
+.footbar .sp{flex:1}
+.prog{height:4px;border-radius:2px;background:var(--pc);overflow:hidden;margin-top:8px}
+.prog i{display:block;height:100%;background:var(--pri);border-radius:2px}
+.progrow{margin-top:14px;background:var(--sf);border-radius:16px;box-shadow:var(--e1);padding:14px 16px}
+.progrow .l{display:flex;align-items:center;gap:8px;font-size:14px;font-weight:800}
+.progrow .l .sp{flex:1}
+.progrow .l .r{font-size:13px;font-weight:600;color:var(--onv)}
+</style>
+</head>
+<body>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+<symbol id="i-prep" viewBox="0 0 24 24"><path d="M5 4h11l3 3v13H5z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/><path d="M8 10h8M8 14h8M8 18h5" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></symbol>
+<symbol id="i-banque" viewBox="0 0 24 24"><rect x="3" y="3" width="8" height="8" rx="2" fill="none" stroke="currentColor" stroke-width="2"/><rect x="13" y="3" width="8" height="8" rx="2" fill="none" stroke="currentColor" stroke-width="2"/><rect x="3" y="13" width="8" height="8" rx="2" fill="none" stroke="currentColor" stroke-width="2"/><rect x="13" y="13" width="8" height="8" rx="2" fill="none" stroke="currentColor" stroke-width="2"/></symbol>
+<symbol id="i-fiche" viewBox="0 0 24 24"><rect x="4" y="3" width="16" height="18" rx="2" fill="none" stroke="currentColor" stroke-width="2"/><rect x="7" y="6" width="4" height="4" rx="1" fill="none" stroke="currentColor" stroke-width="1.8"/><rect x="13" y="6" width="4" height="4" rx="1" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M7 14h10M7 17h6" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></symbol>
+<symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="6.5" fill="none" stroke="currentColor" stroke-width="2"/><path d="M16 16l4.5 4.5" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></symbol>
+<symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/></symbol>
+<symbol id="i-bell" viewBox="0 0 24 24"><path d="M6 16V11a6 6 0 0 1 12 0v5l1.5 2h-15z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/><path d="M10 20.5a2 2 0 0 0 4 0" fill="none" stroke="currentColor" stroke-width="2"/></symbol>
+<symbol id="i-check" viewBox="0 0 24 24"><path d="M5 12.5l4.5 4.5L19 7.5" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+<symbol id="i-dd" viewBox="0 0 24 24"><path d="M7 10l5 5 5-5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+<symbol id="i-close" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/></symbol>
+<symbol id="i-back" viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+<symbol id="i-libre" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="2"/><path d="M3 12h18M12 3c3 3 3 15 0 18M12 3c-3 3-3 15 0 18" fill="none" stroke="currentColor" stroke-width="1.6"/></symbol>
+<symbol id="i-photo" viewBox="0 0 24 24"><rect x="3" y="7" width="18" height="13" rx="3" fill="none" stroke="currentColor" stroke-width="2"/><path d="M8 7l2-3h4l2 3" fill="none" stroke="currentColor" stroke-width="2"/><circle cx="12" cy="13.5" r="3.5" fill="none" stroke="currentColor" stroke-width="2"/></symbol>
+<symbol id="i-album" viewBox="0 0 24 24"><path d="M4 5c3-1 6-1 8 1 2-2 5-2 8-1v14c-3-1-6-1-8 1-2-2-5-2-8-1z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/><path d="M12 6v14" stroke="currentColor" stroke-width="2"/></symbol>
+<symbol id="i-inconnu" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="2"/><path d="M9.5 9.5a2.5 2.5 0 1 1 3.5 2.3c-.7.4-1 .9-1 1.7" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><circle cx="12" cy="17" r="1.2" fill="currentColor"/></symbol>
+<symbol id="i-warn" viewBox="0 0 24 24"><path d="M12 3l10 18H2z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/><path d="M12 10v5" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/><circle cx="12" cy="18" r="1.2" fill="currentColor"/></symbol>
+<symbol id="i-spark" viewBox="0 0 24 24"><path d="M12 3v4M12 17v4M3 12h4M17 12h4M6 6l2.5 2.5M15.5 15.5L18 18M6 18l2.5-2.5M15.5 8.5L18 6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></symbol>
+<symbol id="i-history" viewBox="0 0 24 24"><path d="M4 12a8 8 0 1 0 2.4-5.7L4 8.5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M4 4v4.5h4.5M12 8v4.5l3 2" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+<symbol id="i-word" viewBox="0 0 24 24"><path d="M6 3h8l4 4v14H6z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/><path d="M8.5 11l1.3 5 1.7-4 1.7 4 1.3-5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/></symbol>
+<symbol id="i-ppt" viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="12" rx="2" fill="none" stroke="currentColor" stroke-width="2"/><path d="M12 17v3M8 21h8" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></symbol>
+<symbol id="i-share" viewBox="0 0 24 24"><path d="M12 15V4M8 8l4-4 4 4" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M5 13v6h14v-6" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/></symbol>
+<symbol id="i-trash" viewBox="0 0 24 24"><path d="M5 7h14M10 7V4h4v3M7 7l1 13h8l1-13" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/></symbol>
+<symbol id="i-file" viewBox="0 0 24 24"><path d="M6 3h8l4 4v14H6z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/><path d="M14 3v4h4" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/></symbol>
+<symbol id="i-pen" viewBox="0 0 24 24"><path d="M4 20l1-4L16 5l3 3L8 19z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/></symbol>
+<symbol id="i-link" viewBox="0 0 24 24"><path d="M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></symbol>
+<symbol id="i-filter" viewBox="0 0 24 24"><path d="M4 6h16M7 12h10M10 18h4" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></symbol>
+</svg>
+<div class="doc">
+<h1>Vérification de l'Import</h1>
+<p class="lede">UJ-2 — Claire (MS) importe ses anciens imagiers. Maquette fidèle, mode clair.</p>
+
+<div class="sec-t">1 · Vérification — cartes à problème signalées, sélection de Loup.pptx et complétion en lot</div>
+<div class="fit"><div class="browser">
+<div class="chrome"><i></i><i></i><i></i><div class="url">corpus-mots.fr/import/verification</div></div>
+<div class="app">
+  <nav class="nav" aria-label="Rubriques">
+    <div class="brand">corpus<span>·</span>mots</div>
+    <a><svg class="ic"><use href="#i-prep"/></svg>Préparations</a>
+    <a><svg class="ic"><use href="#i-banque"/></svg>Banque</a>
+    <a><svg class="ic"><use href="#i-fiche"/></svg>Fiches</a>
+  </nav>
+  <main class="main">
+    <div class="top">
+      <div class="search"><svg class="ic"><use href="#i-search"/></svg>Chercher un mot</div>
+      <span class="sp"></span>
+      <button class="plus" aria-label="Créer"><svg class="ic"><use href="#i-plus"/></svg></button>
+      <span class="bell"><svg class="ic"><use href="#i-bell"/></svg></span>
+      <span class="avatar">C</span>
+    </div>
+    <div class="pagehd">
+      <div><div class="k">Import</div><h1 class="headline">Vérifier l'import</h1>
+        <div class="files">
+          <span class="fchip"><svg class="ic"><use href="#i-file"/></svg>Imagier automne.docx</span>
+          <span class="fchip"><svg class="ic"><use href="#i-file"/></svg>Loup.pptx</span>
+          <span class="cnt"><b>18 paires</b> · 2 à corriger</span>
+        </div>
+      </div>
+      <span class="sp"></span>
+      <span class="quality">simple, claire, peu de détails</span>
+    </div>
+
+    <!-- Barre d'actions en lot (sélection active) -->
+    <div class="bulk" role="toolbar" aria-label="Actions en lot">
+      <div class="bh">
+        <span class="n">6 sélectionnées</span>
+        <button class="btn text sm">Tout sélectionner</button>
+        <span class="sp"></span>
+        <span class="x" aria-label="Désélectionner"><svg class="ic"><use href="#i-close"/></svg></span>
+      </div>
+      <div class="bf">
+        <div class="field focus"><span class="lab">Album</span><div class="val">C'est moi le plus fort<svg class="ic dd"><use href="#i-dd"/></svg></div></div>
+        <div class="field"><span class="lab">Module</span><div class="val"><span class="muted">—</span><svg class="ic dd"><use href="#i-dd"/></svg></div></div>
+        <div><span class="label-sm" style="display:block;margin:2px 0 6px">Sections</span><div class="chips"><span class="chip"><i class="shp ps"></i>PS</span><span class="chip on"><i class="shp ms"></i>MS</span><span class="chip"><i class="shp gs"></i>GS</span></div></div>
+        <div class="field"><span class="lab">Thèmes</span><div class="val"><span class="tag">loup</span><span class="tag">contes</span></div></div>
+        <div class="field"><span class="lab">Type d'image</span><div class="val">image libre<svg class="ic dd"><use href="#i-dd"/></svg></div></div>
+        <div class="field"><span class="lab">Licence</span><div class="val">ARASAAC (CC BY-NC-SA)<svg class="ic dd"><use href="#i-dd"/></svg></div></div>
+        <div class="field"><span class="lab">Source</span><div class="val">arasaac.org</div></div>
+      </div>
+    </div>
+
+    <div class="flab"><svg class="ic"><use href="#i-file"/></svg>Imagier automne.docx · 12 paires</div>
+    <div class="vgrid">
+<div class="vc"><span class="cb"><i></i></span><div class="img">🍂</div><div class="fld"><small>Mot</small><span>feuille</span></div><div class="meta"><span class="it inc"><svg><use href="#i-inconnu"/></svg>inconnu</span></div></div>
+<div class="vc"><span class="cb"><i></i></span><div class="img">🎃</div><div class="fld"><small>Mot</small><span>citrouille</span></div><div class="meta"><span class="it inc"><svg><use href="#i-inconnu"/></svg>inconnu</span></div><div class="det"><svg><use href="#i-spark"/></svg><span>existe déjà · 3 images, dans 2 albums</span></div></div>
+<div class="vc prob"><span class="cb"><i></i></span><div class="img">🍄</div><div class="fld"><small>Mot</small><span><span class="caret"></span></span></div><div class="flag"><svg class="ic"><use href="#i-warn"/></svg>mot manquant</div><div class="acts"><button class="btn text sm">Écarter</button></div></div>
+<div class="vc"><span class="cb"><i></i></span><div class="img">🌰</div><div class="fld"><small>Mot</small><span>châtaigne</span></div><div class="meta"><span class="it inc"><svg><use href="#i-inconnu"/></svg>inconnu</span></div></div>
+<div class="vc"><span class="cb"><i></i></span><div class="img">🦔</div><div class="fld"><small>Mot</small><span>hérisson</span></div><div class="meta"><span class="it inc"><svg><use href="#i-inconnu"/></svg>inconnu</span></div></div>
+<div class="vc"><span class="cb"><i></i></span><div class="img">🐿️</div><div class="fld focus"><small>Mot</small><span>écureuil<span class="caret"></span></span></div><div class="meta"><span class="it inc"><svg><use href="#i-inconnu"/></svg>inconnu</span></div></div>
+<div class="vc prob"><span class="cb"><i></i></span><div class="img">🍎</div><div class="fld" style="border-bottom:1px solid var(--outline);padding-bottom:4px"><small style="color:var(--onv)">Mot</small><span>pomme</span></div><div class="meta"><span class="it alb"><svg><use href="#i-album"/></svg>image d'album</span></div><div class="flag"><svg class="ic"><use href="#i-warn"/></svg>Album d'origine requis</div><div class="acts"><button class="btn text sm">Écarter</button></div></div>
+<div class="vc"><span class="cb"><i></i></span><div class="img">🍇</div><div class="fld"><small>Mot</small><span>raisin</span></div><div class="meta"><span class="it inc"><svg><use href="#i-inconnu"/></svg>inconnu</span></div></div>
+<div class="vc"><span class="cb"><i></i></span><div class="img">☂️</div><div class="fld"><small>Mot</small><span>parapluie</span></div><div class="meta"><span class="it inc"><svg><use href="#i-inconnu"/></svg>inconnu</span></div></div>
+<div class="vc"><span class="cb"><i></i></span><div class="img">👢</div><div class="fld"><small>Mot</small><span>bottes</span></div><div class="meta"><span class="it inc"><svg><use href="#i-inconnu"/></svg>inconnu</span></div></div>
+<div class="vc"><span class="cb"><i></i></span><div class="img">🌧️</div><div class="fld"><small>Mot</small><span>pluie</span></div><div class="meta"><span class="it inc"><svg><use href="#i-inconnu"/></svg>inconnu</span></div></div>
+<div class="vc"><span class="cb"><i></i></span><div class="img">🌬️</div><div class="fld"><small>Mot</small><span>vent</span></div><div class="meta"><span class="it inc"><svg><use href="#i-inconnu"/></svg>inconnu</span></div></div>
+
+    </div>
+
+    <div class="flab"><svg class="ic"><use href="#i-file"/></svg>Loup.pptx · 6 paires</div>
+    <div class="vgrid">
+<div class="vc sel"><span class="cb on"><i><svg class="ic"><use href="#i-check"/></svg></i></span><div class="img">🐺</div><div class="fld"><small>Mot</small><span>loup</span></div><div class="meta"><span class="sb ms"><i class="shp"></i>MS</span><span class="it lib"><svg><use href="#i-libre"/></svg>image libre</span></div><div class="det"><svg><use href="#i-spark"/></svg><span>existe déjà · 2 images, dans 1 album</span></div></div>
+<div class="vc sel"><span class="cb on"><i><svg class="ic"><use href="#i-check"/></svg></i></span><div class="img">👧</div><div class="fld"><small>Mot</small><span>chaperon</span></div><div class="meta"><span class="sb ms"><i class="shp"></i>MS</span><span class="it lib"><svg><use href="#i-libre"/></svg>image libre</span></div></div>
+<div class="vc sel"><span class="cb on"><i><svg class="ic"><use href="#i-check"/></svg></i></span><div class="img">🐷</div><div class="fld"><small>Mot</small><span>cochon</span></div><div class="meta"><span class="sb ms"><i class="shp"></i>MS</span><span class="it lib"><svg><use href="#i-libre"/></svg>image libre</span></div></div>
+<div class="vc sel"><span class="cb on"><i><svg class="ic"><use href="#i-check"/></svg></i></span><div class="img">🧔</div><div class="fld"><small>Mot</small><span>nain</span></div><div class="meta"><span class="sb ms"><i class="shp"></i>MS</span><span class="it lib"><svg><use href="#i-libre"/></svg>image libre</span></div></div>
+<div class="vc sel"><span class="cb on"><i><svg class="ic"><use href="#i-check"/></svg></i></span><div class="img">🐉</div><div class="fld"><small>Mot</small><span>dragon</span></div><div class="meta"><span class="sb ms"><i class="shp"></i>MS</span><span class="it lib"><svg><use href="#i-libre"/></svg>image libre</span></div></div>
+<div class="vc sel"><span class="cb on"><i><svg class="ic"><use href="#i-check"/></svg></i></span><div class="img">🌲</div><div class="fld"><small>Mot</small><span>forêt</span></div><div class="meta"><span class="sb ms"><i class="shp"></i>MS</span><span class="it lib"><svg><use href="#i-libre"/></svg>image libre</span></div></div>
+
+    </div>
+
+    <div class="footbar">
+      <span class="cnt"><b>16 paires prêtes</b> · 2 à corriger ou écarter</span>
+      <span class="sp"></span>
+      <button class="btn filled">Valider l'import</button>
+    </div>
+  </main>
+</div>
+</div></div>
+
+<div class="sec-t">2a · Validation en cours — progression par paire</div>
+<div class="fit"><div class="browser">
+<div class="chrome"><i></i><i></i><i></i><div class="url">corpus-mots.fr/import/verification</div></div>
+<div class="app" style="min-height:0">
+  <nav class="nav" aria-label="Rubriques">
+    <div class="brand">corpus<span>·</span>mots</div>
+    <a><svg class="ic"><use href="#i-prep"/></svg>Préparations</a>
+    <a><svg class="ic"><use href="#i-banque"/></svg>Banque</a>
+    <a><svg class="ic"><use href="#i-fiche"/></svg>Fiches</a>
+  </nav>
+  <main class="main">
+    <div class="top">
+      <div class="search"><svg class="ic"><use href="#i-search"/></svg>Chercher un mot</div>
+      <span class="sp"></span>
+      <button class="plus" aria-label="Créer"><svg class="ic"><use href="#i-plus"/></svg></button>
+      <span class="bell"><svg class="ic"><use href="#i-bell"/></svg></span>
+      <span class="avatar">C</span>
+    </div>
+    <div class="pagehd">
+      <div><div class="k">Import</div><h1 class="headline">Vérifier l'import</h1></div>
+    </div>
+    <div class="progrow">
+      <div class="l">Validation<span class="sp"></span><span class="r">9 paires sur 18</span></div>
+      <div class="prog"><i style="width:50%"></i></div>
+    </div>
+  </main>
+</div>
+</div></div>
+
+<div class="sec-t">2b · Validation partielle — paires créées gardées, les autres restent en vérification</div>
+<div class="fit"><div class="browser">
+<div class="chrome"><i></i><i></i><i></i><div class="url">corpus-mots.fr/import/verification</div></div>
+<div class="app" style="min-height:0">
+  <nav class="nav" aria-label="Rubriques">
+    <div class="brand">corpus<span>·</span>mots</div>
+    <a><svg class="ic"><use href="#i-prep"/></svg>Préparations</a>
+    <a><svg class="ic"><use href="#i-banque"/></svg>Banque</a>
+    <a><svg class="ic"><use href="#i-fiche"/></svg>Fiches</a>
+  </nav>
+  <main class="main">
+    <div class="top">
+      <div class="search"><svg class="ic"><use href="#i-search"/></svg>Chercher un mot</div>
+      <span class="sp"></span>
+      <button class="plus" aria-label="Créer"><svg class="ic"><use href="#i-plus"/></svg></button>
+      <span class="bell"><svg class="ic"><use href="#i-bell"/></svg></span>
+      <span class="avatar">C</span>
+    </div>
+    <div class="pagehd">
+      <div><div class="k">Import</div><h1 class="headline">Vérifier l'import</h1>
+        <div class="files"><span class="fchip"><svg class="ic"><use href="#i-file"/></svg>Loup.pptx</span><span class="cnt"><b>5 paires</b> à valider</span></div>
+      </div>
+    </div>
+    <div class="progrow">
+      <div class="l">Validation<span class="sp"></span><span class="r">13 paires sur 18 créées dans Mes mots</span></div>
+      <div class="prog"><i style="width:72%"></i></div>
+    </div>
+    <div class="banner-err" role="alert" style="margin-top:12px">
+      <svg class="ic"><use href="#i-warn"/></svg>
+      <span>5 paires n'ont pas été créées. Les 13 autres sont dans Mes mots.</span>
+      <button class="btn text sm">Réessayer</button>
+    </div>
+    <div class="flab"><svg class="ic"><use href="#i-file"/></svg>Loup.pptx · 5 paires</div>
+    <div class="vgrid">
+<div class="vc"><span class="cb"><i></i></span><div class="img">🐺</div><div class="fld"><small>Mot</small><span>loup</span></div><div class="meta"><span class="sb ms"><i class="shp"></i>MS</span><span class="it lib"><svg><use href="#i-libre"/></svg>image libre</span></div></div>
+<div class="vc"><span class="cb"><i></i></span><div class="img">👧</div><div class="fld"><small>Mot</small><span>chaperon</span></div><div class="meta"><span class="sb ms"><i class="shp"></i>MS</span><span class="it lib"><svg><use href="#i-libre"/></svg>image libre</span></div></div>
+<div class="vc"><span class="cb"><i></i></span><div class="img">🐷</div><div class="fld"><small>Mot</small><span>cochon</span></div><div class="meta"><span class="sb ms"><i class="shp"></i>MS</span><span class="it lib"><svg><use href="#i-libre"/></svg>image libre</span></div></div>
+<div class="vc"><span class="cb"><i></i></span><div class="img">🧔</div><div class="fld"><small>Mot</small><span>nain</span></div><div class="meta"><span class="sb ms"><i class="shp"></i>MS</span><span class="it lib"><svg><use href="#i-libre"/></svg>image libre</span></div></div>
+<div class="vc"><span class="cb"><i></i></span><div class="img">🐉</div><div class="fld"><small>Mot</small><span>dragon</span></div><div class="meta"><span class="sb ms"><i class="shp"></i>MS</span><span class="it lib"><svg><use href="#i-libre"/></svg>image libre</span></div><div class="det"><svg><use href="#i-link"/></svg><span>rattaché au mot existant, ajouté entre-temps</span></div></div>
+
+    </div>
+    <div class="footbar">
+      <span class="cnt"><b>5 paires prêtes</b></span>
+      <span class="sp"></span>
+      <button class="btn filled">Valider l'import</button>
+    </div>
+  </main>
+</div>
+</div></div>
+</div>
+</body>
+</html>
