@@ -2,7 +2,7 @@
 
 Une application web gratuite qui aide les enseignants de maternelle à préparer, partager et réutiliser le vocabulaire des albums étudiés en classe.
 
-> **Statut : conception.** Le product brief est validé ; le PRD et l'architecture sont les prochaines étapes. Aucun code pour l'instant.
+> **Statut : planification terminée.** Brief, PRD, UX, architecture et epics sont validés ; le développement commence par l'Epic 1.
 
 ## Le problème
 
