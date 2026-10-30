@@ -1,0 +1,110 @@
+# Intégration continue de corpus-mots.
+# Sur push et pull request : tests du back et du front, contrôle du contrat OpenAPI,
+# validation de la configuration de déploiement et construction des images (podman build).
+# Sur tag v* : en plus, publication des images sur ghcr.io.
+name: CI
+
+on:
+  push:
+    branches: ["**"]
+    tags: ["v*"]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  back:
+    runs-on: ubuntu-24.04
+    defaults:
+      run:
+        working-directory: back
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "25"
+          cache: maven
+      - name: Socket Podman pour les Dev Services (Testcontainers)
+        run: |
+          systemctl --user start podman.socket
+          echo "DOCKER_HOST=unix://${XDG_RUNTIME_DIR}/podman/podman.sock" >> "$GITHUB_ENV"
+          echo "TESTCONTAINERS_RYUK_DISABLED=true" >> "$GITHUB_ENV"
+      - name: Tests et construction (ArchUnit, erreurs, migrations, OpenAPI)
+        run: |
+          # Le contrat doit être réécrit par le build : sinon le contrôle de dérive échoue.
+          rm -f ../front/openapi/*
+          ./mvnw -B verify
+      - name: Le contrat OpenAPI versionné n'a pas dérivé
+        working-directory: .
+        run: |
+          git status --porcelain front/openapi
+          git diff --exit-code front/openapi
+          test -z "$(git status --porcelain front/openapi)"
+
+  front:
+    runs-on: ubuntu-24.04
+    defaults:
+      run:
+        working-directory: front
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "26"
+          cache: npm
+          cache-dependency-path: front/package-lock.json
+      - run: npm ci
+      - run: npm test -- --watch=false
+      - run: npm run build
+      - name: Aucune ressource chargée depuis l'extérieur dans le build
+        run: |
+          if grep -rnE --include='*.html' --include='*.css' -e 'href="(https?:)?//' -e 'src="(https?:)?//' -e "url\(['\"]?(https?:)?//" -e '@import' dist/; then
+            echo "Ressource externe trouvée dans dist/" >&2
+            exit 1
+          fi
+
+  configuration:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Caddyfiles valides
+        run: |
+          for caddyfile in deploiement/Caddyfile front/Caddyfile; do
+            podman run --rm -e DOMAINE=corpus-mots.example.fr -e ACME_EMAIL=admin@example.fr -v "$PWD/$caddyfile:/etc/caddy/Caddyfile:ro" docker.io/library/caddy:2.11 caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile
+          done
+      - name: compose.yaml valide
+        working-directory: deploiement
+        run: |
+          if ! command -v docker-compose >/dev/null && [ -x /usr/libexec/docker/cli-plugins/docker-compose ]; then
+            export PODMAN_COMPOSE_PROVIDER=/usr/libexec/docker/cli-plugins/docker-compose
+          fi
+          cp .env.exemple .env
+          podman compose config -q
+
+  images:
+    needs: [back, front, configuration]
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: Construction des images
+        run: |
+          for image in back front; do
+            podman build -f "$image/Containerfile" -t "corpus-mots-$image:ci" "$image"
+          done
+      - name: Publication sur ghcr.io (tag v* seulement)
+        if: startsWith(github.ref, 'refs/tags/v')
+        env:
+          REGISTRE: ghcr.io/paulroumy
+          JETON: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          echo "$JETON" | podman login ghcr.io -u "${{ github.actor }}" --password-stdin
+          for image in back front; do
+            podman tag "corpus-mots-$image:ci" "$REGISTRE/corpus-mots-$image:$VERSION"
+            podman push "$REGISTRE/corpus-mots-$image:$VERSION"
+          done

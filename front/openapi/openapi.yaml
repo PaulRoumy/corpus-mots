@@ -1,0 +1,9 @@
+---
+openapi: 3.1.0
+info:
+  title: corpus-mots
+  version: 1.0.0-SNAPSHOT
+  description: API de corpus-mots
+  license:
+    name: AGPL-3.0
+paths: {}

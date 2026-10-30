@@ -17,3 +17,14 @@ desktop.ini
 .memlog.md
 **/.working/*
 !**/.working/*.html
+
+# Back (Maven)
+target/
+
+# Front (npm, Angular)
+node_modules/
+dist/
+.angular/
+
+# Déploiement : secrets et réglages propres à la machine (modèle : deploiement/.env.exemple)
+deploiement/.env

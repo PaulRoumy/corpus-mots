@@ -104,7 +104,7 @@ Ce document découpe en epics et en stories réalisables les exigences de corpus
 
 - Pas de starter tiers : l'architecture fixe un monorepo à créer de zéro, avec `back/` (Quarkus 3.40 LTS, Maven, Java 25), `front/` (Angular 22.2 + Angular Material, composants standalone, état par services à signals, sans NgRx), `deploiement/` (`compose.yaml`, `Caddyfile`, `.env.exemple`, `sauvegarde.sh`, `keycloak/`) et `.github/workflows/`.
 - Le back est découpé en dix modules (`commun`, `comptes`, `referentiels`, `vocabulaire`, `notifications`, `preparations`, `importation`, `fiches`, `moderation`, `indicateurs`), chacun en trois couches `api` → `service` → `persistance` (paquetages `fr.corpusmots.<module>.<couche>`).
-- Versions de la stack : PostgreSQL 18.6 (+ `unaccent`, `pg_trgm`), Keycloak 26.8.x, Caddy 2.11.x, Apache POI 5.5.1, ng-openapi-gen 1.1.x, Node.js 26 LTS, ArchUnit 1.x, Docker Compose v5.
+- Versions de la stack : PostgreSQL 18.6 (+ `unaccent`, `pg_trgm`), Keycloak 26.8.x, Caddy 2.11.x, Apache POI 5.5.1, ng-openapi-gen 1.1.x, Node.js 26 LTS, ArchUnit 1.x, Podman 6.1 (`podman compose`, fournisseur Docker Compose v5).
 
 **Règles structurelles**
 
@@ -143,7 +143,7 @@ Ce document découpe en epics et en stories réalisables les exigences de corpus
 
 - AD-21 : hébergement portable. Tout ce qui dépend de la machine est dans `deploiement/.env`. `compose.yaml`, `Caddyfile` et l'export du realm Keycloak (versionné, thème et textes en français) sont identiques partout. Seuls les ports 80 et 443 sont ouverts.
 - Topologie : Caddy (Let's Encrypt) route `/` vers le front statique, `/api` vers Quarkus et `/auth` vers Keycloak (sauf `/auth/admin`). Un seul PostgreSQL héberge les bases `corpusmots` et `keycloak`.
-- CI/CD : un tag Git déclenche GitHub Actions, qui construit les images `front` et `back` et les publie sur ghcr.io. Sur le mini-PC : `docker compose pull && docker compose up -d`.
+- CI/CD : un tag Git déclenche GitHub Actions, qui construit les images `front` et `back` et les publie sur ghcr.io. Sur le mini-PC : `podman compose pull && podman compose up -d`.
 - Sauvegarde : `pg_dumpall` chaque nuit vers un disque externe, 14 jours conservés, avec un fichier d'état daté. Une restauration complète est testée avant le pilote.
 - Export de Mes mots (NFR-7) : assemblé par `preparations` via `FichiersImages`, sous forme d'archive ZIP (JSON + fichiers).
 - Tests : `@QuarkusTest` contre un PostgreSQL de test (Dev Services) ; ArchUnit pour AD-1 et AD-16 ; tests dédiés pour AD-2, AD-3, AD-4 et AD-10 ; tests de composants front pour les écrans clés. Les journaux ne contiennent jamais de contenu d'image ni de jeton.
@@ -320,8 +320,8 @@ Afin que toutes les fonctionnalités suivantes s'appuient dès le premier jour s
 **Quand** le build du front s'exécute
 **Alors** SmallRye génère le document OpenAPI 3.1, et ng-openapi-gen régénère le client TypeScript dans `front/src/app/api/`, dossier qu'on ne modifie jamais à la main (AD-7)
 
-**Étant donné** un hôte Linux avec Docker et un fichier `deploiement/.env` rempli (domaine, secrets, relais SMTP)
-**Quand** Paul lance `docker compose up -d`
+**Étant donné** un hôte Linux avec Podman et un fichier `deploiement/.env` rempli (domaine, secrets, relais SMTP)
+**Quand** Paul lance `podman compose up -d`
 **Alors** Caddy obtient un certificat Let's Encrypt et route `/` vers le front statique, `/api` vers Quarkus et `/auth` vers Keycloak, tandis que `/auth/admin` reste inaccessible depuis l'extérieur
 **Et** PostgreSQL 18 héberge deux bases : `corpusmots`, où une migration Flyway nommée selon AD-22 crée les extensions `unaccent` et `pg_trgm`, et `keycloak`
 **Et** au démarrage, Keycloak importe le realm versionné dans `deploiement/keycloak/`, avec son thème et ses textes en français
@@ -329,7 +329,7 @@ Afin que toutes les fonctionnalités suivantes s'appuient dès le premier jour s
 **Étant donné** un tag Git poussé
 **Quand** GitHub Actions s'exécute
 **Alors** les tests du back et du front passent, puis les images `front` et `back` sont construites et publiées sur ghcr.io
-**Et** la commande `docker compose pull && docker compose up -d` met la production à jour
+**Et** la commande `podman compose pull && podman compose up -d` met la production à jour
 
 **Étant donné** une requête REST qui échoue
 **Quand** le back répond

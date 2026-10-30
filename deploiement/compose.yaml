@@ -1,0 +1,124 @@
+# corpus-mots : déploiement complet, piloté par `podman compose` (Podman rootless, AD-21).
+# Identique sur toute machine : ce qui en dépend vient de .env (modèle : .env.exemple).
+name: corpus-mots
+
+services:
+  caddy:
+    image: docker.io/library/caddy:2.11
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    environment:
+      DOMAINE: ${DOMAINE:?DOMAINE manquant dans .env}
+      ACME_EMAIL: ${ACME_EMAIL:?ACME_EMAIL manquant dans .env}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro,z
+      - caddy-donnees:/data
+      - caddy-config:/config
+    depends_on:
+      front:
+        condition: service_started
+      back:
+        condition: service_started
+      keycloak:
+        condition: service_started
+    healthcheck:
+      test: ["CMD", "caddy", "version"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+  front:
+    image: ghcr.io/paulroumy/corpus-mots-front:${VERSION:?VERSION manquante dans .env}
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:8080/"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+  back:
+    image: ghcr.io/paulroumy/corpus-mots-back:${VERSION:?VERSION manquante dans .env}
+    restart: unless-stopped
+    environment:
+      BD_HOTE: postgres
+      BD_NOM: corpusmots
+      BD_UTILISATEUR: corpusmots
+      BD_MOT_DE_PASSE: ${BD_MOT_DE_PASSE:?BD_MOT_DE_PASSE manquant dans .env}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      # L'image JRE n'a ni curl ni wget : requête HTTP minimale par bash.
+      test: ["CMD", "bash", "-c", "exec 3<>/dev/tcp/127.0.0.1/8080 && printf 'GET /q/health/ready HTTP/1.0\r\n\r\n' >&3 && head -n 1 <&3 | grep -q ' 200 '"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 60s
+
+  keycloak:
+    image: quay.io/keycloak/keycloak:26.8
+    restart: unless-stopped
+    command: ["start", "--import-realm"]
+    environment:
+      KC_DB: postgres
+      KC_DB_URL: jdbc:postgresql://postgres:5432/keycloak
+      KC_DB_USERNAME: keycloak
+      KC_DB_PASSWORD: ${KEYCLOAK_BD_MOT_DE_PASSE:?KEYCLOAK_BD_MOT_DE_PASSE manquant dans .env}
+      KC_HOSTNAME: https://${DOMAINE}/auth
+      KC_HTTP_ENABLED: "true"
+      KC_HTTP_RELATIVE_PATH: /auth
+      KC_PROXY_HEADERS: xforwarded
+      KC_HEALTH_ENABLED: "true"
+      KC_BOOTSTRAP_ADMIN_USERNAME: ${KEYCLOAK_ADMIN_UTILISATEUR:?KEYCLOAK_ADMIN_UTILISATEUR manquant dans .env}
+      KC_BOOTSTRAP_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_MOT_DE_PASSE:?KEYCLOAK_ADMIN_MOT_DE_PASSE manquant dans .env}
+      # Lus par l'export du realm (placeholders ${env.…}) à l'import.
+      DOMAINE: ${DOMAINE}
+      SMTP_HOTE: ${SMTP_HOTE:?SMTP_HOTE manquant dans .env}
+      SMTP_PORT: ${SMTP_PORT:-587}
+      SMTP_EXPEDITEUR: ${SMTP_EXPEDITEUR:?SMTP_EXPEDITEUR manquant dans .env}
+      SMTP_AUTH: ${SMTP_AUTH:-false}
+      SMTP_UTILISATEUR: ${SMTP_UTILISATEUR:-}
+      SMTP_MOT_DE_PASSE: ${SMTP_MOT_DE_PASSE:-}
+      SMTP_STARTTLS: ${SMTP_STARTTLS:-true}
+      SMTP_SSL: ${SMTP_SSL:-false}
+    volumes:
+      - ./keycloak/realm-corpus-mots.json:/opt/keycloak/data/import/realm-corpus-mots.json:ro,z
+      - ./keycloak/themes/corpus-mots:/opt/keycloak/themes/corpus-mots:ro,z
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      # Interface de gestion (port 9000), sous le même chemin relatif /auth ; l'image n'a pas curl.
+      test: ["CMD", "bash", "-c", "exec 3<>/dev/tcp/127.0.0.1/9000 && printf 'GET /auth/health/ready HTTP/1.0\r\n\r\n' >&3 && head -n 1 <&3 | grep -q ' 200 '"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 90s
+
+  postgres:
+    image: docker.io/library/postgres:18.6
+    restart: unless-stopped
+    environment:
+      # Superutilisateur par défaut « postgres » ; rôles corpusmots et keycloak créés par
+      # postgres/init-keycloak.sh à la première initialisation du volume.
+      POSTGRES_PASSWORD: ${POSTGRES_MOT_DE_PASSE:?POSTGRES_MOT_DE_PASSE manquant dans .env}
+      BD_MOT_DE_PASSE: ${BD_MOT_DE_PASSE:?BD_MOT_DE_PASSE manquant dans .env}
+      KEYCLOAK_BD_MOT_DE_PASSE: ${KEYCLOAK_BD_MOT_DE_PASSE:?KEYCLOAK_BD_MOT_DE_PASSE manquant dans .env}
+    volumes:
+      - postgres-donnees:/var/lib/postgresql
+      - ./postgres/init-keycloak.sh:/docker-entrypoint-initdb.d/init-keycloak.sh:ro,z
+    healthcheck:
+      # Par TCP : l'initdb temporaire n'écoute que sur le socket Unix et ne doit pas paraître prêt.
+      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -U postgres -d postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  caddy-donnees:
+  caddy-config:
+  postgres-donnees:

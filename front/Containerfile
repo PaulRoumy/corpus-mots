@@ -1,0 +1,15 @@
+# Image du front corpus-mots : construite par `podman build -f front/Containerfile front`.
+
+# Étape 1 : génération du client OpenAPI (prebuild) et compilation Angular avec Node 26.
+FROM docker.io/library/node:26 AS construction
+WORKDIR /construction
+COPY package.json package-lock.json ./
+RUN npm ci
+COPY . .
+RUN npm run build
+
+# Étape 2 : fichiers statiques servis par Caddy, avec repli SPA sur index.html.
+FROM docker.io/library/caddy:2.11
+COPY Caddyfile /etc/caddy/Caddyfile
+COPY --from=construction /construction/dist/front/browser/ /srv/
+EXPOSE 8080

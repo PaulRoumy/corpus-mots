@@ -3,7 +3,7 @@
 
 ## corpus-mots
 
-Application web gratuite pour les enseignants de maternelle : banque mot-image partagée dans l'école, préparation du vocabulaire des albums, génération de fiches Word et PowerPoint. Monolithe modulaire Quarkus (Java) + SPA Angular, Keycloak, PostgreSQL, déployés par Docker Compose. La planification BMAD est dans `docs/` (PRD, UX, architecture, epics) ; le suivi de réalisation dans `docs/realisation/`.
+Application web gratuite pour les enseignants de maternelle : banque mot-image partagée dans l'école, préparation du vocabulaire des albums, génération de fiches Word et PowerPoint. Monolithe modulaire Quarkus (Java) + SPA Angular, Keycloak, PostgreSQL, déployés en conteneurs Podman (`podman compose`). La planification BMAD est dans `docs/` (PRD, UX, architecture, epics) ; le suivi de réalisation dans `docs/realisation/`.
 
 ## Où sont les choses
 
@@ -14,8 +14,11 @@ Application web gratuite pour les enseignants de maternelle : banque mot-image p
 
 ## Lancer et vérifier
 
-- TODO (story 1.1) : commandes de build et de test du back (Maven Wrapper, Quarkus), du front (npm, Angular) et du déploiement (`docker compose` dans `deploiement/`), à vérifier au premier refresh.
-- Versions : tableau Stack de l'architecture tant que `back/pom.xml` et `front/package.json` n'existent pas, puis ces fichiers font foi ; ne jamais reprendre une version de mémoire.
+- Back (JDK Temurin 25 dans `JAVA_HOME`), depuis `back/` : `./mvnw verify` (tests + construction, écrit `front/openapi/openapi.json`) ; `./mvnw test -Dtest='fr.corpusmots.architecture.**'` pour ArchUnit seul ; `./mvnw quarkus:dev` en local. Les `@QuarkusTest` et le mode dev démarrent PostgreSQL par Dev Services : socket Podman compatible Docker requis (`DOCKER_HOST`), sinon seule la CI les exécute.
+- Contrat : après tout changement d'API, `./mvnw package -DskipTests` puis versionner `front/openapi/` ; la CI échoue si ce dossier a dérivé.
+- Front (Node 26), depuis `front/` : `npm ci`, `npm test -- --watch=false`, `npm run build`, `npm start` ; `npm run api` régénère `src/app/api/` (non versionné), lancé automatiquement avant `start`, `build` et `test`.
+- Déploiement, depuis `deploiement/` : `cp .env.exemple .env`, `podman compose config --quiet`, `podman compose up -d` ; détails et prérequis de l'hôte dans `deploiement/README.md`. Images publiées par la CI sur tag `v*`.
+- Versions : `back/pom.xml` et `front/package.json` font foi ; ne jamais reprendre une version de mémoire.
 
 ## Conventions qui s'écartent des défauts
 

@@ -1,0 +1,29 @@
+# Point d'entrée HTTPS de corpus-mots (AD-21) : certificat Let's Encrypt pour {$DOMAINE}.
+{
+	email {$ACME_EMAIL}
+}
+
+{$DOMAINE} {
+	# 100 Mio par requête au plus, comme Quarkus (quarkus.http.limits.max-body-size=100M) : sinon 413.
+	request_body {
+		max_size 100MiB
+	}
+
+	# La console et l'API d'administration de Keycloak, et le realm master, ne sont jamais exposés.
+	@keycloakAdministration path /auth/admin* /auth/realms/master*
+	handle @keycloakAdministration {
+		respond 404
+	}
+
+	handle /auth* {
+		reverse_proxy keycloak:8080
+	}
+
+	handle /api* {
+		reverse_proxy back:8080
+	}
+
+	handle {
+		reverse_proxy front:8080
+	}
+}

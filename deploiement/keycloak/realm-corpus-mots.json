@@ -1,0 +1,60 @@
+{
+  "realm": "corpus-mots",
+  "displayName": "corpus-mots",
+  "enabled": true,
+  "sslRequired": "external",
+  "registrationAllowed": false,
+  "registrationEmailAsUsername": true,
+  "loginWithEmailAllowed": true,
+  "duplicateEmailsAllowed": false,
+  "resetPasswordAllowed": true,
+  "editUsernameAllowed": false,
+  "rememberMe": false,
+  "verifyEmail": false,
+  "bruteForceProtected": true,
+  "internationalizationEnabled": true,
+  "supportedLocales": ["fr"],
+  "defaultLocale": "fr",
+  "loginTheme": "corpus-mots",
+  "roles": {
+    "realm": [
+      {
+        "name": "admin",
+        "description": "Administrateur de corpus-mots"
+      }
+    ]
+  },
+  "clients": [
+    {
+      "clientId": "corpus-mots-front",
+      "name": "corpus-mots",
+      "enabled": true,
+      "protocol": "openid-connect",
+      "publicClient": true,
+      "standardFlowEnabled": true,
+      "implicitFlowEnabled": false,
+      "directAccessGrantsEnabled": false,
+      "serviceAccountsEnabled": false,
+      "frontchannelLogout": true,
+      "rootUrl": "https://${env.DOMAINE}",
+      "baseUrl": "/",
+      "redirectUris": ["https://${env.DOMAINE}/*"],
+      "webOrigins": ["https://${env.DOMAINE}"],
+      "attributes": {
+        "pkce.code.challenge.method": "S256",
+        "post.logout.redirect.uris": "https://${env.DOMAINE}/*"
+      }
+    }
+  ],
+  "smtpServer": {
+    "host": "${env.SMTP_HOTE}",
+    "port": "${env.SMTP_PORT}",
+    "from": "${env.SMTP_EXPEDITEUR}",
+    "fromDisplayName": "corpus-mots",
+    "auth": "${env.SMTP_AUTH}",
+    "user": "${env.SMTP_UTILISATEUR}",
+    "password": "${env.SMTP_MOT_DE_PASSE}",
+    "starttls": "${env.SMTP_STARTTLS}",
+    "ssl": "${env.SMTP_SSL}"
+  }
+}

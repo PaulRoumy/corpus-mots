@@ -1,0 +1,29 @@
+# Caddy du conteneur front : sert l'application Angular compilée, en HTTP sur le réseau interne.
+# Le Caddy de deploiement/ termine le TLS et route ici tout ce qui n'est ni /api ni /auth.
+{
+	admin off
+	auto_https off
+}
+
+:8080 {
+	root * /srv
+	encode zstd gzip
+
+	# index.html (servi aussi pour les routes Angular, sans extension) : toujours revalidé.
+	@pageApplication path_regexp pageApplication ^(/index\.html|[^.]*)$
+	header @pageApplication Cache-Control "no-cache"
+
+	# Fichiers à empreinte du build Angular (main-ABCD1234.js…) : cache long.
+	@empreinte path_regexp empreinte -[A-Z0-9]{8}\.[a-z0-9]+$
+	header @empreinte Cache-Control "public, max-age=31536000, immutable"
+
+	# Repli SPA seulement pour les chemins sans extension absents du disque ;
+	# un fichier manquant (*.js, *.css…) reste en 404.
+	@routeAngular {
+		path_regexp routeAngular ^[^.]*$
+		not file
+	}
+	rewrite @routeAngular /index.html
+
+	file_server
+}

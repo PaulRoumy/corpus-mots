@@ -2,7 +2,7 @@
 
 Une application web gratuite qui aide les enseignants de maternelle à préparer, partager et réutiliser le vocabulaire des albums étudiés en classe.
 
-> **Statut : planification terminée.** Brief, PRD, UX, architecture et epics sont validés ; le développement commence par l'Epic 1.
+> **Statut : développement de l'Epic 1 en cours.** Brief, PRD, UX, architecture et epics sont validés ; le socle de l'application (back, front, déploiement, CI) est en place.
 
 ## Le problème
 
@@ -32,6 +32,29 @@ Le projet est conçu par un enseignant, à partir de sa pratique, et sera d'abor
 | **V1** | Banque mot-image, détection des mots existants, partage dans l'école, import des fichiers Word et PowerPoint existants, ajout de photos depuis un téléphone, génération et export des fiches |
 | **V2** | Pilotage du corpus : importer une liste de référence par section (par exemple la liste de Boisseau), voir les mots couverts et manquants, et obtenir des combinaisons d'albums qui couvrent le corpus |
 | **Plus tard** | Envoi hebdomadaire aux familles, vidéos courtes pour les verbes d'action, ouverture à d'autres écoles |
+
+## Démarrage
+
+Le dépôt contient trois parties : `back/` (API Quarkus, Java), `front/` (application Angular) et `deploiement/` (conteneurs Podman). Les commandes fonctionnent sous macOS, Linux et Windows (Git Bash).
+
+Prérequis : JDK **Temurin 25**, **Node.js 26** et **Podman 6.1** avec son socket compatible Docker activé (les tests du back démarrent un PostgreSQL de test dans un conteneur).
+
+```sh
+# Back, depuis la racine : tests (ArchUnit, erreurs, migrations) et construction ;
+# régénère front/openapi/openapi.json
+(cd back && ./mvnw verify)
+(cd back && ./mvnw quarkus:dev)          # API sur http://localhost:8080/api
+
+# Front, depuis la racine : génère le client d'API depuis openapi/, puis teste et construit
+(cd front && npm ci && npm test -- --watch=false && npm run build)
+(cd front && npm start)                  # http://localhost:4200
+```
+
+Installation sur un serveur : voir [`deploiement/README.md`](deploiement/README.md) (`podman compose`, Caddy, Keycloak, PostgreSQL). Chaque tag `vX.Y.Z` publie les images `front` et `back` sur ghcr.io.
+
+## Licence
+
+Code sous licence [GNU AGPL v3](LICENSE).
 
 ## Documentation
 

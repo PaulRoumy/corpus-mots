@@ -1,0 +1,25 @@
+# Image du back corpus-mots : construite par `podman build -f back/Containerfile back`.
+
+# Étape 1 : compilation avec le JDK Temurin 25 et le Maven Wrapper du projet.
+FROM docker.io/library/eclipse-temurin:25-jdk AS construction
+# unzip : sans lui, mvnw (only-script) télécharge le .tar.gz et la somme SHA-256 du .zip échoue.
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends unzip \
+    && rm -rf /var/lib/apt/lists/*
+WORKDIR /construction
+COPY .mvn/ .mvn/
+COPY mvnw pom.xml ./
+COPY src/ src/
+RUN chmod +x mvnw && ./mvnw -B package -DskipTests
+
+# Étape 2 : exécution sur le JRE Temurin 25, sans les outils de compilation.
+FROM docker.io/library/eclipse-temurin:25-jre
+WORKDIR /app
+COPY --from=construction /construction/target/quarkus-app/lib/ lib/
+COPY --from=construction /construction/target/quarkus-app/*.jar ./
+COPY --from=construction /construction/target/quarkus-app/app/ app/
+COPY --from=construction /construction/target/quarkus-app/quarkus/ quarkus/
+ENV QUARKUS_PROFILE=prod
+EXPOSE 8080
+USER 1001
+ENTRYPOINT ["java", "-jar", "/app/quarkus-run.jar"]

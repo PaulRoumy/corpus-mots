@@ -7,7 +7,7 @@ paradigm: 'monolithe modulaire (back Quarkus découpé par domaine, couches REST
 scope: 'V1 de corpus-mots : application web complète (front, back, identité, données, déploiement sur le serveur de Paul)'
 status: final
 created: '2026-10-29'
-updated: '2026-10-29'
+updated: '2026-10-30'
 binds: [FR-1..FR-34, NFR §5, contraintes §6]
 sources:
   - docs/prd/prd-corpus-mots-2026-10-27/prd.md
@@ -214,7 +214,7 @@ stateDiagram-v2
 
 - **Binds:** déploiement, PRD §6.3, Q-3
 - **Prevents:** une installation liée au mini-PC qu'on ne pourrait pas déménager si l'hébergement à domicile est refusé
-- **Rule:** tout ce qui dépend de la machine (domaine, chemins de sauvegarde, secrets, relais SMTP) est dans `deploiement/.env` ; `compose.yaml`, `Caddyfile` et la configuration du realm Keycloak (export JSON versionné dans `deploiement/keycloak/`, importé au démarrage, thème et textes en français) sont identiques partout. La même installation tourne sans modification sur tout hôte Linux avec Docker, par exemple un VPS dans l'UE. Seuls les ports 80 (obtention du certificat) et 443 sont ouverts sur la box.
+- **Rule:** tout ce qui dépend de la machine (domaine, chemins de sauvegarde, secrets, relais SMTP) est dans `deploiement/.env` ; `compose.yaml`, `Caddyfile` et la configuration du realm Keycloak (export JSON versionné dans `deploiement/keycloak/`, importé au démarrage, thème et textes en français) sont identiques partout. Les conteneurs tournent sous **Podman** (sans démon, en mode rootless), en développement comme en production ; `compose.yaml` suit la Compose Specification et se pilote par `podman compose`. Les images sont désignées par leur nom complet (`docker.io/library/postgres:18.6`, `quay.io/keycloak/keycloak:26.8`…), car Podman ne résout pas les noms courts sans invite. La même installation tourne sans modification sur tout hôte Linux avec Podman, par exemple un VPS dans l'UE. Seuls les ports 80 (obtention du certificat) et 443 sont ouverts sur la box ; en rootless, l'hôte autorise ces ports (`net.ipv4.ip_unprivileged_port_start=80`) et relance les conteneurs au démarrage (`podman-restart.service`, session persistante par `loginctl enable-linger`).
 
 ### AD-22 — Migrations et clés étrangères
 
@@ -255,7 +255,7 @@ stateDiagram-v2
 | État du front | Composants standalone, Angular Material, état par services à signals ; pas de NgRx |
 | Configuration | Secrets dans `deploiement/.env` (jamais commité) ; profils Quarkus `dev` et `prod` |
 | Tests | Back : `@QuarkusTest` contre un PostgreSQL de test (Dev Services) ; ArchUnit pour AD-1 et AD-16 ; AD-2, AD-3, AD-4 et AD-10 ont leurs tests. Front : tests de composants pour les écrans clés |
-| Journaux | Sortie console des conteneurs (`docker compose logs`) ; jamais de contenu d'image ni de jeton |
+| Journaux | Sortie console des conteneurs (`podman compose logs`) ; jamais de contenu d'image ni de jeton |
 
 ## Stack
 
@@ -272,7 +272,8 @@ stateDiagram-v2
 | Keycloak | 26.8.x (toujours la dernière 26.x : seule version corrigée) |
 | PostgreSQL (+ `unaccent`, `pg_trgm`) | 18.6 |
 | Caddy | 2.11.x |
-| Docker Compose (plugin `docker compose`) | v5.x |
+| Podman (moteur de conteneurs, rootless) | 6.1.x |
+| `podman compose` → fournisseur Docker Compose (CLI seule, branchée sur le socket Podman) | v5.x |
 
 ## Structural Seed
 
@@ -282,7 +283,7 @@ stateDiagram-v2
 graph LR
   U[Navigateurs<br/>ordinateur, téléphone] -->|HTTPS 443| BOX[Box de Paul]
   BOX --> C[Caddy<br/>certificat Let's Encrypt]
-  subgraph MiniPC[Mini-PC de Paul, Docker Compose]
+  subgraph MiniPC[Mini-PC de Paul, Podman + podman compose]
     C -->|/| F[front<br/>Angular statique]
     C -->|/api| B[back<br/>Quarkus]
     C -->|/auth sauf /auth/admin| K[Keycloak]
@@ -293,13 +294,13 @@ graph LR
   B -->|HTTPS| A[API ARASAAC]
   K -->|SMTP| S[Relais d'envoi d'e-mails]
   P -.->|pg_dumpall nocturne| D[Disque externe]
-  GH[GitHub Actions] -->|images Docker| R[ghcr.io]
-  R -.->|docker compose pull| MiniPC
+  GH[GitHub Actions] -->|images OCI| R[ghcr.io]
+  R -.->|podman compose pull| MiniPC
 ```
 
 - Hôte : mini-PC de 8 Go de RAM, box à IP fixe ; le domaine pointe par un enregistrement DNS A fixe vers cette IP (pas de DNS dynamique).
-- Environnements : poste de développement (Docker Desktop, Quarkus dev mode, `ng serve`) et production (mini-PC). Pas d'environnement intermédiaire.
-- Mise en production : un tag Git déclenche GitHub Actions, qui construit les images `front` et `back` et les publie sur ghcr.io ; sur le mini-PC, `docker compose pull && docker compose up -d`. Keycloak et PostgreSQL suivent leurs versions correctives (images officielles) à chaque mise en production.
+- Environnements : poste de développement (Podman, avec le socket compatible Docker activé pour les Dev Services Quarkus / Testcontainers, Quarkus dev mode, `ng serve`) et production (mini-PC). Pas d'environnement intermédiaire.
+- Mise en production : un tag Git déclenche GitHub Actions, qui construit les images `front` et `back` et les publie sur ghcr.io ; sur le mini-PC, `podman compose pull && podman compose up -d`. Keycloak et PostgreSQL suivent leurs versions correctives (images officielles) à chaque mise en production.
 - Sauvegarde : `pg_dumpall` chaque nuit vers le disque externe, 14 jours conservés ; le script écrit un fichier d'état daté (succès, taille) ; une restauration complète est testée avant l'ouverture du pilote. Les sauvegardes contiennent les données des comptes supprimés jusqu'à 14 jours.
 
 ### Modèle de données (noms et relations)
