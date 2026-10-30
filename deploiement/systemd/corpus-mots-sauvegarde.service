@@ -1,0 +1,20 @@
+# Sauvegarde nocturne de corpus-mots, lancée par corpus-mots-sauvegarde.timer.
+# Unité systemd UTILISATEUR (même utilisateur que Podman rootless), à copier dans
+# ~/.config/systemd/user/ : voir deploiement/README.md, section « Sauvegarde ».
+# Le chemin suppose le clone dans ~/corpus-mots ; l'adapter sinon.
+[Unit]
+Description=Sauvegarde nocturne de corpus-mots (pg_dumpall vers le disque externe)
+# Nouvel essai en cas d'échec (rattrapage au démarrage parti avant le montage du disque ou le
+# conteneur postgres) : au plus 4 lancements en 2 heures.
+StartLimitIntervalSec=2h
+StartLimitBurst=4
+
+[Service]
+Type=oneshot
+ExecStart=/bin/sh %h/corpus-mots/deploiement/sauvegarde.sh
+# Un dump bloqué ne doit pas empêcher les nuits suivantes.
+TimeoutStartSec=2h
+Restart=on-failure
+RestartSec=15min
+Nice=10
+IOSchedulingClass=idle

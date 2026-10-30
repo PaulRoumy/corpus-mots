@@ -28,3 +28,6 @@ dist/
 
 # Déploiement : secrets et réglages propres à la machine (modèle : deploiement/.env.exemple)
 deploiement/.env
+
+# Déploiement : fichiers d'état de la sauvegarde nocturne
+deploiement/etat-sauvegarde/

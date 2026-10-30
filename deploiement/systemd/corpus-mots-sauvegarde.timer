@@ -1,0 +1,11 @@
+# Planifie corpus-mots-sauvegarde.service chaque nuit à 03:00.
+# Persistent=true : une nuit manquée (machine éteinte) est rattrapée au démarrage suivant.
+[Unit]
+Description=Sauvegarde nocturne de corpus-mots, chaque nuit à 03:00
+
+[Timer]
+OnCalendar=*-*-* 03:00:00
+Persistent=true
+
+[Install]
+WantedBy=timers.target

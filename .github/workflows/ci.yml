@@ -82,6 +82,10 @@ jobs:
           fi
           cp .env.exemple .env
           podman compose config -q
+      - name: Scripts shell (shellcheck)
+        run: shellcheck deploiement/*.sh deploiement/tests/*.sh deploiement/postgres/*.sh
+      - name: Tests de la sauvegarde nocturne
+        run: sh deploiement/tests/sauvegarde.test.sh
 
   images:
     needs: [back, front, configuration]
