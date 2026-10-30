@@ -1,0 +1,98 @@
+# STATUS DEFINITIONS:
+# ==================
+# Epic Status:
+#   - backlog: Epic not yet started
+#   - in-progress: Epic actively being worked on
+#   - done: All stories in epic completed
+
+# Story Status:
+#   - backlog: Story only exists in epic file
+#   - ready-for-dev: Story file created, ready for development
+#   - in-progress: Developer actively working on implementation
+#   - review: Implementation complete, ready for review
+#   - done: Story completed
+
+# Retrospective Status:
+#   - optional: Can be completed but not required
+#   - done: Retrospective has been completed
+
+# Action Item Status:
+#   - open: Committed during a retrospective, not yet addressed
+#   - in-progress: Actively being worked on
+#   - done: Completed
+
+# WORKFLOW NOTES:
+# ===============
+# - Epic transitions to 'in-progress' automatically when its first story starts (via build's sprint sync)
+# - Stories can be worked in parallel if team capacity allows
+# - Developer typically creates the next story after the previous one is 'done' to incorporate learnings
+# - Dev moves story to 'review', then runs code-review (fresh context, different LLM recommended)
+# - Retrospective appends its action items to action_items; the status view surfaces open ones
+generated: 10-30-2026 18:50
+last_updated: 10-30-2026 18:50
+project: corpus-mots
+project_key: NOKEY
+tracking_system: file-system
+story_location: docs/realisation
+development_status:
+  epic-1: backlog
+  1-1-socle-de-l-application-déployable: backlog
+  1-2-sauvegarde-nocturne-de-la-base: backlog
+  1-3-premier-administrateur-et-connexion: backlog
+  1-4-coquille-de-l-application-et-système-de-design: backlog
+  1-5-inviter-un-collègue: backlog
+  1-6-gérer-les-comptes-de-l-équipe: backlog
+  1-7-mon-compte-et-page-données-personnelles: backlog
+  epic-1-retrospective: optional
+
+  epic-2: backlog
+  2-1-créer-une-préparation-pour-un-album: backlog
+  2-2-modules-thèmes-et-réglages-de-la-préparation: backlog
+  2-3-saisir-des-mots-en-série: backlog
+  2-4-illustrer-un-mot-avec-un-pictogramme-arasaac: backlog
+  2-5-téléverser-une-image: backlog
+  2-6-carte-d-identité-d-une-image: backlog
+  2-7-détection-immédiate-et-réutilisation-en-un-geste: backlog
+  2-8-choisir-ou-créer-un-sens: backlog
+  2-9-reprendre-les-mots-déjà-illustrés-pour-l-album: backlog
+  2-10-gérer-ses-préparations: backlog
+  epic-2-retrospective: optional
+
+  epic-3: backlog
+  3-1-parcourir-la-banque-ouverte-sur-mes-mots: backlog
+  3-2-filtrer-la-banque-et-rechercher-un-mot: backlog
+  3-3-verser-ses-images-dans-la-banque: backlog
+  3-4-réutiliser-l-image-d-un-collègue: backlog
+  3-5-notifications-et-ne-plus-verser: backlog
+  3-6-supprimer-ses-images-sans-casser-le-travail-des-autres: backlog
+  epic-3-retrospective: optional
+
+  epic-4: backlog
+  4-1-générer-une-fiche-de-cartes-depuis-une-préparation: backlog
+  4-2-écritures-combinables: backlog
+  4-3-exporter-une-fiche-en-word-avec-les-crédits: backlog
+  4-4-exporter-une-fiche-en-powerpoint-pour-projeter: backlog
+  4-5-modèles-liste-illustrée-planche-de-catégorisation-et-fiche-d: backlog
+  4-6-fiche-thématique-par-filtre-et-depuis-la-banque: backlog
+  4-7-historique-des-fiches-et-refaire-en-un-clic: backlog
+  epic-4-retrospective: optional
+
+  epic-5: backlog
+  5-1-déposer-des-fichiers-et-extraire-les-paires-image-mot: backlog
+  5-2-vérifier-et-corriger-les-paires: backlog
+  5-3-compléter-les-paires-en-lot: backlog
+  5-4-valider-l-import: backlog
+  5-5-reprendre-un-import-interrompu: backlog
+  5-6-ajouter-une-photo-depuis-le-téléphone-en-trois-gestes: backlog
+  epic-5-retrospective: optional
+
+  epic-6: backlog
+  6-1-retirer-une-image-de-la-banque-avec-un-motif: backlog
+  6-2-supprimer-définitivement-une-image: backlog
+  6-3-fusionner-les-albums-en-doublon-et-corriger-le-lexique: backlog
+  6-4-supprimer-un-compte-et-effacer-ses-données: backlog
+  6-5-signaler-les-comptes-inactifs: backlog
+  6-6-tableau-de-bord-d-usage: backlog
+  6-7-exporter-tout-mes-mots: backlog
+  6-8-prêt-pour-l-ouverture-du-pilote: backlog
+  epic-6-retrospective: optional
