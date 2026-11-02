@@ -10,7 +10,8 @@ WORKDIR /construction
 COPY .mvn/ .mvn/
 COPY mvnw pom.xml ./
 COPY src/ src/
-RUN chmod +x mvnw && ./mvnw -B package -DskipTests
+# Tests ni compilés ni lancés ici : le job « back » de la CI les exécute.
+RUN chmod +x mvnw && ./mvnw -B package -Dmaven.test.skip=true
 
 # Étape 2 : exécution sur le JRE Temurin 25, sans les outils de compilation.
 FROM docker.io/library/eclipse-temurin:25-jre
