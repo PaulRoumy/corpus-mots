@@ -1,0 +1,67 @@
+# corpus-mots : environnement de développement local, piloté par `podman compose -f compose.dev.yaml`.
+# PostgreSQL, Keycloak et une boîte mail locale (Mailpit) ; le back tourne par `./mvnw quarkus:dev`
+# (profil %dev) et le front par `npm start`, qui relaie /api et /auth comme Caddy en production.
+# Valeurs de développement en clair : ce fichier ne sert jamais en production (compose.yaml + .env).
+name: corpus-mots-dev
+
+services:
+  postgres:
+    image: docker.io/library/postgres:18.6
+    ports:
+      - "5433:5432"
+    environment:
+      POSTGRES_PASSWORD: postgres
+      BD_MOT_DE_PASSE: corpusmots
+      KEYCLOAK_BD_MOT_DE_PASSE: keycloak
+    volumes:
+      - postgres-dev-donnees:/var/lib/postgresql
+      - ./postgres/init-keycloak.sh:/docker-entrypoint-initdb.d/init-keycloak.sh:ro,z
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -U postgres -d postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  keycloak:
+    image: quay.io/keycloak/keycloak:26.8
+    command: ["start-dev", "--import-realm"]
+    ports:
+      - "8180:8080"
+    environment:
+      KC_DB: postgres
+      KC_DB_URL: jdbc:postgresql://postgres:5432/keycloak
+      KC_DB_USERNAME: keycloak
+      KC_DB_PASSWORD: keycloak
+      # Le navigateur passe par le proxy d'ng serve (localhost:4200), le back appelle localhost:8180.
+      KC_HOSTNAME: http://localhost:4200/auth
+      KC_HOSTNAME_BACKCHANNEL_DYNAMIC: "true"
+      KC_HTTP_RELATIVE_PATH: /auth
+      # Console d'administration : http://localhost:8180/auth/admin (admin / admin), en local seulement.
+      KC_BOOTSTRAP_ADMIN_USERNAME: admin
+      KC_BOOTSTRAP_ADMIN_PASSWORD: admin
+      # Lus par l'export du realm (placeholders ${…}) à l'import.
+      URL_PUBLIQUE: http://localhost:4200
+      KEYCLOAK_BACK_SECRET: secret-de-developpement
+      SMTP_HOTE: mailpit
+      SMTP_PORT: "1025"
+      SMTP_EXPEDITEUR: corpus-mots@corpus-mots.localhost
+      SMTP_AUTH: "false"
+      SMTP_UTILISATEUR: ""
+      SMTP_MOT_DE_PASSE: ""
+      SMTP_STARTTLS: "false"
+      SMTP_SSL: "false"
+    volumes:
+      - ./keycloak/realm-corpus-mots.json:/opt/keycloak/data/import/realm-corpus-mots.json:ro,z
+      - ./keycloak/themes/corpus-mots:/opt/keycloak/themes/corpus-mots:ro,z
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  mailpit:
+    # Reçoit tous les e-mails de Keycloak (invitation, mot de passe oublié) : http://localhost:8025
+    image: docker.io/axllent/mailpit:v1.32.0
+    ports:
+      - "8025:8025"
+
+volumes:
+  postgres-dev-donnees:

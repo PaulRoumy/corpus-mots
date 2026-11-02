@@ -2,6 +2,9 @@ package fr.corpusmots.commun.api;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.exc.MismatchedInputException;
+import io.quarkus.security.AuthenticationFailedException;
+import io.quarkus.security.ForbiddenException;
+import io.quarkus.security.UnauthorizedException;
 import jakarta.ws.rs.WebApplicationException;
 import jakarta.ws.rs.core.HttpHeaders;
 import jakarta.ws.rs.core.Response;
@@ -41,6 +44,19 @@ public class ErreursMappers {
             }
         });
         return reponse.build();
+    }
+
+    // Sans ces deux mappers, le mapper générique ci-dessous transformerait un refus d'accès en 500.
+    @ServerExceptionMapper({ UnauthorizedException.class, AuthenticationFailedException.class })
+    public Response nonAuthentifie(RuntimeException erreur) {
+        return ProblemeDto.de(401, codeHttp(401), null).constructeurDeReponse()
+                .header(HttpHeaders.WWW_AUTHENTICATE, "Bearer")
+                .build();
+    }
+
+    @ServerExceptionMapper
+    public Response nonAutorise(ForbiddenException erreur) {
+        return ProblemeDto.de(403, codeHttp(403), null).enReponse();
     }
 
     @ServerExceptionMapper

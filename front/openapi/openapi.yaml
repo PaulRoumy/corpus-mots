@@ -1,9 +1,41 @@
 ---
 openapi: 3.1.0
+components:
+  schemas:
+    MonCompteDto:
+      type: object
+      required:
+      - id
+      - nomAffiche
+      - administrateur
+      properties:
+        id:
+          $ref: "#/components/schemas/UUID"
+        nomAffiche:
+          type: string
+        administrateur:
+          type: boolean
+    UUID:
+      type: string
+      format: uuid
+      pattern: "[a-fA-F0-9]{8}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{12}"
+paths:
+  /api/mon-compte:
+    get:
+      summary: Compte de l'enseignant connecté
+      operationId: lireMonCompte
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MonCompteDto"
+      tags:
+      - Mon Compte Resource
 info:
   title: corpus-mots
   version: 1.0.0-SNAPSHOT
   description: API de corpus-mots
   license:
     name: AGPL-3.0
-paths: {}

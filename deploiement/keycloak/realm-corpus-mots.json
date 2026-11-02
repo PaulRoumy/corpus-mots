@@ -9,13 +9,19 @@
   "duplicateEmailsAllowed": false,
   "resetPasswordAllowed": true,
   "editUsernameAllowed": false,
-  "rememberMe": false,
+  "rememberMe": true,
   "verifyEmail": false,
   "bruteForceProtected": true,
+  "accessTokenLifespan": 300,
+  "ssoSessionIdleTimeout": 36000,
+  "ssoSessionMaxLifespan": 36000,
+  "ssoSessionIdleTimeoutRememberMe": 2592000,
+  "ssoSessionMaxLifespanRememberMe": 2592000,
   "internationalizationEnabled": true,
   "supportedLocales": ["fr"],
   "defaultLocale": "fr",
   "loginTheme": "corpus-mots",
+  "emailTheme": "corpus-mots",
   "roles": {
     "realm": [
       {
@@ -36,25 +42,67 @@
       "directAccessGrantsEnabled": false,
       "serviceAccountsEnabled": false,
       "frontchannelLogout": true,
-      "rootUrl": "https://${env.DOMAINE}",
+      "rootUrl": "${URL_PUBLIQUE}",
       "baseUrl": "/",
-      "redirectUris": ["https://${env.DOMAINE}/*"],
-      "webOrigins": ["https://${env.DOMAINE}"],
+      "redirectUris": ["${URL_PUBLIQUE}/*"],
+      "webOrigins": ["${URL_PUBLIQUE}"],
       "attributes": {
         "pkce.code.challenge.method": "S256",
-        "post.logout.redirect.uris": "https://${env.DOMAINE}/*"
+        "post.logout.redirect.uris": "${URL_PUBLIQUE}/*"
       }
+    },
+    {
+      "clientId": "corpus-mots-back",
+      "name": "corpus-mots (back)",
+      "description": "Compte de service du back : création des utilisateurs invités (API d'administration).",
+      "enabled": true,
+      "protocol": "openid-connect",
+      "publicClient": false,
+      "clientAuthenticatorType": "client-secret",
+      "secret": "${KEYCLOAK_BACK_SECRET}",
+      "standardFlowEnabled": false,
+      "implicitFlowEnabled": false,
+      "directAccessGrantsEnabled": false,
+      "serviceAccountsEnabled": true
     }
   ],
   "smtpServer": {
-    "host": "${env.SMTP_HOTE}",
-    "port": "${env.SMTP_PORT}",
-    "from": "${env.SMTP_EXPEDITEUR}",
+    "host": "${SMTP_HOTE}",
+    "port": "${SMTP_PORT}",
+    "from": "${SMTP_EXPEDITEUR}",
     "fromDisplayName": "corpus-mots",
-    "auth": "${env.SMTP_AUTH}",
-    "user": "${env.SMTP_UTILISATEUR}",
-    "password": "${env.SMTP_MOT_DE_PASSE}",
-    "starttls": "${env.SMTP_STARTTLS}",
-    "ssl": "${env.SMTP_SSL}"
+    "auth": "${SMTP_AUTH}",
+    "user": "${SMTP_UTILISATEUR}",
+    "password": "${SMTP_MOT_DE_PASSE}",
+    "starttls": "${SMTP_STARTTLS}",
+    "ssl": "${SMTP_SSL}"
+  },
+  "users": [
+    {
+      "username": "service-account-corpus-mots-back",
+      "enabled": true,
+      "serviceAccountClientId": "corpus-mots-back",
+      "clientRoles": {
+        "realm-management": [
+          "manage-users",
+          "view-users",
+          "query-users",
+          "view-realm"
+        ]
+      }
+    }
+  ],
+  "components": {
+    "org.keycloak.userprofile.UserProfileProvider": [
+      {
+        "providerId": "declarative-user-profile",
+        "subComponents": {},
+        "config": {
+          "kc.user.profile.config": [
+            "{\"attributes\": [{\"name\": \"username\", \"displayName\": \"${username}\", \"permissions\": {\"view\": [\"admin\", \"user\"], \"edit\": [\"admin\"]}, \"validations\": {\"length\": {\"min\": 3, \"max\": 255}, \"username-prohibited-characters\": {}, \"up-username-not-idn-homograph\": {}}}, {\"name\": \"email\", \"displayName\": \"${email}\", \"required\": {\"roles\": [\"user\"]}, \"permissions\": {\"view\": [\"admin\", \"user\"], \"edit\": [\"admin\"]}, \"validations\": {\"email\": {}, \"length\": {\"max\": 255}}}, {\"name\": \"firstName\", \"displayName\": \"${firstName}\", \"required\": {\"roles\": [\"user\"]}, \"permissions\": {\"view\": [\"admin\", \"user\"], \"edit\": [\"admin\", \"user\"]}, \"validations\": {\"length\": {\"max\": 255}, \"person-name-prohibited-characters\": {}}}, {\"name\": \"lastName\", \"displayName\": \"${lastName}\", \"required\": {\"roles\": [\"user\"]}, \"permissions\": {\"view\": [\"admin\", \"user\"], \"edit\": [\"admin\", \"user\"]}, \"validations\": {\"length\": {\"max\": 255}, \"person-name-prohibited-characters\": {}}}], \"groups\": []}"
+          ]
+        }
+      }
+    ]
   }
 }

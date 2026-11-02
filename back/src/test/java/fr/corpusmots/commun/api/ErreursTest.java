@@ -83,6 +83,16 @@ class ErreursTest {
     }
 
     @Test
+    void unJetonRefuseParOidcRenvoie401EtNon500() {
+        given().when().get("/api/test-erreurs/jeton-refuse")
+                .then()
+                .statusCode(401)
+                .contentType(ProblemeDto.MEDIA_TYPE)
+                .header("WWW-Authenticate", equalTo("Bearer"))
+                .body("code", equalTo("authentification.requise"));
+    }
+
+    @Test
     void uneMethodeNonAutoriseeRenvoie405() {
         // Quarkus REST ne joint pas d'en-tête Allow à son 405 ; la recopie des en-têtes d'origine
         // est vérifiée par le test 503 (Retry-After).

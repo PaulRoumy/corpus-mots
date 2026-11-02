@@ -41,7 +41,8 @@ Un hôte Linux (mini-PC ou VPS dans l'UE) avec :
 git clone https://github.com/PaulRoumy/corpus-mots.git
 cd corpus-mots/deploiement
 cp .env.exemple .env
-# Éditer .env : VERSION, DOMAINE, ACME_EMAIL, mots de passe (postgres, corpusmots, keycloak), relais SMTP.
+# Éditer .env : VERSION, DOMAINE, ACME_EMAIL, mots de passe (postgres, corpusmots, keycloak),
+# KEYCLOAK_BACK_SECRET, ADMIN_INITIAL_EMAIL, relais SMTP.
 podman compose config --quiet   # vérifie la configuration
 podman compose pull
 podman compose up -d
@@ -58,7 +59,16 @@ curl -s  https://<domaine>/api/inexistant      # 404, application/problem+json
 curl -sI https://<domaine>/auth/realms/corpus-mots/.well-known/openid-configuration   # 200
 curl -sI https://<domaine>/auth/admin/          # 404 : console Keycloak jamais exposée
 curl -sI https://<domaine>/auth/realms/master/  # 404 : realm master jamais exposé
+curl -s  https://<domaine>/api/mon-compte      # 401, code authentification.requise
 ```
+
+### Premier administrateur
+
+Tant que la base n'a aucun compte, le back invite `ADMIN_INITIAL_EMAIL` avec le rôle d'administrateur, au démarrage puis chaque minute (Keycloak peut être encore en train de démarrer). Le message « Invitation à rejoindre corpus-mots » arrive à cette adresse : le lien, valable 7 jours, fait créer le mot de passe et saisir prénom et nom, puis ouvre l'application. Dès qu'un compte existe, `ADMIN_INITIAL_EMAIL` n'est plus lu.
+
+Suivre l'invitation dans les journaux : `podman compose logs back | grep -i administrateur`. Si le journal indique qu'un utilisateur Keycloak porte déjà cette adresse (base restaurée sans Keycloak, par exemple), supprimer cet utilisateur depuis la console Keycloak du serveur, puis attendre la tâche suivante.
+
+Si le lien a expiré avant d'être ouvert : supprimer l'utilisateur dans Keycloak et vider la table `enseignant` (`podman compose exec postgres psql -U postgres -d corpusmots -c 'delete from enseignant'`), ou attendre l'écran d'invitation de l'Administration.
 
 ## Mise à jour
 
@@ -74,7 +84,7 @@ podman compose up -d
 
 Keycloak et PostgreSQL suivent alors leurs versions correctives (`26.8`, `18.6`).
 
-Le realm n'est importé que s'il n'existe pas encore : une modification de `keycloak/realm-corpus-mots.json` après la première installation s'applique à la main (ou par une story dédiée).
+Le realm n'est importé que s'il n'existe pas encore : une modification de `keycloak/realm-corpus-mots.json` après la première installation s'applique à la main (ou par une story dédiée). C'est le cas de la version qui ajoute la connexion (client `corpus-mots-back`, profil utilisateur, durées de session, thème des e-mails) : sur un serveur installé avant elle, et sans compte à garder, supprimer le realm `corpus-mots` depuis la console Keycloak du serveur puis redémarrer `keycloak` pour le réimporter.
 
 ## Sauvegarde
 
@@ -145,6 +155,21 @@ En cas d'échec, `resultat=echec` et `cause` vaut :
 ### Restauration
 
 La procédure pas à pas est dans [RESTAURATION.md](RESTAURATION.md).
+
+## Développement local
+
+`compose.dev.yaml` fournit à un poste de développement ce que le back et le front attendent : PostgreSQL (port 5433), Keycloak avec le realm et le thème de `keycloak/` (port 8180, console `http://localhost:8180/auth/admin`, `admin` / `admin`) et Mailpit, qui reçoit tous les e-mails (`http://localhost:8025`). Valeurs de développement en clair : ce fichier ne sert jamais en production.
+
+```sh
+cd deploiement
+podman compose -f compose.dev.yaml up -d
+cd ../back && ./mvnw quarkus:dev      # profil %dev : base et Keycloak ci-dessus
+cd ../front && npm start              # http://localhost:4200, relaie /api et /auth
+```
+
+Au premier démarrage du back, l'invitation de `admin@corpus-mots.localhost` (ou de `ADMIN_INITIAL_EMAIL` s'il est défini) arrive dans Mailpit : son lien crée le mot de passe, puis ouvre l'application. Pour repartir de zéro (comptes, base, realm réimporté) : `podman compose -f compose.dev.yaml down -v`.
+
+Sous Windows, `podman compose` demande le fournisseur Docker Compose (`winget install Docker.DockerCompose`) ; sous macOS, `brew install docker-compose`.
 
 ## Journaux
 

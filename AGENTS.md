@@ -14,9 +14,10 @@ Application web gratuite pour les enseignants de maternelle : banque mot-image p
 
 ## Lancer et vérifier
 
-- Back (JDK Temurin 25 dans `JAVA_HOME`), depuis `back/` : `./mvnw verify` (tests + construction, écrit `front/openapi/openapi.json`) ; `./mvnw test -Dtest='fr.corpusmots.architecture.**'` pour ArchUnit seul ; `./mvnw quarkus:dev` en local. Les `@QuarkusTest` et le mode dev démarrent PostgreSQL par Dev Services : socket Podman compatible Docker requis (`DOCKER_HOST`), sinon seule la CI les exécute.
+- Back (JDK Temurin 25 dans `JAVA_HOME`), depuis `back/` : `./mvnw verify` (tests + construction, écrit `front/openapi/openapi.json`) ; `./mvnw test -Dtest='fr.corpusmots.architecture.**'` pour ArchUnit seul ; `./mvnw quarkus:dev` en local (conteneurs de `compose.dev.yaml`, ci-dessous). Les `@QuarkusTest` démarrent PostgreSQL par Dev Services : socket Podman compatible Docker requis (`DOCKER_HOST`, sous Windows `npipe:////./pipe/podman-<machine>`), sinon seule la CI les exécute.
 - Contrat : après tout changement d'API, `./mvnw package -DskipTests` puis versionner `front/openapi/` ; la CI échoue si ce dossier a dérivé.
 - Front (Node 26), depuis `front/` : `npm ci`, `npm test -- --watch=false`, `npm run build`, `npm start` ; `npm run api` régénère `src/app/api/` (non versionné), lancé automatiquement avant `start`, `build` et `test`.
+- Développement local, depuis `deploiement/` : `podman compose -f compose.dev.yaml up -d` (PostgreSQL, Keycloak, Mailpit), puis `./mvnw quarkus:dev` et `npm start` ; e-mails dans `http://localhost:8025`, remise à zéro par `down -v`. `podman compose` exige le fournisseur Docker Compose dans le `PATH`.
 - Déploiement, depuis `deploiement/` : `cp .env.exemple .env`, `podman compose config --quiet`, `podman compose up -d` ; détails et prérequis de l'hôte dans `deploiement/README.md`. Images publiées par la CI sur tag `v*`.
 - Versions : `back/pom.xml` et `front/package.json` font foi ; ne jamais reprendre une version de mémoire.
 
