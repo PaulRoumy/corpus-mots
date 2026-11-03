@@ -1,0 +1,97 @@
+import { HttpErrorResponse } from '@angular/common/http';
+import { codeErreur, MESSAGE_RESEAU, messageErreur } from './message-erreur';
+
+const SERVICE_INDISPONIBLE = 'Le service ne répond pas comme prévu. Réessayez dans un instant.';
+
+/** Réponse en erreur telle que la produit `HttpClient` pour un corps RFC 9457. */
+function reponse(status: number, code?: string): HttpErrorResponse {
+  return new HttpErrorResponse({
+    status,
+    error: code === undefined ? null : { type: 'about:blank', title: 'x', status, code },
+  });
+}
+
+describe('messageErreur', () => {
+  // Chaque code renvoyé par le back (commun.api.ErreursMappers, comptes.service.ComptesService).
+  const codesDuBack: [number, string, string][] = [
+    [
+      401,
+      'authentification.requise',
+      'Session expirée. Reconnectez-vous : votre saisie est conservée.',
+    ],
+    [
+      403,
+      'compte.inconnu_ou_inactif',
+      "Votre compte n'est pas actif. Adressez-vous à l'administrateur de l'école.",
+    ],
+    [403, 'acces.refuse', "Cette action est réservée à l'administrateur."],
+    [404, 'ressource.introuvable', "Cet élément n'existe plus. Rechargez la page."],
+    [400, 'requete.invalide', 'La demande est incomplète. Vérifiez la saisie, puis réessayez.'],
+    [
+      413,
+      'requete.trop_volumineuse',
+      'Envoi trop volumineux : 20 Mo au plus par fichier, 100 Mo par envoi.',
+    ],
+    [415, 'format.non_supporte', 'Format de fichier non pris en charge.'],
+    [500, 'erreur.interne', SERVICE_INDISPONIBLE],
+    [406, 'format.non_acceptable', SERVICE_INDISPONIBLE],
+    [405, 'methode.non_autorisee', SERVICE_INDISPONIBLE],
+  ];
+
+  it.each(codesDuBack)('%i %s : message du code', (status, code, message) => {
+    expect(messageErreur(reponse(status, code))).toBe(message);
+  });
+
+  it('code inconnu : message selon le statut, sinon service indisponible', () => {
+    expect(messageErreur(reponse(409, 'autre.code'))).toBe(SERVICE_INDISPONIBLE);
+    expect(messageErreur(reponse(404, 'http.404x'))).toBe(
+      "Cet élément n'existe plus. Rechargez la page.",
+    );
+  });
+
+  it.each([
+    [404, "Cet élément n'existe plus. Rechargez la page."],
+    [401, 'Session expirée. Reconnectez-vous : votre saisie est conservée.'],
+    [403, "Cette action est réservée à l'administrateur."],
+    [400, 'La demande est incomplète. Vérifiez la saisie, puis réessayez.'],
+    [422, 'La demande est incomplète. Vérifiez la saisie, puis réessayez.'],
+    [413, 'Envoi trop volumineux : 20 Mo au plus par fichier, 100 Mo par envoi.'],
+    [415, 'Format de fichier non pris en charge.'],
+    [500, SERVICE_INDISPONIBLE],
+    [502, SERVICE_INDISPONIBLE],
+    [409, SERVICE_INDISPONIBLE],
+  ])('%i sans code : message selon le statut', (status, message) => {
+    expect(messageErreur(reponse(status))).toBe(message);
+  });
+
+  it('statut 0 (réseau) : connexion impossible', () => {
+    expect(
+      messageErreur(new HttpErrorResponse({ status: 0, error: new ProgressEvent('error') })),
+    ).toBe(MESSAGE_RESEAU);
+    expect(MESSAGE_RESEAU).toBe(
+      'Connexion au serveur impossible. Vérifiez votre réseau, puis réessayez.',
+    );
+  });
+
+  it('erreur qui ne vient pas de HttpClient : service indisponible', () => {
+    expect(messageErreur(new Error('boum'))).toBe(SERVICE_INDISPONIBLE);
+    expect(messageErreur(undefined)).toBe(SERVICE_INDISPONIBLE);
+  });
+
+  it("n'utilise pas une clé héritée d'Object comme code", () => {
+    expect(messageErreur(reponse(409, 'toString'))).toBe(SERVICE_INDISPONIBLE);
+  });
+});
+
+describe('codeErreur', () => {
+  it('lit le code du corps RFC 9457', () => {
+    expect(codeErreur(reponse(403, 'compte.inconnu_ou_inactif'))).toBe('compte.inconnu_ou_inactif');
+  });
+
+  it('null sans corps, sans code textuel ou hors HttpErrorResponse', () => {
+    expect(codeErreur(reponse(500))).toBeNull();
+    expect(codeErreur(new HttpErrorResponse({ status: 400, error: { code: 42 } }))).toBeNull();
+    expect(codeErreur(new HttpErrorResponse({ status: 400, error: 'texte' }))).toBeNull();
+    expect(codeErreur(new Error('x'))).toBeNull();
+  });
+});

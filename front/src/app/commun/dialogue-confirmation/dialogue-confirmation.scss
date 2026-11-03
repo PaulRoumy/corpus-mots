@@ -1,0 +1,23 @@
+@use '@angular/material' as mat;
+
+:host {
+  display: block;
+  width: var(--cm-largeur-dialogue-confirmation);
+  max-width: 100%;
+}
+
+.dialogue-confirmation__phrase {
+  margin: 0;
+  font: var(--cm-typo-body);
+}
+
+// Bouton grave : error / on-error (DESIGN.md › dialogue-confirmation).
+.dialogue-confirmation__confirmer {
+  @include mat.button-overrides(
+    (
+      filled-container-color: var(--mat-sys-error),
+      filled-label-text-color: var(--mat-sys-on-error),
+      filled-state-layer-color: var(--mat-sys-on-error),
+    )
+  );
+}

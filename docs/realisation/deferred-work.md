@@ -33,3 +33,12 @@
 - source_spec: none
   summary: Story 1.4, seconde partie : composants partagés de `commun/` (Bandeau « Annuler », Bandeau d'erreur, Dialogue de confirmation, squelettes de chargement, avec leurs tests de composant) et service qui traduit chaque `code` d'erreur du back en message français.
   evidence: Découpage de la story 1.4 décidé par Paul (2026-11-03) : la coquille et le système de design partent d'abord ; ces composants ne servent qu'à partir de la story 1.5 et doivent être livrés avant elle.
+- source_spec: `docs/realisation/spec-1-4-2-composants-partages-et-messages-d-erreur.md`
+  summary: Lire le `code` d'erreur d'une réponse `Blob` ou texte (téléchargement des Fiches et des archives) avant d'appeler `messageErreur`.
+  evidence: `codeErreur` ne lit qu'un corps JSON déjà décodé ; avec `responseType: 'blob'`, le message retombe sur le statut (revue story 1.4.2, constat 5). À faire avec les exports (Epic 4).
+- source_spec: `docs/realisation/spec-1-4-2-composants-partages-et-messages-d-erreur.md`
+  summary: Vérifier avec un lecteur d'écran (NVDA) que le squelette annonce « Chargement » et qu'une page à plusieurs squelettes ne multiplie pas les annonces.
+  evidence: Région `role="status"` insérée déjà remplie (revue story 1.4.2, constat 12) ; à faire au premier écran qui l'utilise (story 1.5).
+- source_spec: `docs/realisation/spec-1-4-2-composants-partages-et-messages-d-erreur.md`
+  summary: Conserver la saisie en cours quand la session expire (Connexion puis retour à la même page), comme le promet le message de `authentification.requise`.
+  evidence: Depuis la story 1.3, `Authentification` redirige vers Keycloak et la page se recharge : la saisie est perdue (revue story 1.4.2, constat 15 ; EXPERIENCE.md › State Patterns, session expirée).

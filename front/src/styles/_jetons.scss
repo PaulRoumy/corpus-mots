@@ -162,6 +162,16 @@ $typographie-material: (
   --cm-taille-illustration: 64px;
   --cm-hauteur-bouton: 40px;
 
+  // Composants partagés de commun/ (UX-DR-13, 14, 22) ; la durée de 8 s du Bandeau « Annuler » est un
+  // comportement, portée par DUREE_BANDEAU_ANNULER_MS dans bandeau-annuler.ts.
+  --cm-largeur-dialogue-confirmation: 440px;
+  --cm-hauteur-squelette-carte: 168px;
+  --cm-hauteur-squelette-ligne: 56px;
+  --cm-hauteur-squelette-texte: 14px;
+  --cm-largeur-squelette-texte-courte: 60%;
+  --cm-duree-pulsation-squelette: 1.6s;
+  --cm-opacite-pulsation-squelette: 0.45;
+
   // Graisse forte (entrée active de la navigation) et plan du lien d'évitement, au-dessus de la coquille
   --cm-graisse-forte: 900;
   --cm-plan-evitement: 2;

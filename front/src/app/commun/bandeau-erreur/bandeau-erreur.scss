@@ -1,0 +1,45 @@
+@use '@angular/material' as mat;
+
+:host {
+  display: block;
+}
+
+.bandeau-erreur {
+  display: flex;
+  align-items: center;
+  gap: var(--cm-espace-3);
+  padding: var(--cm-espace-2) var(--cm-espace-2) var(--cm-espace-2) var(--cm-espace-4);
+  border-radius: var(--cm-arrondi-md);
+  background: var(--mat-sys-error-container);
+  color: var(--mat-sys-on-error-container);
+}
+
+.bandeau-erreur__icone {
+  flex: none;
+  width: var(--cm-taille-icone);
+  height: var(--cm-taille-icone);
+}
+
+.bandeau-erreur__message {
+  flex: 1;
+  margin: 0;
+  font: var(--cm-typo-body-sm);
+}
+
+.bandeau-erreur__reessayer {
+  @include mat.button-overrides(
+    (
+      text-label-text-color: var(--mat-sys-error),
+      text-state-layer-color: var(--mat-sys-error),
+    )
+  );
+}
+
+.bandeau-erreur__fermer {
+  @include mat.icon-button-overrides(
+    (
+      icon-color: var(--mat-sys-on-error-container),
+      state-layer-color: var(--mat-sys-on-error-container),
+    )
+  );
+}

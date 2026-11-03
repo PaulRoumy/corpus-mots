@@ -1,8 +1,8 @@
-import { HttpErrorResponse } from '@angular/common/http';
 import { computed, inject, Injectable, signal } from '@angular/core';
 import { Api } from '../api/api';
 import { lireMonCompte } from '../api/fn/mon-compte-resource/lire-mon-compte';
 import { MonCompteDto } from '../api/models/mon-compte-dto';
+import { codeErreur } from './erreurs/message-erreur';
 
 /** Compte de l'enseignant connecté : en chargement, chargé, inactif (403 du back) ou en échec. */
 export type EtatCompte =
@@ -40,14 +40,5 @@ export class CompteCourant {
 }
 
 function estCompteInactif(erreur: unknown): boolean {
-  if (!(erreur instanceof HttpErrorResponse) || erreur.status !== 403) {
-    return false;
-  }
-  const corps: unknown = erreur.error;
-  return (
-    typeof corps === 'object' &&
-    corps !== null &&
-    'code' in corps &&
-    corps.code === 'compte.inconnu_ou_inactif'
-  );
+  return codeErreur(erreur) === 'compte.inconnu_ou_inactif';
 }

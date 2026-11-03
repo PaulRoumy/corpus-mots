@@ -9,6 +9,7 @@ import { Router, RouterLink, RouterLinkActive, RouterOutlet } from '@angular/rou
 import { map } from 'rxjs';
 import { Authentification } from '../commun/authentification/authentification';
 import { CompteCourant } from '../commun/compte-courant';
+import { MESSAGE_COMPTE_NON_CHARGE, MESSAGES_PAR_CODE } from '../commun/erreurs/message-erreur';
 
 /**
  * Coquille de l'application (UX-DR-3, 5, 6) : barre supérieure fixe (marque, Champ de recherche, Bouton « + »,
@@ -160,15 +161,13 @@ import { CompteCourant } from '../commun/compte-courant';
       }
       @case ('inactif') {
         <main class="coquille__refus">
-          <p role="alert">
-            Votre compte n'est pas actif. Adressez-vous à l'administrateur de l'école.
-          </p>
+          <p role="alert">{{ messageInactif }}</p>
           <button matButton="filled" type="button" (click)="deconnecter()">Se déconnecter</button>
         </main>
       }
       @case ('erreur') {
         <main class="coquille__refus">
-          <p role="alert">Votre compte n'a pas pu être chargé. Rechargez la page.</p>
+          <p role="alert">{{ messageNonCharge }}</p>
           <button matButton="filled" type="button" (click)="deconnecter()">Se déconnecter</button>
         </main>
       }
@@ -182,6 +181,9 @@ export class Coquille {
   protected readonly compteCourant = inject(CompteCourant);
   private readonly authentification = inject(Authentification);
   private readonly router = inject(Router);
+
+  protected readonly messageInactif = MESSAGES_PAR_CODE['compte.inconnu_ou_inactif'];
+  protected readonly messageNonCharge = MESSAGE_COMPTE_NON_CHARGE;
 
   protected readonly rubriques = [
     { lien: '/preparations', libelle: 'Préparations', icone: 'preparation' },

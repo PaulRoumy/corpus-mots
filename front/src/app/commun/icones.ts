@@ -25,6 +25,11 @@ const TRACES = {
     '<rect x="3.5" y="4.5" width="17" height="15" rx="2.5"/><circle cx="9" cy="10" r="1.8"/>' +
     '<path d="m4 18 5.5-5 4 3.5 2.5-2 4.5 4"/>',
   importer: '<path d="M12 15V4M7.5 8.5 12 4l4.5 4.5"/><path d="M4 15v4h16v-4"/>',
+  // Bandeau d'erreur : triangle d'alerte ; bouton « Fermer » : croix (`i-close` de la maquette).
+  alerte:
+    '<path d="M10.3 4.2 2.6 18a2 2 0 0 0 1.7 3h15.4a2 2 0 0 0 1.7-3L13.7 4.2a2 2 0 0 0-3.4 0z"/>' +
+    '<path d="M12 9.5v4M12 17h.01"/>',
+  fermer: '<path d="M6 6l12 12M18 6 6 18"/>',
 } as const satisfies Record<string, string>;
 
 /** Nom des pictogrammes enregistrés, pour `<mat-icon svgIcon="…">`. */

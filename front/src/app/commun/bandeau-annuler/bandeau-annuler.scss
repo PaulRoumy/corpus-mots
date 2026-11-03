@@ -1,0 +1,11 @@
+// Fond, texte, couleur de l'action et arrondi du snackbar : styles.scss (mat.snack-bar-overrides), car la
+// surcouche est rendue hors du composant.
+:host {
+  display: flex;
+  align-items: center;
+  gap: var(--cm-espace-2);
+}
+
+.bandeau-annuler__message {
+  font: var(--cm-typo-body);
+}

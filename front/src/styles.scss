@@ -17,6 +17,27 @@ html {
       container-shape: var(--cm-arrondi-sm),
     )
   );
+
+  // Bandeau « Annuler » (snackbar) : fond encre, texte papier, action « Annuler » en couleur claire (UX-DR-13).
+  @include mat.snack-bar-overrides(
+    (
+      container-color: var(--mat-sys-on-surface),
+      supporting-text-color: var(--mat-sys-background),
+      button-color: var(--mat-sys-primary-container),
+      container-shape: var(--cm-arrondi-sm),
+    )
+  );
+
+  // Dialogue de confirmation : surface, arrondi xl, élévation 2.
+  @include mat.dialog-overrides(
+    (
+      container-color: var(--mat-sys-surface),
+      container-shape: var(--cm-arrondi-xl),
+      container-elevation-shadow: var(--cm-elevation-2),
+      subhead-color: var(--mat-sys-on-surface),
+      supporting-text-color: var(--mat-sys-on-surface),
+    )
+  );
 }
 
 // Mode sombre « Repères » : défini, jamais appliqué (aucune classe ne le porte, aucune entrée ne le choisit).
