@@ -1,0 +1,224 @@
+// Jetons de DESIGN.md (docs/ux-designs/ux-corpus-mots-2026-10-28/DESIGN.md), en deux couches :
+// - les rôles Material 3 (`--mat-sys-*`), posés par `mat.theme-overrides` : les composants Material les suivent ;
+// - ce que Material ne connaît pas (`--cm-*`) : Sections, types d'image, états, arrondis, espacements, élévations,
+//   typographies, tailles de la coquille.
+// Seul fichier, avec styles.scss, où une valeur littérale est permise (vérifié par scripts/verifier-jetons.mjs).
+// Le mode sombre « Repères » est défini sous `.theme-sombre`, qu'aucun élément ne porte : aucune entrée ne le choisit.
+@use '@angular/material' as mat;
+@use 'sass:map';
+@use 'sass:meta';
+
+$police-interface: ('Nunito Variable', Nunito, ui-rounded, 'Segoe UI', system-ui, sans-serif);
+$police-cursive: ('Segoe Script', 'Playwrite FR Moderne', cursive);
+
+// --- Rôles Material 3, clair (direction « Cahier Material », variante « Repères ») ---
+$roles-clairs: (
+  background: #fbf5e6,
+  on-background: #2a2733,
+  surface: #fffdf6,
+  surface-bright: #fffdf6,
+  surface-container-lowest: #fffdf6,
+  surface-container-low: #f7eedb,
+  surface-container: #f2e7cf,
+  surface-container-high: #ecdfc3,
+  surface-container-highest: #ecdfc3,
+  surface-variant: #f2e7cf,
+  on-surface: #2a2733,
+  on-surface-variant: #625b6b,
+  outline: #8a8070,
+  outline-variant: #e3d6b8,
+  inverse-surface: #2a2733,
+  inverse-on-surface: #fbf5e6,
+  inverse-primary: #9ec0ff,
+  primary: #2c6bd1,
+  on-primary: #ffffff,
+  primary-container: #dde8fb,
+  on-primary-container: #123a7a,
+  secondary-container: #fdf0c8,
+  on-secondary-container: #5a4300,
+  tertiary-container: #dcf0e2,
+  on-tertiary-container: #1d5f37,
+  error: #b3261e,
+  on-error: #ffffff,
+  error-container: #fbe1d9,
+  on-error-container: #7a1a12,
+);
+
+// --- Rôles Material 3, sombre « Repères » (nuit d'encre) ---
+$roles-sombres: (
+  background: #1a1922,
+  on-background: #f3f0e8,
+  surface: #2a2835,
+  surface-bright: #2e2c3a,
+  surface-container-lowest: #1a1922,
+  surface-container-low: #1f1e28,
+  surface-container: #25232f,
+  surface-container-high: #2e2c3a,
+  surface-container-highest: #2e2c3a,
+  surface-variant: #25232f,
+  on-surface: #f3f0e8,
+  on-surface-variant: #c3bdcc,
+  outline: #8e879a,
+  outline-variant: #423f50,
+  inverse-surface: #f3f0e8,
+  inverse-on-surface: #1a1922,
+  inverse-primary: #2c6bd1,
+  primary: #9ec0ff,
+  on-primary: #0b2a5c,
+  primary-container: #233a6a,
+  on-primary-container: #d8e4ff,
+  secondary-container: #463a18,
+  on-secondary-container: #ffe08a,
+  tertiary-container: #1f3d2e,
+  on-tertiary-container: #a5e3bd,
+  error: #ffb4a6,
+  on-error: #690005,
+  error-container: #5c2219,
+  on-error-container: #ffdad3,
+);
+
+// Typographie Material alignée sur DESIGN.md › body (corps de texte des composants Material).
+$typographie-material: (
+  body-medium: #{'400 14.5px / 1.45'} #{meta.inspect($police-interface)},
+  body-medium-size: 14.5px,
+  body-medium-line-height: 1.45,
+);
+
+// --- Couleurs propres à corpus-mots, clair puis sombre ---
+@mixin _couleurs-claires {
+  --cm-section-ps: #d9472f;
+  --cm-section-ms: #b07d00;
+  --cm-section-gs: #8455c2;
+  --cm-image-libre: #2f8f55;
+  --cm-image-photo: #0b7a86;
+  --cm-image-album: #c2456f;
+  --cm-image-inconnu: #8a8070;
+  --cm-etat-a-illustrer-fond: #fdf0c8;
+  --cm-etat-a-illustrer-texte: #5a4300;
+  --cm-etat-a-illustrer-bordure: #ad820f;
+  --cm-etat-retiree-fond: #fbe1d9;
+  --cm-etat-retiree-texte: #7a1a12;
+  --cm-etat-versee-fond: #dcf0e2;
+  --cm-etat-versee-texte: #1d5f37;
+  --cm-page-export: #ffffff;
+  --cm-elevation-1: 0 1px 2px rgba(70, 50, 20, 0.14), 0 1px 3px 1px rgba(70, 50, 20, 0.08);
+  --cm-elevation-2: 0 1px 2px rgba(70, 50, 20, 0.16), 0 3px 8px 2px rgba(70, 50, 20, 0.1);
+}
+
+@mixin _couleurs-sombres {
+  --cm-section-ps: #ff8a73;
+  --cm-section-ms: #ffd25e;
+  --cm-section-gs: #c5a3f5;
+  --cm-image-libre: #73d39a;
+  --cm-image-photo: #5fd0db;
+  --cm-image-album: #ff9ec0;
+  --cm-image-inconnu: #8e879a;
+  --cm-etat-a-illustrer-fond: #463a18;
+  --cm-etat-a-illustrer-texte: #ffe08a;
+  --cm-etat-a-illustrer-bordure: #ffd25e;
+  --cm-etat-retiree-fond: #5c2219;
+  --cm-etat-retiree-texte: #ffdad3;
+  --cm-etat-versee-fond: #1f3d2e;
+  --cm-etat-versee-texte: #a5e3bd;
+  --cm-page-export: #ffffff;
+  // En sombre, la profondeur vient des surfaces : pas d'ombre visible requise (DESIGN.md › Elevation).
+  --cm-elevation-1: none;
+  --cm-elevation-2: none;
+}
+
+// --- Échelles et typographies, communes aux deux modes ---
+@mixin _echelles {
+  // Arrondis (DESIGN.md › rounded)
+  --cm-arrondi-sm: 8px;
+  --cm-arrondi-md: 12px;
+  --cm-arrondi-lg: 16px;
+  --cm-arrondi-bouton: 20px;
+  --cm-arrondi-xl: 24px;
+  --cm-arrondi-plein: 9999px;
+
+  // Espacements (DESIGN.md › spacing)
+  --cm-espace-1: 4px;
+  --cm-espace-2: 8px;
+  --cm-espace-3: 12px;
+  --cm-espace-4: 16px;
+  --cm-espace-5: 24px;
+  --cm-espace-6: 32px;
+  --cm-largeur-page-min: 1280px;
+  --cm-gouttiere-mobile: 16px;
+  --cm-largeur-navigation: 248px;
+  --cm-largeur-panneau: 400px;
+  --cm-largeur-carte-min: 120px;
+  --cm-largeur-contenu-max: 640px;
+
+  // Tailles des composants de la coquille (DESIGN.md › components)
+  --cm-hauteur-element-navigation: 48px;
+  --cm-hauteur-recherche: 44px;
+  --cm-largeur-recherche-max: 440px;
+  --cm-taille-bouton-plus: 48px;
+  --cm-taille-bouton-icone: 40px;
+  --cm-taille-avatar: 36px;
+  --cm-taille-icone: 20px;
+  --cm-taille-icone-grande: 24px;
+  --cm-taille-illustration: 64px;
+  --cm-hauteur-bouton: 40px;
+
+  // Graisse forte (entrée active de la navigation) et plan du lien d'évitement, au-dessus de la coquille
+  --cm-graisse-forte: 900;
+  --cm-plan-evitement: 2;
+
+  // Anneau de focus : primary 2 px, décalé de 2 px (UX-DR-36)
+  --cm-anneau-focus-epaisseur: 2px;
+  --cm-anneau-focus-decalage: 2px;
+
+  // Polices et typographies (DESIGN.md › typography) ; raccourci `font` : graisse taille/interligne famille
+  --cm-police-interface: #{meta.inspect($police-interface)};
+  --cm-police-cursive: #{meta.inspect($police-cursive)};
+  --cm-typo-headline: 900 28px / 1.2 var(--cm-police-interface);
+  --cm-typo-title: 800 16px / 1.3 var(--cm-police-interface);
+  --cm-typo-body: 400 14.5px / 1.45 var(--cm-police-interface);
+  --cm-typo-body-sm: 600 13px / 1.4 var(--cm-police-interface);
+  --cm-typo-label: 800 14px / 1.2 var(--cm-police-interface);
+  --cm-typo-label-sm: 800 12px / 1.2 var(--cm-police-interface);
+  --cm-typo-input: 700 18px / 1.3 var(--cm-police-interface);
+  --cm-typo-marque: 900 19px / 1.2 var(--cm-police-interface);
+  --cm-typo-word-cursive: 400 20px / 1.3 var(--cm-police-cursive);
+  --cm-typo-word-cursive-lg: 400 24px / 1.3 var(--cm-police-cursive);
+}
+
+/// Thème clair, le seul appliqué : à inclure sur `html`.
+@mixin theme-clair {
+  @include mat.theme(
+    (
+      color: (
+        primary: mat.$azure-palette,
+        theme-type: light,
+      ),
+      typography: (
+        plain-family: $police-interface,
+        brand-family: $police-interface,
+        bold-weight: 900,
+        medium-weight: 800,
+        regular-weight: 400,
+      ),
+      density: 0,
+    )
+  );
+  @include mat.theme-overrides(map.merge($roles-clairs, $typographie-material));
+  @include _couleurs-claires;
+  @include _echelles;
+}
+
+/// Thème sombre « Repères », défini mais jamais appliqué en V1.
+@mixin theme-sombre {
+  // D'abord tous les rôles sombres de Material (secondary, tertiary, scrim, *-fixed…), puis ceux de DESIGN.md.
+  @include mat.theme(
+    (
+      color: (
+        primary: mat.$azure-palette,
+        theme-type: dark,
+      ),
+    )
+  );
+  @include mat.theme-overrides($roles-sombres);
+  @include _couleurs-sombres;
+}

@@ -30,3 +30,6 @@
 - source_spec: `docs/realisation/spec-1-3-premier-administrateur-et-connexion.md`
   summary: Ajouter le lien « Données personnelles » aux pages Keycloak (Connexion, Créer mon mot de passe, Mot de passe oublié) par surcharge du gabarit du thème.
   evidence: UX-DR-39 ; la page n'existe pas encore : à faire avec la story 1.7 (revue story 1.3, constat 23).
+- source_spec: none
+  summary: Story 1.4, seconde partie : composants partagés de `commun/` (Bandeau « Annuler », Bandeau d'erreur, Dialogue de confirmation, squelettes de chargement, avec leurs tests de composant) et service qui traduit chaque `code` d'erreur du back en message français.
+  evidence: Découpage de la story 1.4 décidé par Paul (2026-11-03) : la coquille et le système de design partent d'abord ; ces composants ne servent qu'à partir de la story 1.5 et doivent être livrés avant elle.

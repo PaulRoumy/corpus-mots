@@ -1,0 +1,12 @@
+// Mise en page commune aux pages de la coquille : titre de rubrique en `headline`, puis le contenu.
+.page {
+  display: flex;
+  flex-direction: column;
+  gap: var(--cm-espace-4);
+}
+
+.page__titre {
+  margin: 0;
+  font: var(--cm-typo-headline);
+  color: var(--mat-sys-on-surface);
+}

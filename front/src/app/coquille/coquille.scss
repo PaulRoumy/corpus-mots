@@ -1,0 +1,251 @@
+// Coquille : barre supérieure fixe au-dessus, navigation de 248 px à gauche, seul le contenu défile.
+// Toutes les valeurs viennent des jetons (styles/_jetons.scss).
+
+.coquille {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  height: 100dvh;
+  background: var(--mat-sys-background);
+
+  mat-icon {
+    width: var(--cm-taille-icone);
+    height: var(--cm-taille-icone);
+  }
+}
+
+// --- Lien d'évitement : hors de l'écran jusqu'au focus ---
+.coquille__evitement {
+  position: absolute;
+  top: var(--cm-espace-2);
+  left: var(--cm-espace-2);
+  z-index: var(--cm-plan-evitement);
+  padding: var(--cm-espace-2) var(--cm-espace-4);
+  border-radius: var(--cm-arrondi-bouton);
+  background: var(--mat-sys-primary);
+  color: var(--mat-sys-on-primary);
+  font: var(--cm-typo-label);
+  text-decoration: none;
+  transform: translateY(-200%);
+
+  &:focus {
+    transform: none;
+  }
+}
+
+// --- Barre supérieure ---
+.coquille__barre {
+  display: grid;
+  grid-template-columns: var(--cm-largeur-navigation) minmax(0, 1fr);
+  background: var(--mat-sys-background);
+}
+
+.coquille__entete-marque {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--cm-espace-2);
+  padding: var(--cm-espace-4) var(--cm-espace-3) var(--cm-espace-4) var(--cm-espace-6);
+  background: var(--mat-sys-surface-container-low);
+}
+
+.coquille__marque {
+  font: var(--cm-typo-marque);
+  color: var(--mat-sys-on-surface);
+  text-decoration: none;
+  border-radius: var(--cm-arrondi-sm);
+}
+
+.coquille__point {
+  color: var(--mat-sys-primary);
+}
+
+.coquille__outils {
+  display: flex;
+  align-items: center;
+  gap: var(--cm-espace-3);
+  min-width: 0;
+  padding: var(--cm-espace-4) var(--cm-espace-5);
+}
+
+.coquille__espace {
+  flex: 1;
+}
+
+// Champ de recherche : pilule `surface-container`, loupe, 44 px ; l'anneau de focus entoure la pilule.
+.coquille__recherche {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: var(--cm-espace-3);
+  min-width: 0;
+  max-width: var(--cm-largeur-recherche-max);
+  height: var(--cm-hauteur-recherche);
+  padding: 0 var(--cm-espace-4);
+  border-radius: var(--cm-arrondi-plein);
+  background: var(--mat-sys-surface-container);
+  color: var(--mat-sys-on-surface-variant);
+
+  &:focus-within {
+    outline: var(--cm-anneau-focus-epaisseur) solid var(--mat-sys-primary);
+    outline-offset: var(--cm-anneau-focus-decalage);
+  }
+
+  input {
+    flex: 1;
+    min-width: 0;
+    border: 0;
+    padding: 0;
+    background: transparent;
+    color: var(--mat-sys-on-surface);
+    font: var(--cm-typo-body);
+
+    &::placeholder {
+      color: var(--mat-sys-on-surface-variant);
+      opacity: 1;
+    }
+
+    &:focus-visible {
+      outline: none !important;
+    }
+  }
+}
+
+// Bouton « + » : bouton plein agrandi (48 px), pilule.
+.coquille__plus {
+  --mat-button-filled-container-height: var(--cm-taille-bouton-plus);
+  --mat-button-filled-container-shape: var(--cm-arrondi-xl);
+  --mat-button-filled-horizontal-padding: 0;
+  --mat-button-filled-icon-offset: 0;
+  --mat-button-filled-icon-spacing: 0;
+  min-width: var(--cm-taille-bouton-plus);
+  width: var(--cm-taille-bouton-plus);
+  box-shadow: var(--cm-elevation-1);
+
+  mat-icon {
+    width: var(--cm-taille-icone-grande);
+    height: var(--cm-taille-icone-grande);
+    font-size: var(--cm-taille-icone-grande);
+  }
+}
+
+.coquille__profil {
+  color: var(--mat-sys-on-surface-variant);
+}
+
+.coquille__avatar {
+  display: grid;
+  place-items: center;
+  width: var(--cm-taille-avatar);
+  height: var(--cm-taille-avatar);
+  border-radius: var(--cm-arrondi-plein);
+  background: var(--mat-sys-tertiary-container);
+  color: var(--mat-sys-on-tertiary-container);
+  font: var(--cm-typo-title);
+}
+
+// Contenus des menus (rendus dans la surcouche, mais portés par ce gabarit).
+.coquille__menu-nom {
+  margin: 0;
+  padding: var(--cm-espace-3) var(--cm-espace-4);
+  font: var(--cm-typo-body-sm);
+  color: var(--mat-sys-on-surface-variant);
+}
+
+// --- Navigation des rubriques ---
+.coquille__corps {
+  --mat-sidenav-container-width: var(--cm-largeur-navigation);
+  --mat-sidenav-container-shape: 0;
+  --mat-sidenav-container-background-color: var(--mat-sys-surface-container-low);
+  --mat-sidenav-content-background-color: var(--mat-sys-background);
+  --mat-sidenav-container-divider-color: transparent;
+}
+
+.coquille__navigation {
+  width: var(--cm-largeur-navigation);
+  background: var(--mat-sys-surface-container-low);
+}
+
+.coquille__rubriques {
+  display: flex;
+  flex-direction: column;
+  gap: var(--cm-espace-1);
+  padding: var(--cm-espace-2) var(--cm-espace-3);
+}
+
+.coquille__rubrique {
+  display: flex;
+  align-items: center;
+  gap: var(--cm-espace-3);
+  height: var(--cm-hauteur-element-navigation);
+  padding: 0 var(--cm-espace-4);
+  border-radius: var(--cm-arrondi-xl);
+  color: var(--mat-sys-on-surface-variant);
+  font: var(--cm-typo-label);
+  text-decoration: none;
+
+  &:hover {
+    background: var(--mat-sys-surface-container);
+  }
+}
+
+.coquille__rubrique--active,
+.coquille__rubrique--active:hover {
+  background: var(--mat-sys-secondary-container);
+  color: var(--mat-sys-on-secondary-container);
+  font-weight: var(--cm-graisse-forte);
+}
+
+// --- Contenu ---
+.coquille__contenu {
+  padding: var(--cm-espace-2) var(--cm-espace-5) var(--cm-espace-6);
+
+  &:focus-visible {
+    outline: none !important;
+  }
+}
+
+// --- Téléphone (< 600 px) : marque et « Rubriques » sur une ligne, outils dessous, gouttière 16 px ---
+.coquille--mobile {
+  .coquille__barre {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .coquille__entete-marque {
+    padding: var(--cm-espace-2) var(--cm-gouttiere-mobile);
+    background: var(--mat-sys-background);
+  }
+
+  .coquille__outils {
+    gap: var(--cm-espace-2);
+    padding: 0 var(--cm-gouttiere-mobile) var(--cm-espace-2);
+  }
+
+  .coquille__espace {
+    display: none;
+  }
+
+  .coquille__navigation {
+    padding-top: var(--cm-espace-4);
+  }
+
+  .coquille__contenu {
+    padding: var(--cm-espace-2) var(--cm-gouttiere-mobile) var(--cm-espace-5);
+  }
+}
+
+// --- Page sans coquille : compte inactif ou non chargé ---
+.coquille__refus {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--cm-espace-4);
+  max-width: var(--cm-largeur-contenu-max);
+  margin: 0 auto;
+  padding: var(--cm-espace-6) var(--cm-gouttiere-mobile);
+
+  p {
+    margin: 0;
+    font: var(--cm-typo-title);
+    color: var(--mat-sys-on-surface);
+  }
+}

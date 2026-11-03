@@ -64,6 +64,14 @@ jobs:
             echo "Ressource externe trouvée dans dist/" >&2
             exit 1
           fi
+      - name: Polices auto-hébergées dans le build (Nunito, Playwrite FR Moderne)
+        run: |
+          for police in nunito playwrite-fr-moderne; do
+            if ! find dist -name "${police}-*.woff2" | grep -q .; then
+              echo "Police ${police} absente de dist/" >&2
+              exit 1
+            fi
+          done
 
   configuration:
     runs-on: ubuntu-24.04
