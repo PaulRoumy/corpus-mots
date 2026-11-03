@@ -80,6 +80,19 @@ public class ComptesService {
                 .toList();
     }
 
+    /**
+     * Annuaire de l'équipe (AD-20) : tout Enseignant sauf {@code invite}, dont ni le nom ni l'existence ne sont
+     * montrés ; {@code supprime} compris, pour résoudre le nom d'un ancien membre. Un invité désactivé avant d'avoir
+     * saisi son nom reste un invité : sans nom, il n'y figure pas.
+     */
+    @Transactional
+    public List<EnseignantLu> annuaire() {
+        return enseignants.list("statut <> ?1 and nomAffiche is not null", StatutEnseignant.INVITE).stream()
+                .map(enseignant -> new EnseignantLu(enseignant.id(), enseignant.nomAffiche(),
+                        enseignant.statut().valeur()))
+                .toList();
+    }
+
     /** Statut de chaque Enseignant, {@code supprime} compris (réconciliation avec Keycloak). */
     @Transactional
     public Map<UUID, StatutEnseignant> statutsDesEnseignants() {

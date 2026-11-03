@@ -26,6 +26,22 @@
           }
         }
       },
+      "EnseignantDto" : {
+        "type" : "object",
+        "required" : [ "id", "nomAffiche", "statut" ],
+        "properties" : {
+          "id" : {
+            "$ref" : "#/components/schemas/UUID"
+          },
+          "nomAffiche" : {
+            "type" : "string"
+          },
+          "statut" : {
+            "type" : "string",
+            "enum" : [ "actif", "desactive", "suppression_en_cours", "supprime" ]
+          }
+        }
+      },
       "InvitationDto" : {
         "type" : "object",
         "required" : [ "email" ],
@@ -210,6 +226,28 @@
           }
         },
         "tags" : [ "Comptes Resource" ]
+      }
+    },
+    "/api/enseignants" : {
+      "get" : {
+        "summary" : "Annuaire de l'équipe, sans les invités",
+        "operationId" : "listerEnseignants",
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "type" : "array",
+                  "items" : {
+                    "$ref" : "#/components/schemas/EnseignantDto"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "tags" : [ "Enseignants Resource" ]
       }
     },
     "/api/mon-compte" : {
