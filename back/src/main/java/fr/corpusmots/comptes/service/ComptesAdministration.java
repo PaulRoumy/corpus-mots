@@ -6,24 +6,29 @@ import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 import java.text.Collator;
 import java.util.Comparator;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 import java.util.function.Function;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
 /**
- * Administration › Comptes (FR-1) : liste de l'équipe, invitation d'un collègue, renvoi de l'invitation. Jamais de
- * transaction autour : la base se lit ou s'écrit par {@link ComptesService}, Keycloak s'appelle hors transaction
- * (AD-17, AD-18).
+ * Administration › Comptes (FR-1, FR-32) : liste de l'équipe, invitation d'un collègue, renvoi de l'invitation,
+ * désactivation, réactivation et rôle d'administrateur. Jamais de transaction autour : la base se lit ou s'écrit par
+ * {@link ComptesService}, Keycloak s'appelle hors transaction (AD-17, AD-18), sauf sous le verrou des administrateurs
+ * ({@link ComptesService#sousVerrouAdministrateurs}).
  */
 @ApplicationScoped
 public class ComptesAdministration {
 
     static final String CODE_EMAIL_DEJA_UTILISE = "compte.email_deja_utilise";
     static final String CODE_REQUETE_INVALIDE = "requete.invalide";
+    static final String CODE_DERNIER_ADMINISTRATEUR = "compte.dernier_administrateur";
+    static final String CODE_AUTO_DESACTIVATION = "compte.auto_desactivation";
 
     /**
      * Une partie locale, un {@code @}, un domaine avec au moins un point ; sans espace, caractère de contrôle ni
@@ -87,6 +92,73 @@ public class ComptesAdministration {
     public void renvoyerInvitation(UUID id) {
         comptes.verifierInvite(id);
         identites.envoyerInvitation(id);
+    }
+
+    /**
+     * Désactive un compte (FR-32) : Keycloak {@code enabled=false} et sessions révoquées, puis {@code statut =
+     * desactive} (AD-18) ; aucune donnée effacée.
+     *
+     * @param acteur l'administrateur qui agit, qui ne peut pas se désactiver lui-même
+     * @throws ErreurMetier {@code 404 ressource.introuvable}, {@code 409 compte.auto_desactivation},
+     *         {@code 409 compte.statut_incompatible} s'il n'est ni invité ni actif,
+     *         {@code 409 compte.dernier_administrateur} s'il est le seul administrateur actif
+     */
+    public void desactiver(UUID id, UUID acteur) {
+        if (id.equals(acteur)) {
+            throw new ErreurMetier(409, CODE_AUTO_DESACTIVATION, "Un administrateur ne se désactive pas lui-même");
+        }
+        comptes.verifierDesactivable(id);
+        comptes.sousVerrouAdministrateurs(() -> {
+            exigerUnAutreAdministrateurActif(id);
+            identites.desactiver(id);
+        });
+        comptes.desactiver(id);
+    }
+
+    /**
+     * Réactive un compte désactivé : Keycloak {@code enabled=true}, puis {@code statut = actif}, ou {@code invite} s'il
+     * n'a jamais été activé (AD-18).
+     *
+     * @throws ErreurMetier {@code 404 ressource.introuvable}, {@code 409 compte.statut_incompatible} s'il n'est pas
+     *         désactivé
+     */
+    public void reactiver(UUID id) {
+        comptes.verifierReactivable(id);
+        identites.reactiver(id);
+        comptes.reactiver(id);
+    }
+
+    /**
+     * Donne ou retire le rôle d'administrateur, dans Keycloak seulement (jamais copié en base, AD-6) ; il s'applique
+     * au prochain jeton de l'enseignant.
+     *
+     * @throws ErreurMetier {@code 404 ressource.introuvable}, {@code 409 compte.statut_incompatible} pour un compte en
+     *         cours de suppression, {@code 409 compte.dernier_administrateur} pour retirer le rôle du seul
+     *         administrateur actif
+     */
+    public void changerRoleAdministrateur(UUID id, boolean administrateur) {
+        comptes.verifierRoleModifiable(id);
+        if (administrateur) {
+            identites.donnerRoleAdministrateur(id);
+        } else {
+            comptes.sousVerrouAdministrateurs(() -> {
+                exigerUnAutreAdministrateurActif(id);
+                identites.retirerRoleAdministrateur(id);
+            });
+        }
+    }
+
+    /**
+     * Refuse l'action s'il ne resterait aucun autre administrateur actif : membre activé du rôle {@code admin} dans
+     * Keycloak et Enseignant {@code actif} en base (un invité ou un désactivé ne peut pas administrer). Lu sous
+     * verrou ; une lecture vide ou incomplète refuse (fermé par défaut).
+     */
+    private void exigerUnAutreAdministrateurActif(UUID id) {
+        Set<UUID> autres = new HashSet<>(comptes.actifsParmi(identites.administrateursActives()));
+        autres.remove(id);
+        if (autres.isEmpty()) {
+            throw new ErreurMetier(409, CODE_DERNIER_ADMINISTRATEUR, "Il doit rester au moins un administrateur actif");
+        }
     }
 
     /** E-mail sans espaces autour et en minuscules ; refusé s'il garde un espace ou n'a pas la forme d'une adresse. */

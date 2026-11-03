@@ -14,6 +14,7 @@ import org.eclipse.microprofile.config.inject.ConfigProperty;
 import org.keycloak.admin.client.CreatedResponseUtil;
 import org.keycloak.admin.client.Keycloak;
 import org.keycloak.admin.client.resource.RealmResource;
+import org.keycloak.admin.client.resource.UserResource;
 import org.keycloak.representations.idm.RoleRepresentation;
 import org.keycloak.representations.idm.UserRepresentation;
 
@@ -56,6 +57,43 @@ public class IdentitesKeycloak implements Identites {
     public void donnerRoleAdministrateur(UUID id) {
         RoleRepresentation role = realm().roles().get(ComptesService.ROLE_ADMINISTRATEUR).toRepresentation();
         realm().users().get(id.toString()).roles().realmLevel().add(List.of(role));
+    }
+
+    @Override
+    public void retirerRoleAdministrateur(UUID id) {
+        RoleRepresentation role = realm().roles().get(ComptesService.ROLE_ADMINISTRATEUR).toRepresentation();
+        realm().users().get(id.toString()).roles().realmLevel().remove(List.of(role));
+    }
+
+    @Override
+    public void desactiver(UUID id) {
+        activer(id, false);
+        // Un jeton déjà émis reste valide jusqu'à son expiration : le filtre du back le refuse dès l'écriture du
+        // statut ; la révocation empêche son renouvellement.
+        realm().users().get(id.toString()).logout();
+    }
+
+    @Override
+    public void reactiver(UUID id) {
+        activer(id, true);
+    }
+
+    @Override
+    public Set<UUID> administrateursActives() {
+        Set<UUID> actifs = new HashSet<>();
+        // Représentation complète : elle porte à coup sûr le champ enabled.
+        parPages((premier, nombre) -> realm().roles().get(ComptesService.ROLE_ADMINISTRATEUR)
+                .getUserMembers(false, premier, nombre)).stream()
+                .filter(utilisateur -> Boolean.TRUE.equals(utilisateur.isEnabled()))
+                .forEach(utilisateur -> actifs.add(UUID.fromString(utilisateur.getId())));
+        return actifs;
+    }
+
+    private void activer(UUID id, boolean active) {
+        UserResource utilisateur = realm().users().get(id.toString());
+        UserRepresentation representation = utilisateur.toRepresentation();
+        representation.setEnabled(active);
+        utilisateur.update(representation);
     }
 
     @Override

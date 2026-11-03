@@ -2,8 +2,11 @@ import { LiveAnnouncer } from '@angular/cdk/a11y';
 import { provideHttpClient } from '@angular/common/http';
 import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
+import { signal } from '@angular/core';
 import { MATERIAL_ANIMATIONS } from '@angular/material/core';
 import { CompteDto } from '../../api/models/compte-dto';
+import { BandeauAnnuler } from '../../commun/bandeau-annuler/bandeau-annuler';
+import { CompteCourant } from '../../commun/compte-courant';
 import { provideIcones } from '../../commun/icones';
 import { Comptes, MESSAGE_EMAIL_INVALIDE } from './comptes';
 
@@ -34,6 +37,7 @@ describe('Comptes', () => {
   let racine: HTMLElement;
   let serveur: HttpTestingController;
   const announce = vi.fn(() => Promise.resolve());
+  const afficher = vi.fn<(message: string, annuler: () => unknown) => void>();
 
   const tour = () => new Promise((fin) => setTimeout(fin));
 
@@ -44,6 +48,7 @@ describe('Comptes', () => {
 
   beforeEach(async () => {
     announce.mockClear();
+    afficher.mockClear();
     TestBed.configureTestingModule({
       imports: [Comptes],
       providers: [
@@ -52,6 +57,18 @@ describe('Comptes', () => {
         provideIcones(),
         { provide: MATERIAL_ANIMATIONS, useValue: { animationsDisabled: true } },
         { provide: LiveAnnouncer, useValue: { announce } },
+        { provide: BandeauAnnuler, useValue: { afficher } },
+        // L'administrateur connecté est Paul : « Désactiver » est absent de sa ligne.
+        {
+          provide: CompteCourant,
+          useValue: {
+            compte: signal({
+              id: ADMINISTRATEUR.id,
+              nomAffiche: 'Paul Roumy',
+              administrateur: true,
+            }),
+          },
+        },
       ],
     });
     serveur = TestBed.inject(HttpTestingController);
@@ -81,7 +98,9 @@ describe('Comptes', () => {
     ) ?? undefined;
   const lignes = () =>
     [...racine.querySelectorAll('tr.mat-mdc-row')].map((ligne) =>
-      [...ligne.querySelectorAll('td')].map((cellule) => cellule.textContent?.trim()),
+      [...ligne.querySelectorAll('td')].map((cellule) =>
+        cellule.textContent?.replace(/\s+/g, ' ').trim(),
+      ),
     );
 
   async function saisirEtInviter(valeur: string) {
@@ -106,9 +125,9 @@ describe('Comptes', () => {
       'Actions',
     ]);
     expect(lignes()).toEqual([
-      ['en attente', 'a@ecole.fr', 'invité', 'enseignant', "Renvoyer l'invitation"],
-      ['Agathe Petit', 'agathe@ecole.fr', 'désactivé', 'enseignant', ''],
-      ['Paul Roumy', 'paul@ecole.fr', 'actif', 'administrateur', ''],
+      ['en attente', 'a@ecole.fr', 'invité', 'enseignant', "Renvoyer l'invitation Actions"],
+      ['Agathe Petit', 'agathe@ecole.fr', 'désactivé', 'enseignant', 'Actions'],
+      ['Paul Roumy', 'paul@ecole.fr', 'actif', 'administrateur', 'Actions'],
     ]);
     expect(racine.querySelector('table')?.getAttribute('aria-label')).toBe("Comptes de l'équipe");
     expect(renvoi('a@ecole.fr')?.textContent?.trim()).toBe("Renvoyer l'invitation");
@@ -143,7 +162,7 @@ describe('Comptes', () => {
       'claire@ecole.fr',
       'invité',
       'enseignant',
-      "Renvoyer l'invitation",
+      "Renvoyer l'invitation Actions",
     ]);
   });
 
@@ -333,5 +352,297 @@ describe('Comptes', () => {
     // La nouvelle saisie n'est pas effacée.
     expect(champ().value).toBe('autre@ecole.fr');
     await servirListe();
+  });
+
+  // --- Menu « Actions » (story 1.6) ---
+
+  const COLLEGUE: CompteDto = {
+    id: '0190f0a0-0000-7000-8000-000000000102',
+    nomAffiche: 'Zoé Bernard',
+    email: 'zoe@ecole.fr',
+    statut: 'actif',
+    administrateur: false,
+  };
+
+  const boutonActions = (nom: string) =>
+    racine.querySelector<HTMLButtonElement>(`button[aria-label="Actions pour ${nom}"]`) ??
+    undefined;
+  const elementsDuMenu = () =>
+    [...document.querySelectorAll<HTMLButtonElement>('.mat-mdc-menu-item')].map((element) =>
+      element.textContent?.trim(),
+    );
+
+  async function ouvrirActions(nom: string) {
+    boutonActions(nom)!.click();
+    await stabiliser();
+  }
+
+  async function fermerMenu() {
+    document
+      .querySelector('.mat-mdc-menu-panel')
+      ?.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+    await stabiliser();
+  }
+
+  async function choisir(libelle: string) {
+    [...document.querySelectorAll<HTMLButtonElement>('.mat-mdc-menu-item')]
+      .find((element) => element.textContent?.trim() === libelle)!
+      .click();
+    await stabiliser();
+  }
+
+  /** Dernière opération inverse passée au Bandeau « Annuler ». */
+  const operationInverse = () => afficher.mock.calls.at(-1)![1];
+
+  it('Menu « Actions » : actions selon le statut et le rôle, sans « Désactiver » sur sa propre ligne', async () => {
+    await servirListe([INVITEE, COLLEGUE, DESACTIVEE, ADMINISTRATEUR]);
+
+    for (const [nom, attendus] of [
+      ['a@ecole.fr', ['Désactiver', "Donner le rôle d'administrateur"]],
+      ['Zoé Bernard', ['Désactiver', "Donner le rôle d'administrateur"]],
+      ['Agathe Petit', ['Réactiver', "Donner le rôle d'administrateur"]],
+      ['Paul Roumy', ["Retirer le rôle d'administrateur"]],
+    ] as const) {
+      await ouvrirActions(nom);
+      expect(elementsDuMenu()).toEqual(attendus);
+      await fermerMenu();
+    }
+  });
+
+  it('Aucune action sur un compte en cours de suppression', async () => {
+    await servirListe([{ ...COLLEGUE, statut: 'suppression_en_cours' }]);
+
+    expect(boutonActions('Zoé Bernard')).toBeUndefined();
+  });
+
+  it('Désactiver : Bandeau « Annuler », liste rechargée ; « Annuler » réactive', async () => {
+    await servirListe([COLLEGUE, ADMINISTRATEUR]);
+
+    await ouvrirActions('Zoé Bernard');
+    await choisir('Désactiver');
+    serveur
+      .expectOne({ method: 'POST', url: `/api/comptes/${COLLEGUE.id}/desactivation` })
+      .flush(null, { status: 204, statusText: 'No Content' });
+    await stabiliser();
+
+    expect(afficher).toHaveBeenCalledTimes(1);
+    expect(afficher.mock.calls[0][0]).toBe('Compte de Zoé Bernard désactivé.');
+    expect(bandeau()).toBeUndefined();
+    await servirListe([{ ...COLLEGUE, statut: 'desactive' }, ADMINISTRATEUR]);
+    expect(lignes()[0][2]).toBe('désactivé');
+
+    operationInverse()();
+    await stabiliser();
+    serveur
+      .expectOne({ method: 'POST', url: `/api/comptes/${COLLEGUE.id}/reactivation` })
+      .flush(null, { status: 204, statusText: 'No Content' });
+    await stabiliser();
+
+    // L'annulation n'ouvre pas de nouveau Bandeau « Annuler » : elle est annoncée.
+    expect(afficher).toHaveBeenCalledTimes(1);
+    expect(announce).toHaveBeenCalledWith('Compte de Zoé Bernard réactivé.');
+    await servirListe([COLLEGUE, ADMINISTRATEUR]);
+  });
+
+  it('Désactiver un invité : message avec son e-mail', async () => {
+    await servirListe([INVITEE, ADMINISTRATEUR]);
+
+    await ouvrirActions('a@ecole.fr');
+    await choisir('Désactiver');
+    serveur
+      .expectOne(`/api/comptes/${INVITEE.id}/desactivation`)
+      .flush(null, { status: 204, statusText: 'No Content' });
+    await stabiliser();
+
+    expect(afficher.mock.calls[0][0]).toBe('Compte de a@ecole.fr désactivé.');
+    await servirListe();
+  });
+
+  it('Réactiver : Bandeau « Annuler », dont l’opération inverse désactive', async () => {
+    await servirListe([DESACTIVEE, ADMINISTRATEUR]);
+
+    await ouvrirActions('Agathe Petit');
+    await choisir('Réactiver');
+    serveur
+      .expectOne({ method: 'POST', url: `/api/comptes/${DESACTIVEE.id}/reactivation` })
+      .flush(null, { status: 204, statusText: 'No Content' });
+    await stabiliser();
+
+    expect(afficher.mock.calls[0][0]).toBe('Compte de Agathe Petit réactivé.');
+    await servirListe();
+
+    operationInverse()();
+    await stabiliser();
+    serveur
+      .expectOne({ method: 'POST', url: `/api/comptes/${DESACTIVEE.id}/desactivation` })
+      .flush(null, { status: 204, statusText: 'No Content' });
+    await stabiliser();
+    expect(announce).toHaveBeenCalledWith('Compte de Agathe Petit désactivé.');
+    await servirListe();
+  });
+
+  it('Donner le rôle : Bandeau « Annuler », dont l’opération inverse retire le rôle', async () => {
+    await servirListe([COLLEGUE, ADMINISTRATEUR]);
+
+    await ouvrirActions('Zoé Bernard');
+    await choisir("Donner le rôle d'administrateur");
+    const requete = serveur.expectOne({
+      method: 'PUT',
+      url: `/api/comptes/${COLLEGUE.id}/administrateur`,
+    });
+    expect(requete.request.body).toEqual({ administrateur: true });
+    requete.flush(null, { status: 204, statusText: 'No Content' });
+    await stabiliser();
+
+    expect(afficher.mock.calls[0][0]).toBe('Zoé Bernard est administrateur.');
+    await servirListe([{ ...COLLEGUE, administrateur: true }, ADMINISTRATEUR]);
+    expect(lignes()[0][3]).toBe('administrateur');
+
+    operationInverse()();
+    await stabiliser();
+    const inverse = serveur.expectOne(`/api/comptes/${COLLEGUE.id}/administrateur`);
+    expect(inverse.request.body).toEqual({ administrateur: false });
+    inverse.flush(null, { status: 204, statusText: 'No Content' });
+    await stabiliser();
+    expect(announce).toHaveBeenCalledWith("Zoé Bernard n'est plus administrateur.");
+    await servirListe([COLLEGUE, ADMINISTRATEUR]);
+  });
+
+  it('Retirer le rôle : Bandeau « Annuler »', async () => {
+    await servirListe([{ ...COLLEGUE, administrateur: true }, ADMINISTRATEUR]);
+
+    await ouvrirActions('Zoé Bernard');
+    await choisir("Retirer le rôle d'administrateur");
+    const requete = serveur.expectOne(`/api/comptes/${COLLEGUE.id}/administrateur`);
+    expect(requete.request.body).toEqual({ administrateur: false });
+    requete.flush(null, { status: 204, statusText: 'No Content' });
+    await stabiliser();
+
+    expect(afficher.mock.calls[0][0]).toBe("Zoé Bernard n'est plus administrateur.");
+    await servirListe([COLLEGUE, ADMINISTRATEUR]);
+  });
+
+  it('Dernier administrateur : Bandeau d’erreur, liste rechargée, « Réessayer » recharge sans rejouer', async () => {
+    await servirListe([COLLEGUE, ADMINISTRATEUR]);
+
+    await ouvrirActions('Paul Roumy');
+    await choisir("Retirer le rôle d'administrateur");
+    serveur
+      .expectOne(`/api/comptes/${ADMINISTRATEUR.id}/administrateur`)
+      .flush(
+        { status: 409, code: 'compte.dernier_administrateur' },
+        { status: 409, statusText: 'Conflict' },
+      );
+    await stabiliser();
+
+    expect(bandeau()).toBe('Il doit rester au moins un administrateur actif.');
+    expect(afficher).not.toHaveBeenCalled();
+    await servirListe([COLLEGUE, ADMINISTRATEUR]);
+
+    bouton('Réessayer')[0].click();
+    await stabiliser();
+    serveur.expectNone(`/api/comptes/${ADMINISTRATEUR.id}/administrateur`);
+    await servirListe([COLLEGUE, ADMINISTRATEUR]);
+    expect(bandeau()).toBeUndefined();
+  });
+
+  it.each([
+    [409, 'compte.statut_incompatible', 'Ce compte a changé entre-temps. La liste est rechargée.'],
+    [404, 'ressource.introuvable', "Cet élément n'existe plus. Rechargez la page."],
+    // Rôle retiré à soi-même : le jeton suivant n'a plus accès.
+    [403, 'acces.refuse', "Cette action est réservée à l'administrateur."],
+  ])(
+    'Refus %i %s : message, liste rechargée, « Réessayer » recharge sans rejouer',
+    async (status, code, message) => {
+      await servirListe([DESACTIVEE, ADMINISTRATEUR]);
+
+      await ouvrirActions('Agathe Petit');
+      await choisir('Réactiver');
+      serveur
+        .expectOne(`/api/comptes/${DESACTIVEE.id}/reactivation`)
+        .flush({ status, code }, { status, statusText: 'Refus' });
+      await stabiliser();
+
+      expect(bandeau()).toBe(message);
+      await servirListe([{ ...DESACTIVEE, statut: 'actif' }, ADMINISTRATEUR]);
+      expect(lignes()[0][2]).toBe('actif');
+
+      bouton('Réessayer')[0].click();
+      await stabiliser();
+      serveur.expectNone(`/api/comptes/${DESACTIVEE.id}/reactivation`);
+      await servirListe([{ ...DESACTIVEE, statut: 'actif' }, ADMINISTRATEUR]);
+      expect(bandeau()).toBeUndefined();
+    },
+  );
+
+  it('Chargements qui se chevauchent : seule la réponse du dernier est affichée', async () => {
+    await servirListe([COLLEGUE, ADMINISTRATEUR]);
+
+    await ouvrirActions('Zoé Bernard');
+    await choisir('Désactiver');
+    serveur
+      .expectOne(`/api/comptes/${COLLEGUE.id}/desactivation`)
+      .flush(null, { status: 204, statusText: 'No Content' });
+    await stabiliser();
+    // Annulation avant la réponse du rechargement : deux chargements en cours.
+    operationInverse()();
+    await stabiliser();
+    serveur
+      .expectOne(`/api/comptes/${COLLEGUE.id}/reactivation`)
+      .flush(null, { status: 204, statusText: 'No Content' });
+    await stabiliser();
+
+    const [ancien, recent] = serveur.match({ method: 'GET', url: '/api/comptes' });
+    recent.flush([COLLEGUE, ADMINISTRATEUR]);
+    await stabiliser();
+    ancien.flush([{ ...COLLEGUE, statut: 'desactive' }, ADMINISTRATEUR]);
+    await stabiliser();
+
+    expect(lignes()[0][2]).toBe('actif');
+  });
+
+  it('Échec de l’action : Bandeau d’erreur, « Réessayer » rejoue l’action', async () => {
+    await servirListe([COLLEGUE, ADMINISTRATEUR]);
+
+    await ouvrirActions('Zoé Bernard');
+    await choisir('Désactiver');
+    serveur
+      .expectOne(`/api/comptes/${COLLEGUE.id}/desactivation`)
+      .flush({ status: 500, code: 'erreur.interne' }, { status: 500, statusText: 'Server Error' });
+    await stabiliser();
+
+    expect(bandeau()).toBe('Le service ne répond pas comme prévu. Réessayez dans un instant.');
+    await servirListe([COLLEGUE, ADMINISTRATEUR]);
+
+    bouton('Réessayer')[0].click();
+    await stabiliser();
+    serveur
+      .expectOne(`/api/comptes/${COLLEGUE.id}/desactivation`)
+      .flush(null, { status: 204, statusText: 'No Content' });
+    await stabiliser();
+
+    expect(bandeau()).toBeUndefined();
+    expect(afficher.mock.calls[0][0]).toBe('Compte de Zoé Bernard désactivé.');
+    await servirListe([{ ...COLLEGUE, statut: 'desactive' }, ADMINISTRATEUR]);
+  });
+
+  it('Pendant une action, le bouton « Actions » de la ligne reste désactivé et garde le focus', async () => {
+    await servirListe([COLLEGUE, ADMINISTRATEUR]);
+
+    await ouvrirActions('Zoé Bernard');
+    await choisir('Désactiver');
+    const declencheur = boutonActions('Zoé Bernard')!;
+    expect(declencheur.getAttribute('aria-disabled')).toBe('true');
+    // Désactivé sans `disabled` natif : le menu lui rend le focus au lieu de le perdre sur <body>.
+    expect(declencheur.disabled).toBe(false);
+    expect(document.activeElement).toBe(declencheur);
+    expect(boutonActions('Paul Roumy')!.getAttribute('aria-disabled')).not.toBe('true');
+
+    serveur
+      .expectOne(`/api/comptes/${COLLEGUE.id}/desactivation`)
+      .flush(null, { status: 204, statusText: 'No Content' });
+    await stabiliser();
+    expect(boutonActions('Zoé Bernard')!.getAttribute('aria-disabled')).not.toBe('true');
+    await servirListe([COLLEGUE, ADMINISTRATEUR]);
   });
 });

@@ -48,6 +48,22 @@ public class Enseignant {
         this.statut = StatutEnseignant.ACTIF;
     }
 
+    /** Accès coupé par l'administrateur (invité ou actif) ; rien n'est effacé. */
+    public void desactiver() {
+        if (statut != StatutEnseignant.INVITE && statut != StatutEnseignant.ACTIF) {
+            throw new IllegalStateException("Seul un enseignant invité ou actif peut être désactivé : " + statut.valeur());
+        }
+        this.statut = StatutEnseignant.DESACTIVE;
+    }
+
+    /** Accès rendu : actif s'il a déjà saisi son nom, sinon de nouveau invité (il n'a jamais été activé). */
+    public void reactiver() {
+        if (statut != StatutEnseignant.DESACTIVE) {
+            throw new IllegalStateException("Seul un enseignant désactivé peut être réactivé : " + statut.valeur());
+        }
+        this.statut = nomAffiche == null ? StatutEnseignant.INVITE : StatutEnseignant.ACTIF;
+    }
+
     public UUID id() {
         return id;
     }

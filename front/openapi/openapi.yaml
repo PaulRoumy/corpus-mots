@@ -47,6 +47,13 @@ components:
           type: string
         administrateur:
           type: boolean
+    RoleAdministrateurDto:
+      type: object
+      required:
+      - administrateur
+      properties:
+        administrateur:
+          type: boolean
     UUID:
       type: string
       format: uuid
@@ -87,6 +94,46 @@ paths:
           description: Bad Request
       tags:
       - Comptes Resource
+  /api/comptes/{id}/administrateur:
+    put:
+      summary: Donner ou retirer le rôle d'administrateur (appliqué au prochain jeton
+        du compte)
+      operationId: changerRoleAdministrateur
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          $ref: "#/components/schemas/UUID"
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RoleAdministrateurDto"
+        required: true
+      responses:
+        "204":
+          description: Rôle modifié
+        "400":
+          description: Bad Request
+      tags:
+      - Comptes Resource
+  /api/comptes/{id}/desactivation:
+    post:
+      summary: "Désactiver un compte : connexion et API refusées, sessions révoqué\
+        es, rien n'est effacé"
+      operationId: desactiverCompte
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          $ref: "#/components/schemas/UUID"
+      responses:
+        "204":
+          description: Compte désactivé
+      tags:
+      - Comptes Resource
   /api/comptes/{id}/invitation:
     post:
       summary: Renvoyer l'e-mail d'invitation (nouveau lien de 7 jours)
@@ -100,6 +147,21 @@ paths:
       responses:
         "204":
           description: Invitation renvoyée
+      tags:
+      - Comptes Resource
+  /api/comptes/{id}/reactivation:
+    post:
+      summary: Réactiver un compte désactivé
+      operationId: reactiverCompte
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          $ref: "#/components/schemas/UUID"
+      responses:
+        "204":
+          description: Compte réactivé
       tags:
       - Comptes Resource
   /api/mon-compte:

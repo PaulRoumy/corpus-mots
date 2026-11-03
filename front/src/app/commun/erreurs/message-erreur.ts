@@ -23,6 +23,9 @@ export const MESSAGES_PAR_CODE: Readonly<Record<string, string>> = {
   'acces.refuse': "Cette action est réservée à l'administrateur.",
   'compte.email_deja_utilise': 'Cet e-mail est déjà associé à un compte.',
   'compte.invitation_inutile': 'Ce compte est déjà actif : aucune invitation à renvoyer.',
+  'compte.dernier_administrateur': 'Il doit rester au moins un administrateur actif.',
+  'compte.auto_desactivation': 'Vous ne pouvez pas désactiver votre propre compte.',
+  'compte.statut_incompatible': 'Ce compte a changé entre-temps. La liste est rechargée.',
   'ressource.introuvable': "Cet élément n'existe plus. Rechargez la page.",
   'requete.invalide': 'La demande est incomplète. Vérifiez la saisie, puis réessayez.',
   'requete.trop_volumineuse':

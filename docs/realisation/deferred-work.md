@@ -45,3 +45,15 @@
 - source_spec: `docs/realisation/spec-1-5-inviter-un-collegue.md`
   summary: Tester aussi `IdentitesKeycloak.lister()` contre un vrai Keycloak : plus de 100 utilisateurs (pages), membres du rôle `admin` marqués administrateurs.
   evidence: Tous les tests passent par `IdentitesFactices` (revue story 1.5, constat 1) ; à joindre au test de l'adaptateur déjà reporté (spec 1.3).
+- source_spec: none
+  summary: Story 1.6, deuxième partie : tâche planifiée de `comptes` (au démarrage puis chaque heure) qui rejoue les étapes Keycloak restées en échec et supprime les utilisateurs Keycloak sans `Enseignant` (AD-18).
+  evidence: Découpage de la story 1.6 décidé par Paul (2026-11-03) : les actions sur les comptes partent d'abord ; la réconciliation est à livrer avant le déploiement (un utilisateur Keycloak orphelin bloque sinon son adresse, revue story 1.5).
+- source_spec: none
+  summary: Story 1.6, troisième partie : annuaire `GET /api/enseignants` (`id`, `nomAffiche`, `statut`, comptes `invite` exclus) et son cache front `commun/annuaire` (AD-20).
+  evidence: Découpage de la story 1.6 décidé par Paul (2026-11-03) : aucun écran ne l'utilise avant l'Epic 3 ; à livrer avant lui.
+- source_spec: `docs/realisation/spec-1-6-gerer-les-comptes-de-l-equipe.md`
+  summary: Tester aussi contre un vrai Keycloak `desactiver` (`enabled=false` puis révocation des sessions), `reactiver`, `retirerRoleAdministrateur` et `administrateursActives` (membres activés du rôle `admin`, pages).
+  evidence: Tous les tests passent par `IdentitesFactices` (revue story 1.6, constat 2) ; la règle du dernier administrateur dépend de cette lecture. À joindre au test de l'adaptateur reporté (specs 1.3 et 1.5).
+- source_spec: `docs/realisation/spec-1-6-gerer-les-comptes-de-l-equipe.md`
+  summary: La tâche de réconciliation (story 1.6, partie 2) doit aussi corriger le sens inverse : Keycloak modifié (désactivé, réactivé) mais statut non écrit en base.
+  evidence: Désactiver ou réactiver appelle Keycloak puis écrit la base ; si l'écriture échoue, les deux divergent jusqu'au rejeu manuel (revue story 1.6, constat 4).

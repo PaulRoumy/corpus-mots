@@ -1,6 +1,7 @@
 package fr.corpusmots.comptes.service;
 
 import java.util.List;
+import java.util.Set;
 import java.util.UUID;
 
 /**
@@ -17,6 +18,18 @@ public interface Identites {
     UUID creerUtilisateur(String email);
 
     void donnerRoleAdministrateur(UUID id);
+
+    /** Retire le rôle {@code admin} ; sans effet si l'utilisateur ne l'a pas. Il s'applique au prochain jeton. */
+    void retirerRoleAdministrateur(UUID id);
+
+    /** Bloque la connexion ({@code enabled=false}) puis révoque toutes les sessions de l'utilisateur (AD-6). */
+    void desactiver(UUID id);
+
+    /** Rend la connexion possible ({@code enabled=true}). */
+    void reactiver(UUID id);
+
+    /** Membres du rôle {@code admin} dont le compte Keycloak est activé. */
+    Set<UUID> administrateursActives();
 
     /** Envoie l'e-mail « Créer mon mot de passe » : mot de passe, prénom et nom, lien valable 7 jours. */
     void envoyerInvitation(UUID id);
