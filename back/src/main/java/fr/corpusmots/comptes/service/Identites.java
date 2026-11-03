@@ -1,5 +1,6 @@
 package fr.corpusmots.comptes.service;
 
+import java.util.List;
 import java.util.UUID;
 
 /**
@@ -21,4 +22,7 @@ public interface Identites {
     void envoyerInvitation(UUID id);
 
     void supprimer(UUID id);
+
+    /** Tous les utilisateurs du realm, avec leur e-mail et la présence du rôle {@code admin}. */
+    List<IdentiteVue> lister();
 }

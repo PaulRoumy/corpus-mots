@@ -39,9 +39,15 @@ export const routes: Routes = [
       {
         path: 'administration',
         canMatch: [administrateurSeulement],
-        component: PageBientot,
-        title: 'Administration · corpus-mots',
-        data: { titre: 'Administration' },
+        children: [
+          { path: '', pathMatch: 'full', redirectTo: 'comptes' },
+          {
+            path: 'comptes',
+            // Chargée à la demande : formulaires et table Material restent hors du paquet initial.
+            loadComponent: () => import('./administration/comptes/comptes').then((m) => m.Comptes),
+            title: 'Comptes · Administration · corpus-mots',
+          },
+        ],
       },
     ],
   },

@@ -130,12 +130,14 @@ describe('Coquille', () => {
       expect(TestBed.inject(Router).url).toBe('/preparations');
     });
 
-    it('URL directe /administration pour un administrateur : la page s’ouvre', async () => {
+    it('URL directe /administration pour un administrateur : Administration › Comptes s’ouvre', async () => {
       const fixture = await ouvrir('/administration', enCompte(ADMINISTRATEUR));
+      TestBed.inject(HttpTestingController).expectOne('/api/comptes').flush([]);
+      await tour();
+      await fixture.whenStable();
 
-      expect(TestBed.inject(Router).url).toBe('/administration');
-      expect(page(fixture).querySelector('h1')?.textContent).toContain('Administration');
-      expect(page(fixture).textContent).toContain('Cette page arrive bientôt.');
+      expect(TestBed.inject(Router).url).toBe('/administration/comptes');
+      expect(page(fixture).querySelector('h1')?.textContent).toContain('Comptes');
     });
 
     it('Recherche : Entrée ouvre la Banque filtrée sur le Mot, entrée Banque mise en évidence', async () => {

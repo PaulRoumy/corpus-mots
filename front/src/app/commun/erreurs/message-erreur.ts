@@ -21,6 +21,8 @@ export const MESSAGES_PAR_CODE: Readonly<Record<string, string>> = {
   'compte.inconnu_ou_inactif':
     "Votre compte n'est pas actif. Adressez-vous à l'administrateur de l'école.",
   'acces.refuse': "Cette action est réservée à l'administrateur.",
+  'compte.email_deja_utilise': 'Cet e-mail est déjà associé à un compte.',
+  'compte.invitation_inutile': 'Ce compte est déjà actif : aucune invitation à renvoyer.',
   'ressource.introuvable': "Cet élément n'existe plus. Rechargez la page.",
   'requete.invalide': 'La demande est incomplète. Vérifiez la saisie, puis réessayez.',
   'requete.trop_volumineuse':
@@ -47,13 +49,28 @@ export function codeErreur(erreur: unknown): string | null {
   if (!(erreur instanceof HttpErrorResponse)) {
     return null;
   }
-  const corps: unknown = erreur.error;
+  const corps = corpsJson(erreur.error);
   return typeof corps === 'object' &&
     corps !== null &&
     'code' in corps &&
     typeof corps.code === 'string'
     ? corps.code
     : null;
+}
+
+/**
+ * Les opérations sans corps de réponse (`204`) sont générées en `responseType: 'text'` : leur erreur RFC 9457 arrive
+ * alors en texte JSON, à relire.
+ */
+function corpsJson(corps: unknown): unknown {
+  if (typeof corps !== 'string') {
+    return corps;
+  }
+  try {
+    return JSON.parse(corps) as unknown;
+  } catch {
+    return null;
+  }
 }
 
 /**

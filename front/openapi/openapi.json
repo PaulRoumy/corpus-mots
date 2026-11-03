@@ -2,6 +2,39 @@
   "openapi" : "3.1.0",
   "components" : {
     "schemas" : {
+      "CompteDto" : {
+        "type" : "object",
+        "required" : [ "id", "email", "statut", "administrateur" ],
+        "properties" : {
+          "id" : {
+            "$ref" : "#/components/schemas/UUID"
+          },
+          "nomAffiche" : {
+            "type" : "string",
+            "description" : "Absent tant que le compte est invité"
+          },
+          "email" : {
+            "type" : "string",
+            "description" : "Vide si Keycloak ne connaît plus l'utilisateur"
+          },
+          "statut" : {
+            "type" : "string",
+            "enum" : [ "invite", "actif", "desactive", "suppression_en_cours" ]
+          },
+          "administrateur" : {
+            "type" : "boolean"
+          }
+        }
+      },
+      "InvitationDto" : {
+        "type" : "object",
+        "required" : [ "email" ],
+        "properties" : {
+          "email" : {
+            "type" : "string"
+          }
+        }
+      },
       "MonCompteDto" : {
         "type" : "object",
         "required" : [ "id", "nomAffiche", "administrateur" ],
@@ -25,6 +58,78 @@
     }
   },
   "paths" : {
+    "/api/comptes" : {
+      "get" : {
+        "summary" : "Comptes de l'équipe, invités d'abord",
+        "operationId" : "listerComptes",
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "type" : "array",
+                  "items" : {
+                    "$ref" : "#/components/schemas/CompteDto"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "tags" : [ "Comptes Resource" ]
+      },
+      "post" : {
+        "summary" : "Inviter un collègue par e-mail",
+        "operationId" : "inviter",
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/InvitationDto"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "201" : {
+            "description" : "Compte créé au statut invite, e-mail envoyé",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/CompteDto"
+                }
+              }
+            }
+          },
+          "400" : {
+            "description" : "Bad Request"
+          }
+        },
+        "tags" : [ "Comptes Resource" ]
+      }
+    },
+    "/api/comptes/{id}/invitation" : {
+      "post" : {
+        "summary" : "Renvoyer l'e-mail d'invitation (nouveau lien de 7 jours)",
+        "operationId" : "renvoyerInvitation",
+        "parameters" : [ {
+          "name" : "id",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "$ref" : "#/components/schemas/UUID"
+          }
+        } ],
+        "responses" : {
+          "204" : {
+            "description" : "Invitation renvoyée"
+          }
+        },
+        "tags" : [ "Comptes Resource" ]
+      }
+    },
     "/api/mon-compte" : {
       "get" : {
         "summary" : "Compte de l'enseignant connecté",

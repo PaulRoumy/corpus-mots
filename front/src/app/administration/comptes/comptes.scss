@@ -1,0 +1,43 @@
+// Administration › Comptes : formulaire « Inviter » sur une ligne (le bouton passe dessous sur un écran étroit),
+// puis la liste ; toutes les valeurs viennent des jetons (styles/_jetons.scss).
+
+.comptes__invitation {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: var(--cm-espace-3);
+  max-width: var(--cm-largeur-contenu-max);
+}
+
+.comptes__champ {
+  flex: 1 1 var(--cm-largeur-panneau);
+  min-width: 0;
+}
+
+// Aligne le bouton sur le champ rempli Material, plus haut que lui.
+.comptes__inviter {
+  margin-top: var(--cm-espace-2);
+}
+
+// Sur téléphone, la table défile horizontalement dans son cadre, jamais la page.
+.comptes__defilement {
+  overflow-x: auto;
+  border-radius: var(--cm-arrondi-lg);
+  background: var(--mat-sys-surface);
+  box-shadow: var(--cm-elevation-1);
+}
+
+.comptes__table {
+  width: 100%;
+  background: transparent;
+
+  th,
+  td {
+    white-space: nowrap;
+  }
+}
+
+.comptes__en-attente {
+  font-style: italic;
+  color: var(--mat-sys-on-surface-variant);
+}

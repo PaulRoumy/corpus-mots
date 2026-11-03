@@ -7,6 +7,7 @@ import fr.corpusmots.comptes.persistance.StatutEnseignant;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 import jakarta.transaction.Transactional;
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -18,6 +19,8 @@ public class ComptesService {
     public static final String ROLE_ADMINISTRATEUR = "admin";
 
     static final String CODE_COMPTE_INCONNU_OU_INACTIF = "compte.inconnu_ou_inactif";
+    static final String CODE_INVITATION_INUTILE = "compte.invitation_inutile";
+    static final String CODE_INTROUVABLE = "ressource.introuvable";
 
     @Inject
     EnseignantRepository enseignants;
@@ -61,6 +64,35 @@ public class ComptesService {
                 .filter(trouve -> trouve.statut() == StatutEnseignant.ACTIF)
                 .orElseThrow(ComptesService::inconnuOuInactif);
         return new MonCompteVue(enseignant.id(), enseignant.nomAffiche(), administrateur);
+    }
+
+    /** Enseignants de l'équipe, hors {@code supprime}. */
+    @Transactional
+    public List<EnseignantLu> enseignantsDeLEquipe() {
+        return enseignants.list("statut <> ?1", StatutEnseignant.SUPPRIME).stream()
+                .map(enseignant -> new EnseignantLu(enseignant.id(), enseignant.nomAffiche(),
+                        enseignant.statut().valeur()))
+                .toList();
+    }
+
+    /**
+     * Vérifie qu'une invitation peut être renvoyée à cet Enseignant.
+     *
+     * @throws ErreurMetier {@code 404 ressource.introuvable} s'il n'existe pas (ou plus),
+     *         {@code 409 compte.invitation_inutile} s'il n'est pas {@code invite}
+     */
+    @Transactional
+    public void verifierInvite(UUID id) {
+        Enseignant enseignant = enseignants.findByIdOptional(id)
+                .filter(trouve -> trouve.statut() != StatutEnseignant.SUPPRIME)
+                .orElseThrow(() -> new ErreurMetier(404, CODE_INTROUVABLE, "Aucun compte ne porte cet identifiant"));
+        if (enseignant.statut() != StatutEnseignant.INVITE) {
+            throw new ErreurMetier(409, CODE_INVITATION_INUTILE, "Ce compte n'est plus au statut invite");
+        }
+    }
+
+    /** Enseignant tel qu'il est en base : nom affiché (vide tant que {@code invite}) et statut. */
+    public record EnseignantLu(UUID id, String nomAffiche, String statut) {
     }
 
     private static UUID identifiant(String sub) {

@@ -12,7 +12,7 @@ function reponse(status: number, code?: string): HttpErrorResponse {
 }
 
 describe('messageErreur', () => {
-  // Chaque code renvoyé par le back (commun.api.ErreursMappers, comptes.service.ComptesService).
+  // Chaque code renvoyé par le back (commun.api.ErreursMappers, comptes.service.ComptesService, ComptesAdministration).
   const codesDuBack: [number, string, string][] = [
     [
       401,
@@ -25,6 +25,8 @@ describe('messageErreur', () => {
       "Votre compte n'est pas actif. Adressez-vous à l'administrateur de l'école.",
     ],
     [403, 'acces.refuse', "Cette action est réservée à l'administrateur."],
+    [409, 'compte.email_deja_utilise', 'Cet e-mail est déjà associé à un compte.'],
+    [409, 'compte.invitation_inutile', 'Ce compte est déjà actif : aucune invitation à renvoyer.'],
     [404, 'ressource.introuvable', "Cet élément n'existe plus. Rechargez la page."],
     [400, 'requete.invalide', 'La demande est incomplète. Vérifiez la saisie, puis réessayez.'],
     [
@@ -86,6 +88,13 @@ describe('messageErreur', () => {
 describe('codeErreur', () => {
   it('lit le code du corps RFC 9457', () => {
     expect(codeErreur(reponse(403, 'compte.inconnu_ou_inactif'))).toBe('compte.inconnu_ou_inactif');
+  });
+
+  it('lit aussi le code d’un corps reçu en texte (opération sans corps de réponse)', () => {
+    const texte = JSON.stringify({ status: 409, code: 'compte.invitation_inutile' });
+    expect(codeErreur(new HttpErrorResponse({ status: 409, error: texte }))).toBe(
+      'compte.invitation_inutile',
+    );
   });
 
   it('null sans corps, sans code textuel ou hors HttpErrorResponse', () => {

@@ -4,8 +4,12 @@ import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 import jakarta.ws.rs.core.Response;
 import java.time.Duration;
+import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 import java.util.UUID;
+import java.util.function.BiFunction;
 import org.eclipse.microprofile.config.inject.ConfigProperty;
 import org.keycloak.admin.client.CreatedResponseUtil;
 import org.keycloak.admin.client.Keycloak;
@@ -20,6 +24,7 @@ public class IdentitesKeycloak implements Identites {
     static final String CLIENT_FRONT = "corpus-mots-front";
     static final Duration VALIDITE_INVITATION = Duration.ofDays(7);
     static final List<String> ACTIONS_INVITATION = List.of("UPDATE_PASSWORD", "UPDATE_PROFILE");
+    static final int TAILLE_PAGE = 100;
 
     @Inject
     Keycloak keycloak;
@@ -65,6 +70,30 @@ public class IdentitesKeycloak implements Identites {
             int statut = reponse.getStatus();
             if (statut != Response.Status.NO_CONTENT.getStatusCode() && statut != Response.Status.NOT_FOUND.getStatusCode()) {
                 throw new IllegalStateException("Suppression de l'utilisateur Keycloak refusée : HTTP " + statut);
+            }
+        }
+    }
+
+    @Override
+    public List<IdentiteVue> lister() {
+        Set<String> administrateurs = new HashSet<>();
+        parPages((premier, nombre) -> realm().roles().get(ComptesService.ROLE_ADMINISTRATEUR)
+                .getUserMembers(premier, nombre))
+                .forEach(utilisateur -> administrateurs.add(utilisateur.getId()));
+        return parPages((premier, nombre) -> realm().users().list(premier, nombre)).stream()
+                .map(utilisateur -> new IdentiteVue(UUID.fromString(utilisateur.getId()), utilisateur.getEmail(),
+                        administrateurs.contains(utilisateur.getId())))
+                .toList();
+    }
+
+    /** Lit une liste de l'API d'administration page après page, jusqu'à une page incomplète. */
+    private static List<UserRepresentation> parPages(BiFunction<Integer, Integer, List<UserRepresentation>> page) {
+        List<UserRepresentation> tous = new ArrayList<>();
+        for (int premier = 0; ; premier += TAILLE_PAGE) {
+            List<UserRepresentation> lus = page.apply(premier, TAILLE_PAGE);
+            tous.addAll(lus);
+            if (lus.size() < TAILLE_PAGE) {
+                return tous;
             }
         }
     }

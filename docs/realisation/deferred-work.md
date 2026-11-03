@@ -42,3 +42,6 @@
 - source_spec: `docs/realisation/spec-1-4-2-composants-partages-et-messages-d-erreur.md`
   summary: Conserver la saisie en cours quand la session expire (Connexion puis retour à la même page), comme le promet le message de `authentification.requise`.
   evidence: Depuis la story 1.3, `Authentification` redirige vers Keycloak et la page se recharge : la saisie est perdue (revue story 1.4.2, constat 15 ; EXPERIENCE.md › State Patterns, session expirée).
+- source_spec: `docs/realisation/spec-1-5-inviter-un-collegue.md`
+  summary: Tester aussi `IdentitesKeycloak.lister()` contre un vrai Keycloak : plus de 100 utilisateurs (pages), membres du rôle `admin` marqués administrateurs.
+  evidence: Tous les tests passent par `IdentitesFactices` (revue story 1.5, constat 1) ; à joindre au test de l'adaptateur déjà reporté (spec 1.3).
