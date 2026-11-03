@@ -26,6 +26,7 @@ public class IdentitesKeycloak implements Identites {
     static final Duration VALIDITE_INVITATION = Duration.ofDays(7);
     static final List<String> ACTIONS_INVITATION = List.of("UPDATE_PASSWORD", "UPDATE_PROFILE");
     static final int TAILLE_PAGE = 100;
+    static final String PREFIXE_COMPTE_DE_SERVICE = "service-account-";
 
     @Inject
     Keycloak keycloak;
@@ -119,9 +120,24 @@ public class IdentitesKeycloak implements Identites {
                 .getUserMembers(premier, nombre))
                 .forEach(utilisateur -> administrateurs.add(utilisateur.getId()));
         return parPages((premier, nombre) -> realm().users().list(premier, nombre)).stream()
-                .map(utilisateur -> new IdentiteVue(UUID.fromString(utilisateur.getId()), utilisateur.getEmail(),
-                        administrateurs.contains(utilisateur.getId())))
+                .map(utilisateur -> vue(utilisateur, administrateurs))
                 .toList();
+    }
+
+    /** Utilisateur Keycloak vu par le back ; {@code administrateurs} : identifiants des membres du rôle {@code admin}. */
+    static IdentiteVue vue(UserRepresentation utilisateur, Set<String> administrateurs) {
+        return new IdentiteVue(UUID.fromString(utilisateur.getId()), utilisateur.getEmail(),
+                administrateurs.contains(utilisateur.getId()), Boolean.TRUE.equals(utilisateur.isEnabled()),
+                estCompteDeService(utilisateur));
+    }
+
+    /**
+     * Utilisateur d'un client (compte de service), reconnu au lien vers son client ou, si la représentation ne le
+     * porte pas, au préfixe que Keycloak donne à son nom d'utilisateur.
+     */
+    private static boolean estCompteDeService(UserRepresentation utilisateur) {
+        return utilisateur.getServiceAccountClientId() != null
+                || (utilisateur.getUsername() != null && utilisateur.getUsername().startsWith(PREFIXE_COMPTE_DE_SERVICE));
     }
 
     /** Lit une liste de l'API d'administration page après page, jusqu'à une page incomplète. */

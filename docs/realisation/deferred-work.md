@@ -57,3 +57,6 @@
 - source_spec: `docs/realisation/spec-1-6-gerer-les-comptes-de-l-equipe.md`
   summary: La tâche de réconciliation (story 1.6, partie 2) doit aussi corriger le sens inverse : Keycloak modifié (désactivé, réactivé) mais statut non écrit en base.
   evidence: Désactiver ou réactiver appelle Keycloak puis écrit la base ; si l'écriture échoue, les deux divergent jusqu'au rejeu manuel (revue story 1.6, constat 4).
+- source_spec: `docs/realisation/spec-1-6-2-reconciliation-des-comptes.md`
+  summary: Le circuit de suppression de compte (Epic 6) doit laisser, s'il s'interrompt après Keycloak `enabled=false`, un état que `ReconciliationComptes` distingue d'une désactivation interrompue (sinon l'effacement RGPD est achevé en simple désactivation, sans trace).
+  evidence: Revue story 1.6, partie 2, constat 9 : Keycloak désactivé et Enseignant encore `actif` est aujourd'hui corrigé en `desactive` ; à vérifier quand AD-18 §1 sera implémenté.

@@ -9,6 +9,7 @@ import jakarta.inject.Inject;
 import jakarta.persistence.LockModeType;
 import jakarta.transaction.Transactional;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
@@ -77,6 +78,13 @@ public class ComptesService {
                 .map(enseignant -> new EnseignantLu(enseignant.id(), enseignant.nomAffiche(),
                         enseignant.statut().valeur()))
                 .toList();
+    }
+
+    /** Statut de chaque Enseignant, {@code supprime} compris (réconciliation avec Keycloak). */
+    @Transactional
+    public Map<UUID, StatutEnseignant> statutsDesEnseignants() {
+        return enseignants.listAll().stream()
+                .collect(Collectors.toMap(Enseignant::id, Enseignant::statut));
     }
 
     /**

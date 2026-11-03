@@ -46,8 +46,8 @@ public class InvitationService {
         try {
             identites.supprimer(id);
         } catch (RuntimeException echecDeCompensation) {
-            // L'échec d'origine remonte à l'appelant ; l'utilisateur sans Enseignant sera supprimé par la tâche de
-            // réconciliation des comptes (story 1.6).
+            // L'échec d'origine remonte à l'appelant ; l'utilisateur sans Enseignant sera supprimé par
+            // ReconciliationComptes une fois l'écart constaté à deux passages successifs.
             LOG.errorf(echecDeCompensation, "Invitation échouée et utilisateur Keycloak %s non supprimé", id);
         }
     }

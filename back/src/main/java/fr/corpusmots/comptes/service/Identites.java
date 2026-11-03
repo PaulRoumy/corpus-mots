@@ -36,6 +36,6 @@ public interface Identites {
 
     void supprimer(UUID id);
 
-    /** Tous les utilisateurs du realm, avec leur e-mail et la présence du rôle {@code admin}. */
+    /** Tous les utilisateurs du realm (compte de service compris), avec e-mail, rôle {@code admin} et activation. */
     List<IdentiteVue> lister();
 }

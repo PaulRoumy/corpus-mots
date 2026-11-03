@@ -4,6 +4,7 @@ import io.quarkus.test.Mock;
 import jakarta.enterprise.context.ApplicationScoped;
 import java.time.Duration;
 import java.util.ArrayList;
+import java.util.EnumMap;
 import java.util.EnumSet;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
@@ -21,22 +22,41 @@ public class IdentitesFactices implements Identites {
         CREATION, ROLE, INVITATION, SUPPRESSION, LISTE, RETRAIT_ROLE, DESACTIVATION, REACTIVATION, ADMINISTRATEURS
     }
 
-    /** Utilisateur du realm : e-mail, rôle {@code admin}, compte activé. */
-    private record Utilisateur(String email, boolean administrateur, boolean active) {
+    /** Identifiant du compte de service du back, présent dans le realm après chaque réinitialisation. */
+    public static final UUID COMPTE_DE_SERVICE = UUID.fromString("00000000-0000-0000-0000-00000000c0de");
+
+    /** Utilisateur du realm : e-mail, rôle {@code admin}, compte activé, compte de service. */
+    private record Utilisateur(String email, boolean administrateur, boolean active, boolean compteDeService) {
+
+        Utilisateur(String email, boolean administrateur, boolean active) {
+            this(email, administrateur, active, false);
+        }
+
+        Utilisateur avec(boolean nouvelAdministrateur, boolean nouvelActive) {
+            return new Utilisateur(email, nouvelAdministrateur, nouvelActive, compteDeService);
+        }
     }
 
     private final List<String> appels = new ArrayList<>();
     private final EnumSet<Etape> etapesEnEchec = EnumSet.noneOf(Etape.class);
+    private final Map<Etape, Runnable> actionsAuPassage = new EnumMap<>(Etape.class);
     private final Map<UUID, Utilisateur> utilisateurs = new LinkedHashMap<>();
     private final Set<UUID> sessionsRevoquees = new HashSet<>();
     private boolean emailDejaUtilise;
     private UUID prochainId = UUID.randomUUID();
     private Duration pauseApresLectureAdministrateurs = Duration.ZERO;
 
+    {
+        // Pas d'appel de méthode ici : le constructeur sert aussi au proxy client d'ArC.
+        utilisateurs.put(COMPTE_DE_SERVICE, new Utilisateur(null, false, true, true));
+    }
+
     public synchronized void reinitialiser() {
         appels.clear();
         etapesEnEchec.clear();
+        actionsAuPassage.clear();
         utilisateurs.clear();
+        utilisateurs.put(COMPTE_DE_SERVICE, new Utilisateur(null, false, true, true));
         sessionsRevoquees.clear();
         emailDejaUtilise = false;
         prochainId = UUID.randomUUID();
@@ -46,6 +66,14 @@ public class IdentitesFactices implements Identites {
     public synchronized void echouerA(Etape... etapes) {
         etapesEnEchec.clear();
         etapesEnEchec.addAll(List.of(etapes));
+    }
+
+    /**
+     * Exécute {@code action} une fois, au prochain passage par {@code etape} : simule une requête concurrente qui
+     * s'intercale entre deux étapes d'une opération.
+     */
+    public synchronized void auPassage(Etape etape, Runnable action) {
+        actionsAuPassage.put(etape, action);
     }
 
     public synchronized void emailDejaUtilise() {
@@ -77,6 +105,10 @@ public class IdentitesFactices implements Identites {
         return List.copyOf(appels);
     }
 
+    public synchronized boolean existe(UUID id) {
+        return utilisateurs.containsKey(id);
+    }
+
     public synchronized boolean estAdministrateur(UUID id) {
         return utilisateurs.get(id).administrateur();
     }
@@ -105,21 +137,21 @@ public class IdentitesFactices implements Identites {
     public synchronized void donnerRoleAdministrateur(UUID id) {
         appels.add("admin " + id);
         echouerSi(Etape.ROLE);
-        utilisateurs.computeIfPresent(id, (cle, u) -> new Utilisateur(u.email(), true, u.active()));
+        utilisateurs.computeIfPresent(id, (cle, u) -> u.avec(true, u.active()));
     }
 
     @Override
     public synchronized void retirerRoleAdministrateur(UUID id) {
         appels.add("retirer-admin " + id);
         echouerSi(Etape.RETRAIT_ROLE);
-        utilisateurs.computeIfPresent(id, (cle, u) -> new Utilisateur(u.email(), false, u.active()));
+        utilisateurs.computeIfPresent(id, (cle, u) -> u.avec(false, u.active()));
     }
 
     @Override
     public synchronized void desactiver(UUID id) {
         appels.add("desactiver " + id);
         echouerSi(Etape.DESACTIVATION);
-        utilisateurs.computeIfPresent(id, (cle, u) -> new Utilisateur(u.email(), u.administrateur(), false));
+        utilisateurs.computeIfPresent(id, (cle, u) -> u.avec(u.administrateur(), false));
         sessionsRevoquees.add(id);
     }
 
@@ -127,7 +159,7 @@ public class IdentitesFactices implements Identites {
     public synchronized void reactiver(UUID id) {
         appels.add("reactiver " + id);
         echouerSi(Etape.REACTIVATION);
-        utilisateurs.computeIfPresent(id, (cle, u) -> new Utilisateur(u.email(), u.administrateur(), true));
+        utilisateurs.computeIfPresent(id, (cle, u) -> u.avec(u.administrateur(), true));
     }
 
     @Override
@@ -172,11 +204,16 @@ public class IdentitesFactices implements Identites {
         echouerSi(Etape.LISTE);
         return utilisateurs.entrySet().stream()
                 .map(entree -> new IdentiteVue(entree.getKey(), entree.getValue().email(),
-                        entree.getValue().administrateur()))
+                        entree.getValue().administrateur(), entree.getValue().active(),
+                        entree.getValue().compteDeService()))
                 .toList();
     }
 
     private void echouerSi(Etape etape) {
+        Runnable action = actionsAuPassage.remove(etape);
+        if (action != null) {
+            action.run();
+        }
         if (etapesEnEchec.contains(etape)) {
             throw new IllegalStateException("Keycloak injoignable (" + etape + ")");
         }
