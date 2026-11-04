@@ -29,6 +29,7 @@ describe('messageErreur', () => {
     [409, 'compte.invitation_inutile', 'Ce compte est déjà actif : aucune invitation à renvoyer.'],
     [409, 'compte.dernier_administrateur', 'Il doit rester au moins un administrateur actif.'],
     [409, 'compte.auto_desactivation', 'Vous ne pouvez pas désactiver votre propre compte.'],
+    [400, 'compte.nom_affiche_invalide', 'Saisissez un nom de 1 à 100 caractères.'],
     [409, 'compte.statut_incompatible', 'Ce compte a changé entre-temps. La liste est rechargée.'],
     [404, 'ressource.introuvable', "Cet élément n'existe plus. Rechargez la page."],
     [400, 'requete.invalide', 'La demande est incomplète. Vérifiez la saisie, puis réessayez.'],

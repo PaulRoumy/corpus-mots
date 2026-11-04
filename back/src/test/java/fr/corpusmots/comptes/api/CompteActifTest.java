@@ -41,13 +41,15 @@ class CompteActifTest {
 
     @Test
     @TestSecurity(user = ACTIF, roles = "admin")
-    @OidcSecurity(claims = { @Claim(key = "sub", value = ACTIF), @Claim(key = "name", value = "Autre Nom") })
+    @OidcSecurity(claims = { @Claim(key = "sub", value = ACTIF), @Claim(key = "name", value = "Autre Nom"),
+            @Claim(key = "email", value = "paul@ecole.fr") })
     void unEnseignantActifLitSonCompte() {
         given().when().get("/api/mon-compte")
                 .then()
                 .statusCode(200)
                 .body("id", equalTo(ACTIF))
                 .body("nomAffiche", equalTo("Paul Roumy"))
+                .body("email", equalTo("paul@ecole.fr"))
                 .body("administrateur", equalTo(true));
     }
 
@@ -59,6 +61,16 @@ class CompteActifTest {
                 .then()
                 .statusCode(200)
                 .body("administrateur", equalTo(false));
+    }
+
+    @Test
+    @TestSecurity(user = ACTIF)
+    @OidcSecurity(claims = @Claim(key = "sub", value = ACTIF))
+    void sansEmailDansLeJetonLEmailEstVide() {
+        given().when().get("/api/mon-compte")
+                .then()
+                .statusCode(200)
+                .body("email", equalTo(""));
     }
 
     @Test

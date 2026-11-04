@@ -13,6 +13,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
+import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
 /** Enseignants de l'équipe : seul point d'écriture de la table {@code enseignant} (AD-6). */
@@ -26,6 +27,13 @@ public class ComptesService {
     static final String CODE_INVITATION_INUTILE = "compte.invitation_inutile";
     static final String CODE_INTROUVABLE = "ressource.introuvable";
     static final String CODE_STATUT_INCOMPATIBLE = "compte.statut_incompatible";
+    static final String CODE_NOM_AFFICHE_INVALIDE = "compte.nom_affiche_invalide";
+
+    /** Longueur maximale du nom affiché, après retrait des espaces de début et de fin. */
+    static final int LONGUEUR_MAX_NOM_AFFICHE = 100;
+
+    /** Espaces retirés autour du nom : les mêmes que {@code String.prototype.trim()} du front (U+00A0, U+FEFF compris). */
+    private static final Pattern ESPACES_AUTOUR = Pattern.compile("^[\\s\\p{Z}\\x{FEFF}]+|[\\s\\p{Z}\\x{FEFF}]+$");
 
     @Inject
     EnseignantRepository enseignants;
@@ -63,12 +71,34 @@ public class ComptesService {
         }
     }
 
+    /** Compte de l'enseignant actif {@code sub} ; {@code email} et {@code administrateur} viennent du jeton. */
     @Transactional
-    public MonCompteVue monCompte(String sub, boolean administrateur) {
+    public MonCompteVue monCompte(String sub, String email, boolean administrateur) {
         Enseignant enseignant = enseignants.findByIdOptional(identifiant(sub))
                 .filter(trouve -> trouve.statut() == StatutEnseignant.ACTIF)
                 .orElseThrow(ComptesService::inconnuOuInactif);
-        return new MonCompteVue(enseignant.id(), enseignant.nomAffiche(), administrateur);
+        return new MonCompteVue(enseignant.id(), enseignant.nomAffiche(), email, administrateur);
+    }
+
+    /**
+     * L'enseignant actif {@code sub} corrige son nom affiché, écrit dans {@code enseignant} seulement : le prénom et le
+     * nom gardés dans Keycloak ne changent pas (FR-3). Aucun appel Keycloak (AD-17).
+     *
+     * @throws ErreurMetier {@code 400 compte.nom_affiche_invalide} si le nom, sans espaces autour, est vide ou dépasse
+     *         100 caractères ; {@code 403 compte.inconnu_ou_inactif} si {@code sub} n'est pas un Enseignant actif
+     */
+    @Transactional
+    public MonCompteVue renommer(String sub, String nomAffiche, String email, boolean administrateur) {
+        String nom = nomAffiche == null ? "" : ESPACES_AUTOUR.matcher(nomAffiche).replaceAll("");
+        if (nom.isEmpty() || nom.length() > LONGUEUR_MAX_NOM_AFFICHE) {
+            throw new ErreurMetier(400, CODE_NOM_AFFICHE_INVALIDE,
+                    "Le nom affiché doit compter de 1 à " + LONGUEUR_MAX_NOM_AFFICHE + " caractères");
+        }
+        Enseignant enseignant = enseignants.findByIdOptional(identifiant(sub), LockModeType.PESSIMISTIC_WRITE)
+                .filter(trouve -> trouve.statut() == StatutEnseignant.ACTIF)
+                .orElseThrow(ComptesService::inconnuOuInactif);
+        enseignant.renommer(nom);
+        return new MonCompteVue(enseignant.id(), enseignant.nomAffiche(), email, administrateur);
     }
 
     /** Enseignants de l'équipe, hors {@code supprime}. */

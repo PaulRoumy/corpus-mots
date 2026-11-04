@@ -26,9 +26,9 @@ export const routes: Routes = [
       { path: 'fiches', component: Fiches, title: 'Fiches · corpus-mots' },
       {
         path: 'mon-compte',
-        component: PageBientot,
+        // Chargée à la demande : les formulaires Material restent hors du paquet initial.
+        loadComponent: () => import('./compte/mon-compte').then((m) => m.MonCompte),
         title: 'Mon compte · corpus-mots',
-        data: { titre: 'Mon compte' },
       },
       {
         path: 'mes-donnees',

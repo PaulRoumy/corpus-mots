@@ -13,16 +13,19 @@ import { of } from 'rxjs';
 import { App } from '../app';
 import { routes } from '../app.routes';
 import { Authentification } from '../commun/authentification/authentification';
+import { CompteCourant } from '../commun/compte-courant';
 import { provideIcones } from '../commun/icones';
 
 const ENSEIGNANTE = {
   id: '0190f0a0-0000-7000-8000-000000000002',
   nomAffiche: 'Claire Martin',
+  email: 'claire@ecole.fr',
   administrateur: false,
 };
 const ADMINISTRATEUR = {
   id: '0190f0a0-0000-7000-8000-000000000001',
   nomAffiche: 'Paul Roumy',
+  email: 'paul@ecole.fr',
   administrateur: true,
 };
 
@@ -52,6 +55,8 @@ describe('Coquille', () => {
     url: string,
     reponse: (requete: TestRequest) => void,
   ): Promise<ComponentFixture<App>> {
+    // Mon compte est chargée à la demande : l'importer d'avance garde à la navigation son nombre de tours habituel.
+    await import('../compte/mon-compte');
     const fixture = TestBed.createComponent(App);
     const navigation = TestBed.inject(Router).navigateByUrl(url);
     await tour();
@@ -223,7 +228,9 @@ describe('Coquille', () => {
         (element) =>
           element.getAttribute('aria-label') ??
           element.getAttribute('placeholder') ??
-          element.textContent?.trim(),
+          (element instanceof HTMLInputElement
+            ? element.labels?.[0]?.textContent?.trim()
+            : element.textContent?.trim()),
       );
 
       expect(focalisables).toEqual([
@@ -236,8 +243,21 @@ describe('Coquille', () => {
         'Préparations',
         'Banque',
         'Fiches',
-        'Retour aux préparations',
+        'Nom affiché',
+        'Enregistrer',
       ]);
+    });
+
+    it('après un renommage, le Menu de profil et l’avatar portent le nouveau nom sans recharger', async () => {
+      const fixture = await ouvrir('/mon-compte', enCompte(ENSEIGNANTE));
+      TestBed.inject(CompteCourant).mettreAJour({ ...ENSEIGNANTE, nomAffiche: 'Bruno Petit' });
+      await tour();
+      await fixture.whenStable();
+
+      const declencheur = bouton(page(fixture), 'Menu de profil')!;
+      expect(declencheur.getAttribute('aria-label')).toBe('Menu de profil, Bruno Petit');
+      expect(page(fixture).querySelector('.coquille__avatar')?.textContent?.trim()).toBe('B');
+      TestBed.inject(HttpTestingController).expectNone('/api/mon-compte');
     });
 
     it('le lien d’évitement donne le focus au contenu', async () => {

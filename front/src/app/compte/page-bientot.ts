@@ -4,7 +4,7 @@ import { RouterLink } from '@angular/router';
 import { EtatVide } from '../commun/etat-vide/etat-vide';
 
 /**
- * Page d'attente de Mon compte et Mes données (story 1.7) : la route existe
+ * Page d'attente de Mes données (story 1.7, partie 2) : la route existe
  * déjà, ouverte depuis le Menu de profil. Le titre vient des données de la route.
  */
 @Component({

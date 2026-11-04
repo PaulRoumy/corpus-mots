@@ -48,6 +48,14 @@ public class Enseignant {
         this.statut = StatutEnseignant.ACTIF;
     }
 
+    /** L'enseignant corrige son nom affiché ; seul un enseignant actif le peut. */
+    public void renommer(String nomAffiche) {
+        if (statut != StatutEnseignant.ACTIF) {
+            throw new IllegalStateException("Seul un enseignant actif peut être renommé : " + statut.valeur());
+        }
+        this.nomAffiche = nomAffiche;
+    }
+
     /** Accès coupé par l'administrateur (invité ou actif) ; rien n'est effacé. */
     public void desactiver() {
         if (statut != StatutEnseignant.INVITE && statut != StatutEnseignant.ACTIF) {

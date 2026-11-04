@@ -37,6 +37,15 @@ export class CompteCourant {
     );
     return this.chargement;
   }
+
+  /**
+   * Remplace le compte chargé par celui que le back vient de renvoyer (après « Enregistrer » sur Mon compte) : le
+   * Menu de profil et l'avatar suivent sans recharger la page.
+   */
+  mettreAJour(compte: MonCompteDto): void {
+    this.chargement = Promise.resolve();
+    this.etatCourant.set({ statut: 'compte', compte });
+  }
 }
 
 function estCompteInactif(erreur: unknown): boolean {

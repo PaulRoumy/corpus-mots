@@ -1,0 +1,46 @@
+// Mon compte : le champ du nom et « Enregistrer » sur une ligne (le bouton passe dessous sur un écran étroit), puis
+// l'e-mail et le rôle en lecture seule ; toutes les valeurs viennent des jetons (styles/_jetons.scss).
+
+.mon-compte__formulaire {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: var(--cm-espace-3);
+  max-width: var(--cm-largeur-contenu-max);
+}
+
+.mon-compte__champ {
+  flex: 1 1 var(--cm-largeur-panneau);
+  min-width: 0;
+}
+
+// Aligne le bouton sur le champ rempli Material, plus haut que lui.
+.mon-compte__enregistrer {
+  margin-top: var(--cm-espace-2);
+}
+
+.mon-compte__lecture {
+  display: flex;
+  flex-direction: column;
+  gap: var(--cm-espace-3);
+  max-width: var(--cm-largeur-contenu-max);
+  margin: 0;
+}
+
+.mon-compte__ligne {
+  display: flex;
+  flex-direction: column;
+  gap: var(--cm-espace-1);
+
+  dt {
+    font: var(--cm-typo-label);
+    color: var(--mat-sys-on-surface-variant);
+  }
+
+  dd {
+    margin: 0;
+    font: var(--cm-typo-body);
+    color: var(--mat-sys-on-surface);
+    overflow-wrap: anywhere;
+  }
+}

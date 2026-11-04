@@ -53,7 +53,7 @@
       },
       "MonCompteDto" : {
         "type" : "object",
-        "required" : [ "id", "nomAffiche", "administrateur" ],
+        "required" : [ "id", "nomAffiche", "email", "administrateur" ],
         "properties" : {
           "id" : {
             "$ref" : "#/components/schemas/UUID"
@@ -61,8 +61,22 @@
           "nomAffiche" : {
             "type" : "string"
           },
+          "email" : {
+            "type" : "string",
+            "description" : "E-mail du jeton Keycloak ; vide s'il n'y figure pas"
+          },
           "administrateur" : {
             "type" : "boolean"
+          }
+        }
+      },
+      "NomAfficheDto" : {
+        "type" : "object",
+        "required" : [ "nomAffiche" ],
+        "properties" : {
+          "nomAffiche" : {
+            "type" : "string",
+            "description" : "De 1 à 100 caractères, une fois retirés les espaces de début et de fin"
           }
         }
       },
@@ -264,6 +278,38 @@
                 }
               }
             }
+          }
+        },
+        "tags" : [ "Mon Compte Resource" ]
+      }
+    },
+    "/api/mon-compte/nom-affiche" : {
+      "put" : {
+        "summary" : "Corriger le nom affiché de l'enseignant connecté (le nom gardé dans Keycloak ne change pas)",
+        "operationId" : "modifierNomAffiche",
+        "requestBody" : {
+          "required" : true,
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/NomAfficheDto"
+              }
+            }
+          }
+        },
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/MonCompteDto"
+                }
+              }
+            }
+          },
+          "400" : {
+            "description" : "Bad Request"
           }
         },
         "tags" : [ "Mon Compte Resource" ]

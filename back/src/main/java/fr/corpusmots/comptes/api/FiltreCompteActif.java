@@ -37,7 +37,7 @@ public class FiltreCompteActif {
     }
 
     /** Selon la bibliothèque JWT, une revendication texte arrive en {@code String} ou en {@code JsonString}. */
-    private static Optional<String> texte(Object revendication) {
+    static Optional<String> texte(Object revendication) {
         return switch (revendication) {
             case String valeur -> Optional.of(valeur);
             case JsonString valeur -> Optional.of(valeur.getString());

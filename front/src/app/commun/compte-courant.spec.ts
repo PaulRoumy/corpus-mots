@@ -44,6 +44,27 @@ describe('CompteCourant', () => {
     expect(compteCourant.administrateur()).toBe(true);
   });
 
+  it('mettreAJour remplace le compte chargé sans relire le back', async () => {
+    await charger((requete) =>
+      requete.flush({
+        id: '0190f0a0-0000-7000-8000-000000000001',
+        nomAffiche: 'Claire Martin',
+        email: 'claire@ecole.fr',
+        administrateur: true,
+      }),
+    );
+    compteCourant.mettreAJour({
+      id: '0190f0a0-0000-7000-8000-000000000001',
+      nomAffiche: 'Claire Dupont',
+      email: 'claire@ecole.fr',
+      administrateur: true,
+    });
+    await compteCourant.charger();
+    serveur.expectNone('/api/mon-compte');
+    expect(compteCourant.compte()?.nomAffiche).toBe('Claire Dupont');
+    expect(compteCourant.administrateur()).toBe(true);
+  });
+
   it('ne charge le compte qu’une fois', async () => {
     await charger((requete) =>
       requete.flush({

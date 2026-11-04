@@ -9,6 +9,14 @@ import { routes } from './app.routes';
 import { Authentification } from './commun/authentification/authentification';
 import { provideIcones } from './commun/icones';
 
+const tour = () => new Promise((fin) => setTimeout(fin));
+
+/**
+ * Mon compte est chargée à la demande : l'importer d'avance pour que la navigation, donc la coquille et sa requête
+ * du compte, ne prennent pas plus de tours qu'une route ordinaire.
+ */
+const precharger = () => import('./compte/mon-compte');
+
 describe('App', () => {
   beforeEach(() => {
     TestBed.configureTestingModule({
@@ -24,10 +32,9 @@ describe('App', () => {
     });
   });
 
-  const tour = () => new Promise((fin) => setTimeout(fin));
-
   /** Ouvre `url` dans la coquille, compte d'enseignant chargé ; rend le texte de la page. */
   async function ouvrir(url: string): Promise<HTMLElement> {
+    await precharger();
     const fixture = TestBed.createComponent(App);
     const navigation = TestBed.inject(Router).navigateByUrl(url);
     await tour();
@@ -36,6 +43,7 @@ describe('App', () => {
     TestBed.inject(HttpTestingController).expectOne('/api/mon-compte').flush({
       id: '0190f0a0-0000-7000-8000-000000000002',
       nomAffiche: 'Claire',
+      email: 'claire@ecole.fr',
       administrateur: false,
     });
     await navigation;
@@ -75,13 +83,19 @@ describe('App', () => {
     expect(page.querySelector('app-etat-vide a, app-etat-vide button')).toBeNull();
   });
 
-  it.each([
-    ['/mon-compte', 'Mon compte'],
-    ['/mes-donnees', 'Mes données'],
-  ])('%s : « Cette page arrive bientôt. » et « Retour aux préparations »', async (url, titre) => {
-    const page = await ouvrir(url);
+  it('/mon-compte : nom affiché modifiable, e-mail et rôle', async () => {
+    const page = await ouvrir('/mon-compte');
 
-    expect(page.querySelector('h1')?.textContent).toBe(titre);
+    expect(page.querySelector('h1')?.textContent).toBe('Mon compte');
+    expect(page.querySelector<HTMLInputElement>('app-mon-compte input')?.value).toBe('Claire');
+    expect(page.querySelector('app-mon-compte dl')?.textContent).toContain('claire@ecole.fr');
+    expect(page.querySelector('app-mon-compte dl')?.textContent).toContain('Enseignant');
+  });
+
+  it('/mes-donnees : « Cette page arrive bientôt. » et « Retour aux préparations »', async () => {
+    const page = await ouvrir('/mes-donnees');
+
+    expect(page.querySelector('h1')?.textContent).toBe('Mes données');
     expect(page.querySelector('app-etat-vide')?.textContent).toContain(
       'Cette page arrive bientôt.',
     );
@@ -111,21 +125,19 @@ describe('App avec la configuration de production', () => {
     });
   });
 
-  const tour = () => new Promise((fin) => setTimeout(fin));
-
   it('lie le titre de la route à la page et sert les pictogrammes', async () => {
+    await precharger();
     const fixture = TestBed.createComponent(App);
     const navigation = TestBed.inject(Router).navigateByUrl('/mon-compte');
     await tour();
     fixture.detectChanges();
     await tour();
-    TestBed.inject(HttpTestingController)
-      .expectOne('/api/mon-compte')
-      .flush({
-        id: '0190f0a0-0000-7000-8000-000000000002',
-        nomAffiche: 'Claire',
-        administrateur: false,
-      });
+    TestBed.inject(HttpTestingController).expectOne('/api/mon-compte').flush({
+      id: '0190f0a0-0000-7000-8000-000000000002',
+      nomAffiche: 'Claire',
+      email: 'claire@ecole.fr',
+      administrateur: false,
+    });
     await navigation;
     await tour();
     await fixture.whenStable();

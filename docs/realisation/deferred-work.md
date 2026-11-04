@@ -60,3 +60,7 @@
 - source_spec: `docs/realisation/spec-1-6-2-reconciliation-des-comptes.md`
   summary: Le circuit de suppression de compte (Epic 6) doit laisser, s'il s'interrompt après Keycloak `enabled=false`, un état que `ReconciliationComptes` distingue d'une désactivation interrompue (sinon l'effacement RGPD est achevé en simple désactivation, sans trace).
   evidence: Revue story 1.6, partie 2, constat 9 : Keycloak désactivé et Enseignant encore `actif` est aujourd'hui corrigé en `desactive` ; à vérifier quand AD-18 §1 sera implémenté.
+
+- source_spec: none
+  summary: Story 1.7, partie 2 : page « Données personnelles » accessible sans connexion et depuis Mes données, lien depuis les pages Keycloak, vérification de l'absence de traceur (NFR-13).
+  evidence: Découpage de la story 1.7 choisi par Paul ; la page publique impose une entrée hors de la connexion forcée au démarrage, indépendante de Mon compte (partie 1).

@@ -25,6 +25,7 @@ export const MESSAGES_PAR_CODE: Readonly<Record<string, string>> = {
   'compte.invitation_inutile': 'Ce compte est déjà actif : aucune invitation à renvoyer.',
   'compte.dernier_administrateur': 'Il doit rester au moins un administrateur actif.',
   'compte.auto_desactivation': 'Vous ne pouvez pas désactiver votre propre compte.',
+  'compte.nom_affiche_invalide': 'Saisissez un nom de 1 à 100 caractères.',
   'compte.statut_incompatible': 'Ce compte a changé entre-temps. La liste est rechargée.',
   'ressource.introuvable': "Cet élément n'existe plus. Rechargez la page.",
   'requete.invalide': 'La demande est incomplète. Vérifiez la saisie, puis réessayez.',
