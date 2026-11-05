@@ -58,10 +58,16 @@ jobs:
       - run: npm ci
       - run: npm test -- --watch=false
       - run: npm run build
-      - name: Aucune ressource chargée depuis l'extérieur dans le build
+      - name: Aucune ressource chargée depuis l'extérieur dans le build ni dans le thème Keycloak
         run: |
-          if grep -rnE --include='*.html' --include='*.css' -e 'href="(https?:)?//' -e 'src="(https?:)?//' -e "url\(['\"]?(https?:)?//" -e '@import' dist/; then
-            echo "Ressource externe trouvée dans dist/" >&2
+          if grep -rnE --include='*.html' --include='*.css' --include='*.ftl' --include='*.properties' -e "href=[\"'](https?:)?//" -e "src=[\"'](https?:)?//" -e "url\(['\"]?(https?:)?//" -e '@import' dist/ ../deploiement/keycloak/themes/; then
+            echo "Ressource externe trouvée dans dist/ ou deploiement/keycloak/themes/" >&2
+            exit 1
+          fi
+      - name: Aucun traceur ni aucune mesure d'audience dans le build ni dans le thème Keycloak (NFR-13)
+        run: |
+          if grep -rniE -e 'google-analytics\.com|googletagmanager\.com|gtag\(|matomo|piwik|plausible\.io|hotjar|clarity\.ms|segment\.(io|com)|mixpanel|amplitude\.com|fbq\(|connect\.facebook\.net|doubleclick\.net|adsbygoogle|umami|usefathom|cloudflareinsights|sentry\.io' dist/ ../deploiement/keycloak/themes/; then
+            echo "Traceur ou mesure d'audience trouvé dans dist/ ou deploiement/keycloak/themes/" >&2
             exit 1
           fi
       - name: Polices auto-hébergées dans le build (Nunito, Playwrite FR Moderne)

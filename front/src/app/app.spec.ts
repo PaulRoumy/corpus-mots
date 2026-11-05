@@ -12,10 +12,11 @@ import { provideIcones } from './commun/icones';
 const tour = () => new Promise((fin) => setTimeout(fin));
 
 /**
- * Mon compte est chargée à la demande : l'importer d'avance pour que la navigation, donc la coquille et sa requête
- * du compte, ne prennent pas plus de tours qu'une route ordinaire.
+ * Mon compte et les pages « Données personnelles » sont chargées à la demande : les importer d'avance pour que la
+ * navigation, donc la coquille et sa requête du compte, ne prennent pas plus de tours qu'une route ordinaire.
  */
-const precharger = () => import('./compte/mon-compte');
+const precharger = () =>
+  Promise.all([import('./compte/mon-compte'), import('./compte/donnees-personnelles')]);
 
 describe('App', () => {
   beforeEach(() => {
@@ -92,16 +93,34 @@ describe('App', () => {
     expect(page.querySelector('app-mon-compte dl')?.textContent).toContain('Enseignant');
   });
 
-  it('/mes-donnees : « Cette page arrive bientôt. » et « Retour aux préparations »', async () => {
+  it('/mes-donnees : le texte « Données personnelles », dans la coquille, sous le titre « Mes données »', async () => {
     const page = await ouvrir('/mes-donnees');
 
+    expect(page.querySelector('app-coquille')).not.toBeNull();
     expect(page.querySelector('h1')?.textContent).toBe('Mes données');
-    expect(page.querySelector('app-etat-vide')?.textContent).toContain(
-      'Cette page arrive bientôt.',
+    expect(page.querySelector('app-texte-donnees-personnelles')?.textContent).toContain(
+      "Demandez-le à l'administrateur de l'école.",
     );
-    const retour = page.querySelector<HTMLAnchorElement>('app-etat-vide a')!;
-    expect(retour.textContent?.trim()).toBe('Retour aux préparations');
-    expect(retour.getAttribute('href')).toBe('/preparations');
+    expect(page.querySelector('app-page-donnees-personnelles')).toBeNull();
+  });
+
+  it('/donnees-personnelles : page publique, hors de la coquille, sans requête à /api', async () => {
+    await precharger();
+    const fixture = TestBed.createComponent(App);
+    await TestBed.inject(Router).navigateByUrl('/donnees-personnelles');
+    fixture.detectChanges();
+    await tour();
+    await fixture.whenStable();
+    const page = fixture.nativeElement as HTMLElement;
+
+    TestBed.inject(HttpTestingController).verify();
+    expect(page.querySelector('app-coquille')).toBeNull();
+    expect(page.querySelector('h1')?.textContent).toBe('Données personnelles');
+    expect(page.querySelector('app-texte-donnees-personnelles')).not.toBeNull();
+    const ouvrirApplication = page.querySelector<HTMLAnchorElement>('header a')!;
+    expect(ouvrirApplication.textContent?.trim()).toBe('Ouvrir corpus-mots');
+    // Lien ordinaire, sans routerLink : il recharge l'application, qui démarre alors la Connexion.
+    expect(ouvrirApplication.getAttribute('href')).toBe('/');
   });
 });
 

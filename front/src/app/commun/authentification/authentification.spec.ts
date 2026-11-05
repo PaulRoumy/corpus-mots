@@ -43,6 +43,35 @@ describe('Authentification', () => {
     expect(keycloak.init).toHaveBeenCalledWith({ onLoad: 'login-required', pkceMethod: 'S256', checkLoginIframe: false });
   });
 
+  it.each(['/donnees-personnelles', '/donnees-personnelles/'])(
+    'page publique %s : aucun appel à Keycloak au démarrage',
+    async (chemin) => {
+      const avant = window.location.href;
+      history.replaceState(null, '', chemin);
+      try {
+        await authentification.demarrer();
+      } finally {
+        history.replaceState(null, '', avant);
+      }
+      expect(keycloak.init).not.toHaveBeenCalled();
+      expect(keycloak.login).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each(['/donnees-personnelles-bis', '/donnees-personnelles//'])(
+    '%s, que la route publique ne sert pas, exige la connexion',
+    async (chemin) => {
+      const avant = window.location.href;
+      history.replaceState(null, '', chemin);
+      try {
+        await authentification.demarrer();
+      } finally {
+        history.replaceState(null, '', avant);
+      }
+      expect(keycloak.init).toHaveBeenCalled();
+    },
+  );
+
   it('renouvelle le jeton qui expire dans moins de 30 s avant de le donner', async () => {
     await expect(authentification.jeton()).resolves.toBe('jeton-1');
     expect(keycloak.updateToken).toHaveBeenCalledWith(30);

@@ -30,6 +30,7 @@
 - source_spec: `docs/realisation/spec-1-3-premier-administrateur-et-connexion.md`
   summary: Ajouter le lien « Données personnelles » aux pages Keycloak (Connexion, Créer mon mot de passe, Mot de passe oublié) par surcharge du gabarit du thème.
   evidence: UX-DR-39 ; la page n'existe pas encore : à faire avec la story 1.7 (revue story 1.3, constat 23).
+  status: fait (story 1.7, partie 2, `footer.ftl` du thème corpus-mots).
 - source_spec: none
   summary: Story 1.4, seconde partie : composants partagés de `commun/` (Bandeau « Annuler », Bandeau d'erreur, Dialogue de confirmation, squelettes de chargement, avec leurs tests de composant) et service qui traduit chaque `code` d'erreur du back en message français.
   evidence: Découpage de la story 1.4 décidé par Paul (2026-11-03) : la coquille et le système de design partent d'abord ; ces composants ne servent qu'à partir de la story 1.5 et doivent être livrés avant elle.
@@ -64,3 +65,16 @@
 - source_spec: none
   summary: Story 1.7, partie 2 : page « Données personnelles » accessible sans connexion et depuis Mes données, lien depuis les pages Keycloak, vérification de l'absence de traceur (NFR-13).
   evidence: Découpage de la story 1.7 choisi par Paul ; la page publique impose une entrée hors de la connexion forcée au démarrage, indépendante de Mon compte (partie 1).
+  status: fait (`docs/realisation/spec-1-7-2-donnees-personnelles.md`).
+- source_spec: `docs/realisation/spec-1-7-2-donnees-personnelles.md`
+  summary: Relire la page Données personnelles à la story 6.8 (périmètre réel, réponse à Q-3).
+  evidence: Le texte (`front/src/app/compte/donnees-personnelles.ts`) décrit le périmètre prévu de la V1 (Images et leur auteur, Préparations, historique des Fiches, notifications, mois d'activité, sort des Images versées après suppression) et annonce une durée de conservation « en cours de validation avec le délégué à la protection des données ».
+- source_spec: `docs/realisation/spec-1-7-2-donnees-personnelles.md`
+  summary: Vérifier en CI que les pages Keycloak rendues (thème corpus-mots) portent le lien « Données personnelles » vers `/donnees-personnelles`.
+  evidence: Revue story 1.7, partie 2, constat 13 : seul un contrôle à la main l'a vu ; un renommage de `footer.ftl`, de la macro `content` ou de la clé `donneesPersonnelles`, ou une montée de version de keycloak.v2, le ferait disparaître sans échec de la CI. Piste : Keycloak 26.8 en `start-dev` dans le job `configuration`, puis `curl` de la page de connexion.
+- source_spec: `docs/realisation/spec-1-7-2-donnees-personnelles.md`
+  summary: Décider si le prénom et le nom saisis à l'activation (profil Keycloak) restent gardés, et mettre FR-3 ou le profil Keycloak en accord.
+  evidence: Revue story 1.7, partie 2, constat 8 : FR-3 limite le compte à nom affiché, e-mail, mot de passe et rôle ; la page Données personnelles déclare aussi le prénom et le nom.
+- source_spec: `docs/realisation/spec-1-7-2-donnees-personnelles.md`
+  summary: Inspecter aussi les bundles `*.js` du front pour des URL externes chargées à l'exécution (`fetch`, `import()`), avec une liste d'exceptions pour les URL de documentation d'Angular.
+  evidence: Revue story 1.7, partie 2, constat 6 : le contrôle de la CI ne lit que `*.html` et `*.css` (et le thème) depuis la story 1.4.

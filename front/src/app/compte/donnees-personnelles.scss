@@ -1,0 +1,45 @@
+// Texte « Données personnelles » : colonne de lecture de 640 px au plus, titres de section en `title`, listes et
+// paragraphes en `body` ; toutes les valeurs viennent des jetons (styles/_jetons.scss).
+
+.donnees {
+  display: flex;
+  flex-direction: column;
+  gap: var(--cm-espace-5);
+  max-width: var(--cm-largeur-contenu-max);
+  overflow-wrap: break-word;
+}
+
+.donnees__chapeau,
+.donnees__paragraphe {
+  margin: 0;
+  font: var(--cm-typo-body);
+  color: var(--mat-sys-on-surface);
+}
+
+.donnees__section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--cm-espace-3);
+}
+
+.donnees__titre {
+  margin: 0;
+  font: var(--cm-typo-title);
+  color: var(--mat-sys-on-surface);
+}
+
+.donnees__sous-titre {
+  margin: var(--cm-espace-2) 0 0;
+  font: var(--cm-typo-label);
+  color: var(--mat-sys-on-surface-variant);
+}
+
+.donnees__liste {
+  display: flex;
+  flex-direction: column;
+  gap: var(--cm-espace-1);
+  margin: 0;
+  padding-left: var(--cm-espace-5);
+  font: var(--cm-typo-body);
+  color: var(--mat-sys-on-surface);
+}

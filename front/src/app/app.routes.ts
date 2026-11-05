@@ -1,8 +1,8 @@
 import { inject } from '@angular/core';
 import { CanMatchFn, Router, Routes } from '@angular/router';
 import { Banque } from './banque/banque';
+import { PAGE_PUBLIQUE } from './commun/authentification/authentification';
 import { CompteCourant } from './commun/compte-courant';
-import { PageBientot } from './compte/page-bientot';
 import { Coquille } from './coquille/coquille';
 import { Fiches } from './fiches/fiches';
 import { Preparations } from './preparations/preparations';
@@ -16,6 +16,13 @@ export const administrateurSeulement: CanMatchFn = async () => {
 };
 
 export const routes: Routes = [
+  {
+    // Publique, hors de la coquille : ni Keycloak ni /api (voir Authentification.demarrer).
+    path: PAGE_PUBLIQUE,
+    loadComponent: () =>
+      import('./compte/donnees-personnelles').then((m) => m.PageDonneesPersonnelles),
+    title: 'Données personnelles · corpus-mots',
+  },
   {
     path: '',
     component: Coquille,
@@ -32,9 +39,8 @@ export const routes: Routes = [
       },
       {
         path: 'mes-donnees',
-        component: PageBientot,
+        loadComponent: () => import('./compte/donnees-personnelles').then((m) => m.MesDonnees),
         title: 'Mes données · corpus-mots',
-        data: { titre: 'Mes données' },
       },
       {
         path: 'administration',

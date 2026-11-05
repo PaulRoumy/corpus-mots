@@ -5,6 +5,12 @@ import Keycloak from 'keycloak-js';
 const VALIDITE_MINIMALE = 30;
 
 /**
+ * Seule page ouverte sans connexion : « Données personnelles » (FR-3, UX-DR-39), liée depuis les pages Keycloak.
+ * Elle ne démarre pas Keycloak et reste hors de la coquille, donc n'appelle pas /api.
+ */
+export const PAGE_PUBLIQUE = 'donnees-personnelles';
+
+/**
  * Session de l'enseignant, tenue par Keycloak (AD-6) : connexion par code + PKCE, jeton court renouvelé en silence,
  * déconnexion. Keycloak est servi sous /auth, à la même origine que l'application.
  */
@@ -16,8 +22,14 @@ export class Authentification {
     clientId: 'corpus-mots-front',
   });
 
-  /** Au démarrage : sans session, passe par la page de Connexion, qui ramène à l'URL demandée. */
+  /**
+   * Au démarrage : sans session, passe par la page de Connexion, qui ramène à l'URL demandée. Sur la page publique,
+   * rien : ni Connexion ni appel à Keycloak ; son lien « Ouvrir corpus-mots » recharge l'application.
+   */
   async demarrer(): Promise<void> {
+    if (window.location.pathname.replace(/\/?$/, '') === `/${PAGE_PUBLIQUE}`) {
+      return;
+    }
     await this.keycloak.init({
       onLoad: 'login-required',
       pkceMethod: 'S256',

@@ -1,0 +1,55 @@
+// Page publique « Données personnelles » : en-tête minimal (marque, « Ouvrir corpus-mots »), puis le texte dans une
+// colonne centrée ; gouttière de 16 px sur téléphone. Toutes les valeurs viennent des jetons (styles/_jetons.scss).
+
+:host {
+  display: block;
+  min-height: 100%;
+  background: var(--mat-sys-background);
+}
+
+.publique__entete {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--cm-espace-2) var(--cm-espace-4);
+  padding: var(--cm-espace-4) var(--cm-gouttiere-mobile);
+  background: var(--mat-sys-surface-container-low);
+}
+
+.publique__marque {
+  font: var(--cm-typo-marque);
+  color: var(--mat-sys-on-surface);
+}
+
+.publique__point {
+  color: var(--mat-sys-primary);
+}
+
+.publique__ouvrir {
+  display: inline-flex;
+  align-items: center;
+  min-height: var(--cm-hauteur-bouton);
+  padding: 0 var(--cm-espace-5);
+  border-radius: var(--cm-arrondi-bouton);
+  background: var(--mat-sys-primary);
+  color: var(--mat-sys-on-primary);
+  font: var(--cm-typo-label);
+  text-decoration: none;
+}
+
+.publique__contenu {
+  display: flex;
+  flex-direction: column;
+  gap: var(--cm-espace-4);
+  box-sizing: border-box;
+  max-width: calc(var(--cm-largeur-contenu-max) + 2 * var(--cm-gouttiere-mobile));
+  margin: 0 auto;
+  padding: var(--cm-espace-5) var(--cm-gouttiere-mobile) var(--cm-espace-6);
+}
+
+.publique__titre {
+  margin: 0;
+  font: var(--cm-typo-headline);
+  color: var(--mat-sys-on-surface);
+}
