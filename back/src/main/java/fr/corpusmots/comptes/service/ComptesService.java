@@ -125,7 +125,7 @@ public class ComptesService {
 
     /** Statut de chaque Enseignant, {@code supprime} compris (réconciliation avec Keycloak). */
     @Transactional
-    public Map<UUID, StatutEnseignant> statutsDesEnseignants() {
+    Map<UUID, StatutEnseignant> statutsDesEnseignants() {
         return enseignants.listAll().stream()
                 .collect(Collectors.toMap(Enseignant::id, Enseignant::statut));
     }

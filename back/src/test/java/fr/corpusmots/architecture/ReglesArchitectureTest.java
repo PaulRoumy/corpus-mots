@@ -10,12 +10,21 @@ import com.tngtech.archunit.lang.ArchRule;
 import fr.corpusmots.architecture.fixtures.RacineFixture;
 import fr.corpusmots.architecture.fixtures.commun.persistance.CommunEntiteFixture;
 import fr.corpusmots.architecture.fixtures.commun.service.CommunAppelleReferentiels;
+import fr.corpusmots.architecture.fixtures.commun.service.EnseignantCourantFixture;
+import fr.corpusmots.architecture.fixtures.comptes.service.AppelKeycloakEnTransaction;
+import fr.corpusmots.architecture.fixtures.comptes.service.AppelKeycloakHorsTransaction;
+import fr.corpusmots.architecture.fixtures.comptes.service.ClasseTransactionnelleAppelleKeycloak;
 import fr.corpusmots.architecture.fixtures.comptes.service.ComptesFixture;
+import fr.corpusmots.architecture.fixtures.comptes.service.Identites;
 import fr.corpusmots.architecture.fixtures.fiches.api.FicheExempleDto;
 import fr.corpusmots.architecture.fixtures.fiches.service.FichesAppelleComptes;
 import fr.corpusmots.architecture.fixtures.inconnu.service.ModuleInconnuFixture;
+import fr.corpusmots.architecture.fixtures.preparations.service.PreparationsConnaitEnseignantCourant;
 import fr.corpusmots.architecture.fixtures.preparations.service.PreparationsToucheCommunPersistance;
 import fr.corpusmots.architecture.fixtures.referentiels.persistance.AlbumFixture;
+import fr.corpusmots.architecture.fixtures.referentiels.service.ReferentielsCacheAlbum;
+import fr.corpusmots.architecture.fixtures.referentiels.service.ReferentielsExposeAlbum;
+import fr.corpusmots.architecture.fixtures.referentiels.service.ReferentielsRecoitAlbum;
 import fr.corpusmots.architecture.fixtures.referentiels.service.ReferentielsFixture;
 import fr.corpusmots.architecture.fixtures.vocabulaire.service.VocabulaireAppelleService;
 import fr.corpusmots.architecture.fixtures.vocabulaire.outils.CoucheInconnueFixture;
@@ -30,6 +39,8 @@ class ReglesArchitectureTest {
     private static final ArchRule GRAPHE = ReglesArchitecture.dependancesEntreModules(RACINE_FIXTURES);
     private static final ArchRule STRUCTURE = ReglesArchitecture.classesDansUnModuleEtUneCouche(RACINE_FIXTURES);
     private static final ArchRule DTO = ReglesArchitecture.nomsDeDtoUniques(RACINE_FIXTURES);
+    private static final ArchRule SIGNATURES = ReglesArchitecture.servicesSansTypeDePersistance(RACINE_FIXTURES);
+    private static final ArchRule TRANSACTIONS = ReglesArchitecture.aucunAppelKeycloakEnTransaction(RACINE_FIXTURES);
 
     @Test
     void unModuleQuiAppelleUnModuleHorsDuGrapheEstRefuse() {
@@ -128,5 +139,78 @@ class ReglesArchitectureTest {
         JavaClasses classes = new ClassFileImporter().importClasses(VocabulaireAppelleService.class);
 
         assertDoesNotThrow(() -> STRUCTURE.check(classes));
+    }
+
+    @Test
+    void unModuleQuiInjecteEnseignantCourantDeCommunEstAccepte() {
+        JavaClasses classes = new ClassFileImporter()
+                .importClasses(PreparationsConnaitEnseignantCourant.class, EnseignantCourantFixture.class);
+
+        assertDoesNotThrow(() -> GRAPHE.check(classes));
+    }
+
+    @Test
+    void unServiceQuiExposeUnTypeDePersistanceEstRefuse() {
+        JavaClasses classes = new ClassFileImporter()
+                .importClasses(ReferentielsExposeAlbum.class, AlbumFixture.class);
+
+        AssertionError erreur = assertThrows(AssertionError.class, () -> SIGNATURES.check(classes));
+
+        assertTrue(erreur.getMessage().contains(ReferentielsExposeAlbum.class.getName()), erreur.getMessage());
+        assertTrue(erreur.getMessage().contains("AD-16 : la couche service ne laisse fuir"), erreur.getMessage());
+        assertTrue(erreur.getMessage().contains(AlbumFixture.class.getName()), erreur.getMessage());
+    }
+
+    @Test
+    void unServiceQuiRecoitUnTypeDePersistanceEstRefuse() {
+        JavaClasses classes = new ClassFileImporter()
+                .importClasses(ReferentielsRecoitAlbum.class, AlbumFixture.class);
+
+        AssertionError erreur = assertThrows(AssertionError.class, () -> SIGNATURES.check(classes));
+
+        String classe = ReferentielsRecoitAlbum.class.getName();
+        String album = AlbumFixture.class.getName();
+        assertTrue(erreur.getMessage().contains(classe + ".enregistrer(" + album + ")"), erreur.getMessage());
+        assertTrue(erreur.getMessage().contains(classe + ".<init>(" + album + ")"), erreur.getMessage());
+        assertTrue(erreur.getMessage().contains(classe + ".courant"), erreur.getMessage());
+    }
+
+    @Test
+    void unServiceQuiGardeLaPersistanceHorsDeSesMembresPublicsEstAccepte() {
+        JavaClasses classes = new ClassFileImporter()
+                .importClasses(ReferentielsCacheAlbum.class, AlbumFixture.class);
+
+        assertDoesNotThrow(() -> SIGNATURES.check(classes));
+    }
+
+    @Test
+    void uneMethodeTransactionnelleQuiAppelleKeycloakEstRefusee() {
+        JavaClasses classes = new ClassFileImporter()
+                .importClasses(AppelKeycloakEnTransaction.class, Identites.class);
+
+        AssertionError erreur = assertThrows(AssertionError.class, () -> TRANSACTIONS.check(classes));
+
+        assertTrue(erreur.getMessage().contains(AppelKeycloakEnTransaction.class.getName()), erreur.getMessage());
+        assertTrue(erreur.getMessage().contains("AD-17 : aucun appel HTTP sortant"), erreur.getMessage());
+    }
+
+    @Test
+    void uneClasseTransactionnelleQuiAppelleKeycloakEstRefusee() {
+        JavaClasses classes = new ClassFileImporter()
+                .importClasses(ClasseTransactionnelleAppelleKeycloak.class, Identites.class);
+
+        AssertionError erreur = assertThrows(AssertionError.class, () -> TRANSACTIONS.check(classes));
+
+        assertTrue(erreur.getMessage().contains(ClasseTransactionnelleAppelleKeycloak.class.getName()),
+                erreur.getMessage());
+        assertTrue(erreur.getMessage().contains("AD-17 : aucun appel HTTP sortant"), erreur.getMessage());
+    }
+
+    @Test
+    void unAppelKeycloakHorsTransactionOuDansUnRunnableEstAccepte() {
+        JavaClasses classes = new ClassFileImporter()
+                .importClasses(AppelKeycloakHorsTransaction.class, Identites.class);
+
+        assertDoesNotThrow(() -> TRANSACTIONS.check(classes));
     }
 }

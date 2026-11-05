@@ -6,15 +6,22 @@ import static java.util.stream.Collectors.joining;
 
 import com.tngtech.archunit.core.domain.Dependency;
 import com.tngtech.archunit.core.domain.JavaClass;
+import com.tngtech.archunit.core.domain.JavaField;
+import com.tngtech.archunit.core.domain.JavaMethod;
+import com.tngtech.archunit.core.domain.JavaMethodCall;
+import com.tngtech.archunit.core.domain.JavaModifier;
+import com.tngtech.archunit.core.domain.JavaType;
 import com.tngtech.archunit.lang.ArchCondition;
 import com.tngtech.archunit.lang.ArchRule;
 import com.tngtech.archunit.lang.ConditionEvents;
 import com.tngtech.archunit.lang.SimpleConditionEvent;
 import java.util.Collection;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.stream.Stream;
 
 /**
  * Règles d'architecture du back, paramétrées par le paquetage racine pour pouvoir être éprouvées sur des
@@ -26,6 +33,14 @@ import java.util.Set;
  *       qui ne dépend de rien.</li>
  *   <li>Structure : toute classe réside dans {@code <module connu>.<api|service|persistance>}.</li>
  *   <li>AD-16 : les DTO (suffixe {@code Dto}) ont un nom unique dans tout le back.</li>
+ *   <li>AD-16 : aucun membre public d'une classe publique d'un {@code <module>.service} ne mentionne un type d'un
+ *       {@code <module>.persistance} (retour, paramètre, champ, argument générique).</li>
+ *   <li>AD-17 : aucune méthode {@code @Transactional} (sur la méthode ou sa classe) n'appelle directement
+ *       {@code comptes.service.Identites}, dont chaque méthode est un appel HTTP vers Keycloak. Un appel dans un
+ *       {@code Runnable} passé à une méthode transactionnelle n'est pas un appel direct. Limites : la règle ne voit
+ *       que les appels directs ; elle ne détecte ni un lambda exécuté de façon synchrone dans la méthode
+ *       transactionnelle (par exemple {@code forEach(id -> identites.desactiver(id))}), ni un appel indirect par une
+ *       méthode utilitaire ou un autre bean, ni une transaction programmatique ({@code QuarkusTransaction}).</li>
  * </ul>
  */
 public final class ReglesArchitecture {
@@ -35,6 +50,11 @@ public final class ReglesArchitecture {
     static final String COMMUN = "commun";
 
     static final Set<String> COUCHES = Set.of("api", "service", "persistance");
+
+    static final String TRANSACTIONAL = "jakarta.transaction.Transactional";
+
+    /** Façade des appels HTTP vers Keycloak, relative à la racine (AD-6, AD-17). */
+    static final String IDENTITES = "comptes.service.Identites";
 
     /** Graphe AD-1 exact : module → modules dont il peut appeler la couche service ({@code commun} implicite). */
     static final Map<String, Set<String>> GRAPHE = Map.ofEntries(
@@ -119,6 +139,80 @@ public final class ReglesArchitecture {
                 })
                 .allowEmptyShould(true)
                 .because("AD-16 : deux DTO de même nom faussent le client généré");
+    }
+
+    public static ArchRule servicesSansTypeDePersistance(String racine) {
+        return classes().that().resideInAPackage(racine + "..").and().arePublic()
+                .should(new ArchCondition<JavaClass>(
+                        "ne mentionner aucun type d'un <module>.persistance dans ses membres publics de service") {
+                    @Override
+                    public void check(JavaClass classe, ConditionEvents events) {
+                        Optional<Emplacement> origine = Emplacement.de(racine, classe.getPackageName());
+                        if (origine.isEmpty() || !origine.get().couche().equals("service")) {
+                            return;
+                        }
+                        for (JavaMethod methode : classe.getMethods()) {
+                            if (estPublic(methode.getModifiers())) {
+                                signaler(classe, methode.getFullName(), Stream.concat(
+                                        methode.getParameterTypes().stream(), Stream.of(methode.getReturnType()))
+                                        .toList(), events);
+                            }
+                        }
+                        classe.getConstructors().stream().filter(constructeur -> estPublic(constructeur.getModifiers()))
+                                .forEach(constructeur -> signaler(classe, constructeur.getFullName(),
+                                        List.copyOf(constructeur.getParameterTypes()), events));
+                        for (JavaField champ : classe.getFields()) {
+                            if (estPublic(champ.getModifiers())) {
+                                signaler(classe, champ.getFullName(), List.of(champ.getType()), events);
+                            }
+                        }
+                    }
+
+                    private void signaler(JavaClass classe, String membre, List<JavaType> types,
+                            ConditionEvents events) {
+                        Set<String> persistance = new LinkedHashSet<>();
+                        types.stream().flatMap(type -> type.getAllInvolvedRawTypes().stream())
+                                .map(JavaClass::getBaseComponentType)
+                                .filter(brut -> Emplacement.de(racine, brut.getPackageName())
+                                        .filter(emplacement -> emplacement.couche().equals("persistance"))
+                                        .isPresent())
+                                .forEach(brut -> persistance.add(brut.getName()));
+                        if (!persistance.isEmpty()) {
+                            events.add(SimpleConditionEvent.violated(classe, classe.getName() + " : " + membre
+                                    + " expose " + String.join(", ", persistance) + " (couche persistance)"));
+                        }
+                    }
+                })
+                .allowEmptyShould(true)
+                .because("AD-16 : la couche service ne laisse fuir ni entité, ni Repository, ni type de persistance");
+    }
+
+    public static ArchRule aucunAppelKeycloakEnTransaction(String racine) {
+        String identites = racine + "." + IDENTITES;
+        return classes().that().resideInAPackage(racine + "..")
+                .should(new ArchCondition<JavaClass>(
+                        "n'appeler " + IDENTITES + " directement depuis aucune méthode @Transactional") {
+                    @Override
+                    public void check(JavaClass classe, ConditionEvents events) {
+                        boolean classeTransactionnelle = classe.isAnnotatedWith(TRANSACTIONAL);
+                        for (JavaMethod methode : classe.getMethods()) {
+                            if (!classeTransactionnelle && !methode.isAnnotatedWith(TRANSACTIONAL)) {
+                                continue;
+                            }
+                            for (JavaMethodCall appel : methode.getMethodCallsFromSelf()) {
+                                if (appel.getTargetOwner().isAssignableTo(identites)) {
+                                    events.add(SimpleConditionEvent.violated(appel, classe.getName() + " : "
+                                            + appel.getDescription() + " dans une transaction ouverte"));
+                                }
+                            }
+                        }
+                    }
+                })
+                .because("AD-17 : aucun appel HTTP sortant vers Keycloak pendant une transaction ouverte");
+    }
+
+    private static boolean estPublic(Set<JavaModifier> modificateurs) {
+        return modificateurs.contains(JavaModifier.PUBLIC);
     }
 
     private static Optional<String> raisonDeRefus(String origine, Emplacement cible) {

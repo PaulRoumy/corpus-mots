@@ -1,6 +1,7 @@
 package fr.corpusmots.comptes.api;
 
 import fr.corpusmots.commun.api.ErreurMetier;
+import fr.corpusmots.commun.service.EnseignantCourant;
 import fr.corpusmots.comptes.service.ComptesAdministration;
 import fr.corpusmots.comptes.service.ComptesService;
 import jakarta.annotation.security.RolesAllowed;
@@ -15,7 +16,6 @@ import jakarta.ws.rs.Produces;
 import jakarta.ws.rs.core.MediaType;
 import java.util.List;
 import java.util.UUID;
-import org.eclipse.microprofile.jwt.JsonWebToken;
 import org.eclipse.microprofile.openapi.annotations.Operation;
 import org.eclipse.microprofile.openapi.annotations.media.Content;
 import org.eclipse.microprofile.openapi.annotations.media.Schema;
@@ -32,7 +32,7 @@ public class ComptesResource {
     ComptesAdministration administration;
 
     @Inject
-    JsonWebToken jeton;
+    EnseignantCourant enseignantCourant;
 
     @GET
     @Operation(operationId = "listerComptes", summary = "Comptes de l'équipe, invités d'abord")
@@ -64,8 +64,7 @@ public class ComptesResource {
             summary = "Désactiver un compte : connexion et API refusées, sessions révoquées, rien n'est effacé")
     @APIResponse(responseCode = "204", description = "Compte désactivé")
     public void desactiver(@PathParam("id") UUID id) {
-        // Le filtre des comptes a vérifié que le sub du jeton est un Enseignant actif, donc un UUID.
-        administration.desactiver(id, UUID.fromString(jeton.getSubject()));
+        administration.desactiver(id, enseignantCourant.id());
     }
 
     @POST
