@@ -29,7 +29,7 @@
 # - Dev moves story to 'review', then runs code-review (fresh context, different LLM recommended)
 # - Retrospective appends its action items to action_items; the status view surfaces open ones
 generated: 10-30-2026 18:50
-last_updated: 11-05-2026 11:35
+last_updated: 11-05-2026 11:52
 project: corpus-mots
 project_key: NOKEY
 tracking_system: file-system
@@ -43,7 +43,7 @@ development_status:
   1-5-inviter-un-collègue: done
   1-6-gérer-les-comptes-de-l-équipe: done
   1-7-mon-compte-et-page-données-personnelles: done
-  epic-1-retrospective: optional
+  epic-1-retrospective: done
 
   epic-2: backlog
   2-1-créer-une-préparation-pour-un-album: backlog
@@ -96,3 +96,86 @@ development_status:
   6-7-exporter-tout-mes-mots: backlog
   6-8-prêt-pour-l-ouverture-du-pilote: backlog
   epic-6-retrospective: optional
+action_items:
+  - id: "epic-1-retro-item-1-créer-commun-service-enseignantcourant-i"
+    epic: 1
+    action: "Créer commun.service.EnseignantCourant (implémentée par comptes), sortir
+      StatutEnseignant des signatures de comptes.service, règle ArchUnit service ↛
+      persistance (A-1, A-2)"
+    owner: "dev (bmad-build), avant la story 2.1"
+    status: open
+    ref: "docs/realisation/epic-1-retro-2026-11-05.md"
+  - id: "epic-1-retro-item-2-empêcher-keycloak-de-journaliser-l-e-mai"
+    epic: 1
+    action: "Empêcher Keycloak de journaliser l'e-mail (écouteur jboss-logging) ou
+      corriger le texte de la page Données personnelles (F-1)"
+    owner: "dev, avant le déploiement"
+    status: open
+    ref: "docs/realisation/epic-1-retro-2026-11-05.md"
+  - id: "epic-1-retro-item-3-réécrire-les-procédures-de-dépannage-du"
+    epic: 1
+    action: "Réécrire les procédures de dépannage du README : kcadm.sh par podman
+      compose exec, Mot de passe oublié pour un lien expiré, retirer delete from enseignant,
+      documenter la fenêtre de 5 min d'un rôle retiré (F-2, F-4, F-7)"
+    owner: "dev, avant le déploiement"
+    status: open
+    ref: "docs/realisation/epic-1-retro-2026-11-05.md"
+  - id: "epic-1-retro-item-4-une-seule-normalisation-des-noms-et-e-ma"
+    epic: 1
+    action: "Une seule normalisation des noms et e-mails dans comptes.service, validation
+      d'ADMIN_INITIAL_EMAIL (A-4, F-4)"
+    owner: "dev, avant le déploiement"
+    status: open
+    ref: "docs/realisation/epic-1-retro-2026-11-05.md"
+  - id: "epic-1-retro-item-5-traduire-les-erreurs-du-client-d-adminis"
+    epic: 1
+    action: "Traduire les erreurs du client d'administration Keycloak en ErreurMetier
+      502 identite.indisponible (F-3)"
+    owner: "dev, avant le déploiement"
+    status: open
+    ref: "docs/realisation/epic-1-retro-2026-11-05.md"
+  - id: "epic-1-retro-item-6-identiteskeycloakit-contre-un-vrai-keycl"
+    epic: 1
+    action: "IdentitesKeycloakIT contre un vrai Keycloak avec le realm importé, jeton
+      réel lu par FiltreCompteActif, contrôle jq des réglages du realm en CI (V-1,
+      V-2)"
+    owner: "dev, avant le déploiement"
+    status: open
+    ref: "docs/realisation/epic-1-retro-2026-11-05.md"
+  - id: "epic-1-retro-item-7-règle-archunit-aucune-méthode-transactio"
+    epic: 1
+    action: "Règle ArchUnit : aucune méthode @Transactional n'appelle Identites, sauf
+      sousVerrouAdministrateurs (A-7)"
+    owner: "dev, avec l'action 1"
+    status: open
+    ref: "docs/realisation/epic-1-retro-2026-11-05.md"
+  - id: "epic-1-retro-item-8-rattacher-à-la-story-6-8-en-têtes-de-séc"
+    epic: 1
+    action: "Rattacher à la story 6.8 : en-têtes de sécurité Caddy et contrôle CI,
+      test du blocage /auth/admin, refus des secrets a-remplacer, premier tag et publication
+      ghcr.io (F-9, V-3, V-6, L-1)"
+    owner: "Paul (planification)"
+    status: open
+    ref: "docs/realisation/epic-1-retro-2026-11-05.md"
+  - id: "epic-1-retro-item-9-inscrire-dans-ad-17-l-exception-du-verro"
+    epic: 1
+    action: "Inscrire dans AD-17 l'exception du verrou consultatif (décision 1 de
+      la story 1.6) (A-6)"
+    owner: "Paul"
+    status: open
+    ref: "docs/realisation/epic-1-retro-2026-11-05.md"
+  - id: "epic-1-retro-item-10-ajouter-à-agents-md-une-story-qui-change"
+    epic: 1
+    action: "Ajouter à AGENTS.md : une story qui change un parcours d'exploitation
+      relit deploiement/README.md, RESTAURATION.md et la page Données personnelles
+      (L-2)"
+    owner: "Paul, avant l'Epic 2"
+    status: open
+    ref: "docs/realisation/epic-1-retro-2026-11-05.md"
+  - id: "epic-1-retro-item-11-revue-bmad-review-du-diff-cumulé-en-mili"
+    epic: 1
+    action: "Revue bmad-review du diff cumulé en milieu d'epic, centrée sur les frontières
+      entre stories (L-3)"
+    owner: "Paul, Epic 2"
+    status: open
+    ref: "docs/realisation/epic-1-retro-2026-11-05.md"
