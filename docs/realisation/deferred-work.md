@@ -89,3 +89,18 @@
 - source_spec: `docs/realisation/spec-2-1-2-creer-un-album.md`
   summary: Fixer par des tests le seuil des titres proches (0,4) et leur ordre complet (similarité, puis titre), avec un Album juste sous le seuil.
   evidence: Revue de la story 2.1, partie 2, ligne 21 du journal de tri : remplacer `SEUIL_PROCHE` par `SEUIL_SIMILARITE` ou retirer le départage par titre ne ferait échouer aucun test. Il faut des données dont la similarité trigramme a été mesurée.
+- source_spec: `docs/realisation/spec-2-2-en-tete-de-preparation-modifiable.md`
+  summary: Story 2.2, partie 2 : Modules. « Nouveau module » depuis l'En-tête et le Dialogue « Nouvelle préparation », ajouté en fin d'Album et visible aussitôt de tous ; renommer ou supprimer, réservé au créateur et à l'administrateur (`403` pour les autres) ; événement synchrone `ModuleSupprime`, observé par `preparations`, qui retire le Module de ses Préparations dans la même transaction.
+  evidence: Découpage de la story 2.2 choisi par Paul (quatre objectifs livrables séparément) ; la partie 1 rend l'En-tête modifiable, qui sert de cadre.
+- source_spec: `docs/realisation/spec-2-2-en-tete-de-preparation-modifiable.md`
+  summary: Story 2.2, partie 3 : Thèmes. Champ à étiquettes (UX-DR-17) qui propose les Thèmes existants, « Créer le thème « … » » pour toute l'école, Entrée pour ajouter, Retour arrière pour retirer ; renommer ou supprimer, réservé au créateur et à l'administrateur (`403`) ; suppression refusée si le Thème est encore utilisé, par les interfaces `…Utilisation` des modules aval (AD-15).
+  evidence: Découpage de la story 2.2 choisi par Paul.
+- source_spec: `docs/realisation/spec-2-2-en-tete-de-preparation-modifiable.md`
+  summary: Story 2.2, partie 4 : « Corriger l'album » dans le menu de l'En-tête, réservé au créateur de l'Album et à l'administrateur, pour modifier le titre, l'auteur et l'éditeur ; la correction se voit partout.
+  evidence: Découpage de la story 2.2 choisi par Paul.
+- source_spec: `docs/realisation/spec-2-2-en-tete-de-preparation-modifiable.md`
+  summary: Story 2.3 : brancher `Usages.changerContextePreparation` sur le changement de Module dans `PreparationsService.regler`.
+  evidence: Revue de la story 2.2, partie 1, ligne 12 du journal de tri. `Usages` n'existait pas avant la story 2.3, et l'appel prévu par AD-14 et par le critère de la story 2.2 n'est pas fait.
+- source_spec: `docs/realisation/spec-2-2-en-tete-de-preparation-modifiable.md`
+  summary: Story 2.2, partie 2 : après `preparation.module_invalide` dans l'En-tête, recharger la liste des Modules et retirer le Module disparu, au lieu de renvoyer la même valeur.
+  evidence: Revue de la story 2.2, partie 1, ligne 17 du journal de tri. Une fois un Module supprimé, « Réessayer » renverrait le même Module invalide, et tout enregistrement suivant échouerait.

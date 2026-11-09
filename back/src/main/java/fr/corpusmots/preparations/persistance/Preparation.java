@@ -37,6 +37,9 @@ public class Preparation {
     @Column(name = "theme_defaut_id")
     private UUID themeDefautId;
 
+    @Column(name = "temps_passe_minutes")
+    private Integer tempsPasseMinutes;
+
     @Generated
     @Column(name = "cree_le", insertable = false, updatable = false)
     private OffsetDateTime creeLe;
@@ -55,6 +58,16 @@ public class Preparation {
         preparation.moduleId = moduleId;
         preparation.themeDefautId = themeDefautId;
         return preparation;
+    }
+
+    /**
+     * Remplace les réglages de l'En-tête ; {@code null} retire la valeur. Les vérifications (Module de l'Album, Thème
+     * existant, bornes du Temps passé) sont faites par {@code preparations.service}.
+     */
+    public void regler(UUID moduleId, UUID themeDefautId, Integer tempsPasseMinutes) {
+        this.moduleId = moduleId;
+        this.themeDefautId = themeDefautId;
+        this.tempsPasseMinutes = tempsPasseMinutes;
     }
 
     public UUID id() {
@@ -79,6 +92,11 @@ public class Preparation {
 
     public UUID themeDefautId() {
         return themeDefautId;
+    }
+
+    /** Temps passé en minutes, {@code null} s'il n'est pas renseigné. */
+    public Integer tempsPasseMinutes() {
+        return tempsPasseMinutes;
     }
 
     public OffsetDateTime creeLe() {

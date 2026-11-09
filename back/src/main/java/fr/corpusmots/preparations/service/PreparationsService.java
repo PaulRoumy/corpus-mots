@@ -31,7 +31,14 @@ public class PreparationsService {
     static final String CODE_ALBUM_INTROUVABLE = "preparation.album_introuvable";
     static final String CODE_MODULE_INVALIDE = "preparation.module_invalide";
     static final String CODE_THEME_INTROUVABLE = "preparation.theme_introuvable";
+    static final String CODE_TEMPS_PASSE_INVALIDE = "preparation.temps_passe_invalide";
     static final String CODE_INTROUVABLE = "ressource.introuvable";
+
+    /** Borne haute du Temps passé : 100 heures (contrainte {@code preparation_temps_passe_borne}). */
+    static final int TEMPS_PASSE_MAXIMUM_MINUTES = 6000;
+
+    /** Pas du Temps passé : une demi-heure (même contrainte). */
+    static final int PAS_TEMPS_PASSE_MINUTES = 30;
 
     @Inject
     PreparationRepository preparations;
@@ -56,22 +63,38 @@ public class PreparationsService {
                 .orElseThrow(() -> new ErreurMetier(400, CODE_SECTION_INVALIDE, "La section doit valoir ps, ms ou gs"));
         AlbumVue album = referentiels.album(commande.albumId())
                 .orElseThrow(() -> new ErreurMetier(400, CODE_ALBUM_INTROUVABLE, "Aucun album ne porte cet identifiant"));
-        ModuleVue module = null;
-        if (commande.moduleId() != null) {
-            module = referentiels.module(commande.moduleId())
-                    .filter(trouve -> trouve.albumId().equals(album.id()))
-                    .orElseThrow(() -> new ErreurMetier(400, CODE_MODULE_INVALIDE,
-                            "Ce module n'existe pas ou appartient à un autre album"));
-        }
-        ThemeVue theme = null;
-        if (commande.themeDefautId() != null) {
-            theme = referentiels.theme(commande.themeDefautId())
-                    .orElseThrow(() -> new ErreurMetier(400, CODE_THEME_INTROUVABLE,
-                            "Aucun thème ne porte cet identifiant"));
-        }
+        ModuleVue module = moduleDeLAlbum(commande.moduleId(), album.id());
+        ThemeVue theme = themeExistant(commande.themeDefautId());
         Preparation preparation = Preparation.nouvelle(preparations.nouvelIdentifiant(), enseignantCourant.id(),
                 album.id(), section, module == null ? null : module.id(), theme == null ? null : theme.id());
         preparations.persistAndFlush(preparation);
+        return vue(preparation, album, module, theme);
+    }
+
+    /**
+     * Remplace les réglages (Module, Thème par défaut, Temps passé) de la Préparation {@code id} de l'enseignant
+     * courant ; {@code null} retire la valeur. Rien n'est modifié en cas de refus.
+     *
+     * @throws ErreurMetier {@code 404 ressource.introuvable} si la Préparation n'existe pas ou appartient à un
+     *         collègue ; {@code 400 preparation.module_invalide} si le Module n'existe pas ou appartient à un autre
+     *         Album ; {@code 400 preparation.theme_introuvable} si le Thème n'existe pas ;
+     *         {@code 400 preparation.temps_passe_invalide} si le Temps passé n'est pas un multiple
+     *         de 30 minutes entre 0 et 6000
+     */
+    @Transactional
+    public PreparationVue regler(UUID id, ReglagesPreparationCommande commande) {
+        Preparation preparation = mienne(id);
+        AlbumVue album = albumDe(preparation, referentiels.album(preparation.albumId()).orElse(null));
+        ModuleVue module = moduleDeLAlbum(commande.moduleId(), album.id());
+        ThemeVue theme = themeExistant(commande.themeDefautId());
+        Integer temps = commande.tempsPasseMinutes();
+        if (temps != null
+                && (temps < 0 || temps > TEMPS_PASSE_MAXIMUM_MINUTES || temps % PAS_TEMPS_PASSE_MINUTES != 0)) {
+            throw new ErreurMetier(400, CODE_TEMPS_PASSE_INVALIDE,
+                    "Le temps passé doit être un multiple de " + PAS_TEMPS_PASSE_MINUTES + " minutes entre 0 et "
+                            + TEMPS_PASSE_MAXIMUM_MINUTES);
+        }
+        preparation.regler(module == null ? null : module.id(), theme == null ? null : theme.id(), temps);
         return vue(preparation, album, module, theme);
     }
 
@@ -100,9 +123,7 @@ public class PreparationsService {
      */
     @Transactional
     public PreparationVue lire(UUID id) {
-        Preparation preparation = (id == null ? Optional.<Preparation>empty()
-                : preparations.duProprietaire(id, enseignantCourant.id()))
-                .orElseThrow(() -> new ErreurMetier(404, CODE_INTROUVABLE, "Aucune préparation ne porte cet identifiant"));
+        Preparation preparation = mienne(id);
         AlbumVue album = albumDe(preparation, referentiels.album(preparation.albumId()).orElse(null));
         ModuleVue module = preparation.moduleId() == null ? null
                 : referentiels.module(preparation.moduleId()).orElse(null);
@@ -117,10 +138,37 @@ public class PreparationsService {
         return preparations.plusRecente(enseignantCourant.id()).map(Preparation::section);
     }
 
+    /** Préparation {@code id} de l'enseignant courant ; celle d'un collègue est traitée comme inexistante. */
+    private Preparation mienne(UUID id) {
+        return (id == null ? Optional.<Preparation>empty() : preparations.duProprietaire(id, enseignantCourant.id()))
+                .orElseThrow(() -> new ErreurMetier(404, CODE_INTROUVABLE, "Aucune préparation ne porte cet identifiant"));
+    }
+
+    /** Module {@code moduleId} s'il appartient à l'Album, {@code null} si {@code moduleId} est nul. */
+    private ModuleVue moduleDeLAlbum(UUID moduleId, UUID albumId) {
+        if (moduleId == null) {
+            return null;
+        }
+        return referentiels.module(moduleId)
+                .filter(trouve -> trouve.albumId().equals(albumId))
+                .orElseThrow(() -> new ErreurMetier(400, CODE_MODULE_INVALIDE,
+                        "Ce module n'existe pas ou appartient à un autre album"));
+    }
+
+    /** Thème {@code themeId}, {@code null} si {@code themeId} est nul. */
+    private ThemeVue themeExistant(UUID themeId) {
+        if (themeId == null) {
+            return null;
+        }
+        return referentiels.theme(themeId)
+                .orElseThrow(() -> new ErreurMetier(400, CODE_THEME_INTROUVABLE, "Aucun thème ne porte cet identifiant"));
+    }
+
     private static PreparationVue vue(Preparation preparation, AlbumVue album, ModuleVue module, ThemeVue theme) {
         return new PreparationVue(preparation.id(), album.id(), album.titre(), preparation.section(),
                 module == null ? null : module.id(), module == null ? null : module.nom(),
-                theme == null ? null : theme.id(), theme == null ? null : theme.nom(), 0, 0, preparation.creeLe());
+                theme == null ? null : theme.id(), theme == null ? null : theme.nom(), preparation.tempsPasseMinutes(),
+                0, 0, preparation.creeLe());
     }
 
     /** Un Album n'est jamais supprimé (sa fusion, Epic 6, réécrira les Préparations) : son absence est une anomalie. */

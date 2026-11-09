@@ -26,7 +26,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
 
-/** Création, liste et lecture des Préparations, isolées entre enseignants (matrice de la story 2.1, partie 1). */
+/** Création, liste, lecture et réglages des Préparations, isolées entre enseignants (stories 2.1 et 2.2, partie 1). */
 @QuarkusTest
 class PreparationsResourceTest {
 
@@ -45,6 +45,7 @@ class PreparationsResourceTest {
     UUID rouleGalette;
     UUID loup;
     UUID module1;
+    UUID module2;
     UUID moduleDuLoup;
     UUID cuisine;
 
@@ -57,7 +58,7 @@ class PreparationsResourceTest {
         rouleGalette = referentiels.album("La Roule Galette", "Natha Caputo");
         loup = referentiels.album("Le loup qui voulait changer de couleur", "Orianne Lallemand");
         module1 = referentiels.module(rouleGalette, "Module 1", 1);
-        referentiels.module(rouleGalette, "Module 2", 2);
+        module2 = referentiels.module(rouleGalette, "Module 2", 2);
         moduleDuLoup = referentiels.module(loup, "Couleurs", 1);
         cuisine = referentiels.theme("cuisine");
     }
@@ -283,6 +284,178 @@ class PreparationsResourceTest {
                 .then()
                 .statusCode(400)
                 .body("code", equalTo("requete.invalide"));
+    }
+
+    @Test
+    @TestSecurity(user = CLAIRE)
+    @OidcSecurity(claims = @Claim(key = "sub", value = CLAIRE))
+    void reglerUnePreparationPuisLaRelire() {
+        UUID id = preparation(CLAIRE, rouleGalette, "ms", "2026-11-09T09:00:00Z");
+
+        given().contentType(ContentType.JSON)
+                .body(Map.of("moduleId", module2, "themeDefautId", cuisine, "tempsPasseMinutes", 210))
+                .when().put("/api/preparations/" + id + "/reglages")
+                .then()
+                .statusCode(200)
+                .body("id", equalTo(id.toString()))
+                .body("titreAlbum", equalTo("La Roule Galette"))
+                .body("section", equalTo("ms"))
+                .body("moduleId", equalTo(module2.toString()))
+                .body("nomModule", equalTo("Module 2"))
+                .body("themeDefautId", equalTo(cuisine.toString()))
+                .body("nomThemeDefaut", equalTo("cuisine"))
+                .body("tempsPasseMinutes", equalTo(210));
+
+        given().when().get("/api/preparations/" + id)
+                .then()
+                .statusCode(200)
+                .body("moduleId", equalTo(module2.toString()))
+                .body("nomModule", equalTo("Module 2"))
+                .body("themeDefautId", equalTo(cuisine.toString()))
+                .body("nomThemeDefaut", equalTo("cuisine"))
+                .body("tempsPasseMinutes", equalTo(210));
+        assertEquals(new Reglages(module2, cuisine, 210), reglages(id));
+    }
+
+    @ParameterizedTest
+    @ValueSource(ints = { 0, 6000 })
+    @TestSecurity(user = CLAIRE)
+    @OidcSecurity(claims = @Claim(key = "sub", value = CLAIRE))
+    void lesBornesDuTempsPasseSontAcceptees(int minutes) {
+        UUID id = preparation(CLAIRE, rouleGalette, "ms", "2026-11-09T09:00:00Z");
+
+        given().contentType(ContentType.JSON)
+                .body(Map.of("tempsPasseMinutes", minutes))
+                .when().put("/api/preparations/" + id + "/reglages")
+                .then()
+                .statusCode(200)
+                .body("tempsPasseMinutes", equalTo(minutes));
+        assertEquals(new Reglages(null, null, minutes), reglages(id));
+    }
+
+    @Test
+    @TestSecurity(user = CLAIRE)
+    @OidcSecurity(claims = @Claim(key = "sub", value = CLAIRE))
+    void reglerANullRetireLesTroisValeurs() {
+        UUID id = preparationReglee(CLAIRE);
+        Map<String, Object> corps = new HashMap<>();
+        corps.put("moduleId", null);
+        corps.put("themeDefautId", null);
+        corps.put("tempsPasseMinutes", null);
+
+        given().contentType(ContentType.JSON)
+                .body(corps)
+                .when().put("/api/preparations/" + id + "/reglages")
+                .then()
+                .statusCode(200)
+                .body("moduleId", nullValue())
+                .body("nomModule", nullValue())
+                .body("themeDefautId", nullValue())
+                .body("nomThemeDefaut", nullValue())
+                .body("tempsPasseMinutes", nullValue());
+        assertEquals(new Reglages(null, null, null), reglages(id));
+    }
+
+    @Test
+    @TestSecurity(user = CLAIRE)
+    @OidcSecurity(claims = @Claim(key = "sub", value = CLAIRE))
+    void reglerUnModuleInconnuOuDUnAutreAlbumEstRefuse() {
+        UUID id = preparationReglee(CLAIRE);
+
+        refusDeReglage(id, Map.of("moduleId", UUID.randomUUID()), 400, "preparation.module_invalide");
+        refusDeReglage(id, Map.of("moduleId", moduleDuLoup, "themeDefautId", cuisine), 400,
+                "preparation.module_invalide");
+    }
+
+    @Test
+    @TestSecurity(user = CLAIRE)
+    @OidcSecurity(claims = @Claim(key = "sub", value = CLAIRE))
+    void reglerUnThemeInconnuEstRefuse() {
+        UUID id = preparationReglee(CLAIRE);
+
+        refusDeReglage(id, Map.of("moduleId", module1, "themeDefautId", UUID.randomUUID()), 400,
+                "preparation.theme_introuvable");
+    }
+
+    @ParameterizedTest
+    @ValueSource(ints = { -1, 6001, 45, 5990, Integer.MIN_VALUE, Integer.MAX_VALUE })
+    @TestSecurity(user = CLAIRE)
+    @OidcSecurity(claims = @Claim(key = "sub", value = CLAIRE))
+    void unTempsPasseHorsBornesOuHorsDemiHeureEstRefuse(int minutes) {
+        UUID id = preparationReglee(CLAIRE);
+
+        refusDeReglage(id, Map.of("moduleId", module1, "themeDefautId", cuisine, "tempsPasseMinutes", minutes), 400,
+                "preparation.temps_passe_invalide");
+    }
+
+    @Test
+    @TestSecurity(user = CLAIRE)
+    @OidcSecurity(claims = @Claim(key = "sub", value = CLAIRE))
+    void reglerLaPreparationDUnCollegueEstIntrouvable() {
+        UUID deZoe = preparationReglee(ZOE);
+
+        refusDeReglage(deZoe, Map.of("tempsPasseMinutes", 30), 404, "ressource.introuvable");
+        // Le 404 passe avant toute validation : un corps invalide ne révèle rien de la Préparation du collègue.
+        refusDeReglage(deZoe, Map.of("tempsPasseMinutes", -1), 404, "ressource.introuvable");
+        refusDeReglage(deZoe, Map.of("moduleId", moduleDuLoup), 404, "ressource.introuvable");
+        given().contentType(ContentType.JSON).body(Map.of("tempsPasseMinutes", 30))
+                .when().put("/api/preparations/" + UUID.randomUUID() + "/reglages")
+                .then()
+                .statusCode(404)
+                .contentType(ProblemeDto.MEDIA_TYPE)
+                .body("code", equalTo("ressource.introuvable"));
+    }
+
+    @Test
+    @TestSecurity(user = CLAIRE)
+    @OidcSecurity(claims = @Claim(key = "sub", value = CLAIRE))
+    void reglerSansCorpsEstRefuse() {
+        UUID id = preparationReglee(CLAIRE);
+
+        given().contentType(ContentType.JSON)
+                .when().put("/api/preparations/" + id + "/reglages")
+                .then()
+                .statusCode(400)
+                .contentType(ProblemeDto.MEDIA_TYPE)
+                .body("code", equalTo("requete.invalide"));
+        assertEquals(new Reglages(module1, cuisine, 60), reglages(id));
+    }
+
+    /** Réglages lus en base. */
+    private record Reglages(UUID moduleId, UUID themeDefautId, Integer tempsPasseMinutes) {
+    }
+
+    /** Refus d'un réglage : rien n'est modifié, la Préparation garde Module 1, cuisine et 60 minutes. */
+    private void refusDeReglage(UUID id, Map<String, Object> corps, int statut, String code) {
+        given().contentType(ContentType.JSON).body(new HashMap<>(corps))
+                .when().put("/api/preparations/" + id + "/reglages")
+                .then()
+                .statusCode(statut)
+                .contentType(ProblemeDto.MEDIA_TYPE)
+                .body("code", equalTo(code));
+        assertEquals(new Reglages(module1, cuisine, 60), reglages(id));
+    }
+
+    /** Préparation de La Roule Galette réglée en base sur Module 1, cuisine et 60 minutes. */
+    private UUID preparationReglee(String proprietaire) {
+        UUID id = preparationAvecModule(proprietaire, rouleGalette, "ms", module1, "2026-11-09T09:00:00Z");
+        QuarkusTransaction.requiringNew().run(() -> entityManager.createNativeQuery(
+                "update preparation set theme_defaut_id = :theme, temps_passe_minutes = 60 where id = :id")
+                .setParameter("theme", cuisine)
+                .setParameter("id", id)
+                .executeUpdate());
+        return id;
+    }
+
+    private Reglages reglages(UUID preparation) {
+        return QuarkusTransaction.requiringNew().call(() -> {
+            Object[] ligne = (Object[]) entityManager.createNativeQuery(
+                    "select module_id, theme_defaut_id, temps_passe_minutes from preparation where id = :id")
+                    .setParameter("id", preparation)
+                    .getSingleResult();
+            return new Reglages((UUID) ligne[0], (UUID) ligne[1],
+                    ligne[2] == null ? null : ((Number) ligne[2]).intValue());
+        });
     }
 
     private void refus(Map<String, Object> corps, String code) {

@@ -47,16 +47,32 @@
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: var(--cm-espace-2);
+  gap: var(--cm-espace-3);
 }
 
-.entete__module {
+// Module, Thème par défaut et Temps passé : champs Material compacts, enregistrés à la sortie (story 2.2).
+.entete__champ {
+  width: var(--cm-largeur-champ-entete);
+}
+
+.entete__temps {
+  width: var(--cm-largeur-champ-temps);
+
+  mat-icon {
+    width: var(--cm-taille-icone);
+    height: var(--cm-taille-icone);
+    color: var(--mat-sys-on-surface-variant);
+  }
+}
+
+// Repli en lecture seule quand les listes n'ont pas pu être chargées.
+.entete__nom-module {
   font: var(--cm-typo-body-sm);
   color: var(--mat-sys-on-surface);
 }
 
-// Thème par défaut en étiquette (`.tag` de la maquette) ; le Champ à étiquettes arrive avec la story 2.2.
-.entete__theme {
+// Thème par défaut en étiquette (`.tag` de la maquette), en repli comme ci-dessus.
+.entete__nom-theme {
   display: inline-flex;
   align-items: center;
   padding: var(--cm-espace-1) var(--cm-espace-3);
@@ -64,6 +80,13 @@
   background: var(--mat-sys-secondary-container);
   color: var(--mat-sys-on-secondary-container);
   font: var(--cm-typo-label-sm);
+}
+
+.entete__bas {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--cm-espace-4);
 }
 
 .entete__compteur {

@@ -15,13 +15,14 @@ public record PreparationDto(
         @Schema(description = "Absent si aucun Module n'est choisi") String nomModule,
         @Schema(description = "Absent si aucun Thème par défaut n'est choisi") UUID themeDefautId,
         @Schema(description = "Absent si aucun Thème par défaut n'est choisi") String nomThemeDefaut,
+        @Schema(description = "Temps passé en minutes, absent s'il n'est pas renseigné") Integer tempsPasseMinutes,
         @Schema(required = true) int nombreMots,
         @Schema(required = true, description = "Mots qui ont une Image") int nombreIllustres,
         @Schema(required = true) OffsetDateTime creeLe) {
 
     static PreparationDto de(PreparationVue vue) {
         return new PreparationDto(vue.id(), vue.albumId(), vue.titreAlbum(), vue.section().valeur(), vue.moduleId(),
-                vue.nomModule(), vue.themeDefautId(), vue.nomThemeDefaut(), vue.nombreMots(), vue.nombreIllustres(),
-                vue.creeLe());
+                vue.nomModule(), vue.themeDefautId(), vue.nomThemeDefaut(), vue.tempsPasseMinutes(), vue.nombreMots(),
+                vue.nombreIllustres(), vue.creeLe());
     }
 }

@@ -275,6 +275,10 @@ components:
         nomThemeDefaut:
           type: string
           description: Absent si aucun Thème par défaut n'est choisi
+        tempsPasseMinutes:
+          type: integer
+          format: int32
+          description: "Temps passé en minutes, absent s'il n'est pas renseigné"
         nombreMots:
           type: integer
           format: int32
@@ -285,6 +289,34 @@ components:
         creeLe:
           type: string
           $ref: "#/components/schemas/OffsetDateTime"
+    ReglagesPreparationDto:
+      type: object
+      properties:
+        moduleId:
+          description: "Module de l'Album de la Préparation, null pour aucun"
+          type:
+          - string
+          - "null"
+          anyOf:
+          - $ref: "#/components/schemas/UUID"
+          - type: "null"
+        themeDefautId:
+          description: "Thème par défaut, null pour aucun"
+          type:
+          - string
+          - "null"
+          anyOf:
+          - $ref: "#/components/schemas/UUID"
+          - type: "null"
+        tempsPasseMinutes:
+          type:
+          - integer
+          - "null"
+          format: int32
+          maximum: 6000
+          minimum: 0
+          description: "Temps passé en minutes, multiple de 30 (demi-heure), null\
+            \ s'il n'est pas renseigné"
     RoleAdministrateurDto:
       type: object
       required:
@@ -635,6 +667,34 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/PreparationDto"
+      tags:
+      - Preparations Resource
+  /api/preparations/{id}/reglages:
+    put:
+      summary: "Remplacer le Module, le Thème par défaut et le Temps passé d'une Pré\
+        paration de l'enseignant connecté"
+      operationId: reglerPreparation
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          $ref: "#/components/schemas/UUID"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ReglagesPreparationDto"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PreparationDto"
+        "400":
+          description: Bad Request
       tags:
       - Preparations Resource
   /api/themes:

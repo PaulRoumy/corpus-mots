@@ -31,6 +31,8 @@ export const MESSAGES_PAR_CODE: Readonly<Record<string, string>> = {
   'preparation.album_introuvable': "Cet album n'existe plus. Choisissez-en un autre.",
   'preparation.module_invalide': "Ce module n'appartient plus à l'album. Choisissez-en un autre.",
   'preparation.theme_introuvable': "Ce thème n'existe plus. Choisissez-en un autre.",
+  'preparation.temps_passe_invalide':
+    "Saisissez un nombre d'heures entre 0 et 100, par demi-heure.",
   'album.titre_invalide': 'Saisissez un titre de 1 à 200 caractères.',
   'album.auteur_invalide': 'Saisissez un auteur de 1 à 200 caractères.',
   'album.editeur_invalide': 'Saisissez un éditeur de 200 caractères au plus.',

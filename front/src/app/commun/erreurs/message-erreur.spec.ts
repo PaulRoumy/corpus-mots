@@ -40,6 +40,11 @@ describe('messageErreur', () => {
       "Ce module n'appartient plus à l'album. Choisissez-en un autre.",
     ],
     [400, 'preparation.theme_introuvable', "Ce thème n'existe plus. Choisissez-en un autre."],
+    [
+      400,
+      'preparation.temps_passe_invalide',
+      "Saisissez un nombre d'heures entre 0 et 100, par demi-heure.",
+    ],
     // referentiels.service.ReferentielsService
     [400, 'album.titre_invalide', 'Saisissez un titre de 1 à 200 caractères.'],
     [400, 'album.auteur_invalide', 'Saisissez un auteur de 1 à 200 caractères.'],

@@ -8,6 +8,7 @@ import jakarta.inject.Inject;
 import jakarta.ws.rs.Consumes;
 import jakarta.ws.rs.GET;
 import jakarta.ws.rs.POST;
+import jakarta.ws.rs.PUT;
 import jakarta.ws.rs.Path;
 import jakarta.ws.rs.PathParam;
 import jakarta.ws.rs.Produces;
@@ -70,5 +71,17 @@ public class PreparationsResource {
     @Operation(operationId = "lirePreparation", summary = "Une Préparation de l'enseignant connecté")
     public PreparationDto lire(@PathParam("id") UUID id) {
         return PreparationDto.de(preparations.lire(id));
+    }
+
+    @PUT
+    @Path("/{id}/reglages")
+    @Consumes(MediaType.APPLICATION_JSON)
+    @Operation(operationId = "reglerPreparation",
+            summary = "Remplacer le Module, le Thème par défaut et le Temps passé d'une Préparation de l'enseignant connecté")
+    public PreparationDto regler(@PathParam("id") UUID id, @RequestBody(required = true) ReglagesPreparationDto reglages) {
+        if (reglages == null) {
+            throw new ErreurMetier(400, "requete.invalide", "Le corps de la requête est obligatoire");
+        }
+        return PreparationDto.de(preparations.regler(id, reglages.enCommande()));
     }
 }

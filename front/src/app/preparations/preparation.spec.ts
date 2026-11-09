@@ -1,26 +1,54 @@
 import { provideHttpClient } from '@angular/common/http';
-import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
+import {
+  HttpTestingController,
+  provideHttpClientTesting,
+  TestRequest,
+} from '@angular/common/http/testing';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { MATERIAL_ANIMATIONS } from '@angular/material/core';
 import { Title } from '@angular/platform-browser';
+import { ModuleDto } from '../api/models/module-dto';
 import { PreparationDto } from '../api/models/preparation-dto';
+import { ThemeDto } from '../api/models/theme-dto';
+import { MESSAGE_RESEAU } from '../commun/erreurs/message-erreur';
 import { provideIcones } from '../commun/icones';
-import { libelleIllustres, Preparation } from './preparation';
+import {
+  heuresEnMinutes,
+  libelleIllustres,
+  MESSAGE_TEMPS_PASSE_INVALIDE,
+  minutesEnHeures,
+  Preparation,
+} from './preparation';
 
 const ID = '0190f0a0-0000-7000-8000-00000000d001';
+const ALBUM = '0190f0a0-0000-7000-8000-00000000a001';
+const MODULE_1 = '0190f0a0-0000-7000-8000-00000000b001';
+const MODULE_2 = '0190f0a0-0000-7000-8000-00000000b002';
+const CUISINE = '0190f0a0-0000-7000-8000-00000000c001';
+const ANIMAUX = '0190f0a0-0000-7000-8000-00000000c002';
+
 const PREPARATION: PreparationDto = {
   id: ID,
-  albumId: '0190f0a0-0000-7000-8000-00000000a001',
+  albumId: ALBUM,
   titreAlbum: 'La Roule Galette',
   section: 'ms',
-  moduleId: '0190f0a0-0000-7000-8000-00000000b001',
+  moduleId: MODULE_1,
   nomModule: 'Module 1',
-  themeDefautId: '0190f0a0-0000-7000-8000-00000000c001',
+  themeDefautId: CUISINE,
   nomThemeDefaut: 'cuisine',
   nombreMots: 0,
   nombreIllustres: 0,
   creeLe: '2026-11-09T10:00:00Z',
 };
+
+const MODULES: ModuleDto[] = [
+  { id: MODULE_1, albumId: ALBUM, nom: 'Module 1', ordre: 1 },
+  { id: MODULE_2, albumId: ALBUM, nom: 'Module 2', ordre: 2 },
+];
+const THEMES: ThemeDto[] = [
+  { id: ANIMAUX, nom: 'animaux' },
+  { id: CUISINE, nom: 'cuisine' },
+];
 
 const AUTRE_ID = '0190f0a0-0000-7000-8000-00000000d002';
 const LOUP: PreparationDto = {
@@ -32,6 +60,13 @@ const LOUP: PreparationDto = {
   nombreIllustres: 0,
   creeLe: '2026-11-08T10:00:00Z',
 };
+
+const MODULE_LOUP = '0190f0a0-0000-7000-8000-00000000b003';
+const MODULES_LOUP: ModuleDto[] = [
+  { id: MODULE_LOUP, albumId: LOUP.albumId, nom: 'Couleurs', ordre: 1 },
+];
+
+const URL_REGLAGES = `/api/preparations/${ID}/reglages`;
 
 describe('Preparation (En-tête)', () => {
   let fixture: ComponentFixture<Preparation>;
@@ -67,61 +102,445 @@ describe('Preparation (En-tête)', () => {
   const texte = (selecteur: string) =>
     racine.querySelector(selecteur)?.textContent?.replace(/\s+/g, ' ').trim();
 
-  it('En-tête : titre de l’Album, Repère de Section, Module, Thème par défaut, « 0 mots, 0 déjà illustrés »', async () => {
+  /** Répond à la lecture de la Préparation, puis aux listes de Modules de son Album et de Thèmes. */
+  async function ouvrir(
+    preparation: PreparationDto = PREPARATION,
+    modules: ModuleDto[] = MODULES,
+    themes: ThemeDto[] = THEMES,
+  ) {
+    serveur.expectOne(`/api/preparations/${preparation.id}`).flush(preparation);
+    await stabiliser();
+    serveur.expectOne(`/api/albums/${preparation.albumId}/modules`).flush(modules);
+    serveur.expectOne('/api/themes').flush(themes);
+    await stabiliser();
+  }
+
+  const champ = (etiquette: string) =>
+    [...racine.querySelectorAll<HTMLElement>('mat-form-field')].find(
+      (element) => element.querySelector('mat-label')?.textContent?.trim() === etiquette,
+    );
+  const valeurListe = (etiquette: string) =>
+    champ(etiquette)?.querySelector('.mat-mdc-select-value')?.textContent?.trim();
+  const champTemps = () =>
+    champ('Temps passé (facultatif)')!.querySelector<HTMLInputElement>('input')!;
+  const bandeau = (classe: string) =>
+    racine.querySelector(`app-bandeau-erreur.${classe} [role="alert"]`)?.textContent?.trim();
+
+  async function choisir(etiquette: string, libelle: string) {
+    champ(etiquette)!.querySelector<HTMLElement>('.mat-mdc-select-trigger')!.click();
+    await stabiliser();
+    [...document.querySelectorAll<HTMLElement>('.cdk-overlay-pane mat-option')]
+      .find((option) => option.textContent?.trim() === libelle)!
+      .click();
+    await stabiliser();
+  }
+
+  async function saisirTemps(saisie: string) {
+    champTemps().focus();
+    champTemps().value = saisie;
+    champTemps().dispatchEvent(new Event('input'));
+    champTemps().dispatchEvent(new Event('blur'));
+    await stabiliser();
+  }
+
+  async function reessayer(classe: string) {
+    [...racine.querySelectorAll<HTMLButtonElement>(`app-bandeau-erreur.${classe} button`)]
+      .find((bouton) => bouton.textContent?.trim() === 'Réessayer')!
+      .click();
+    await stabiliser();
+  }
+
+  function reglage(): TestRequest {
+    const requete = serveur.expectOne(URL_REGLAGES);
+    expect(requete.request.method).toBe('PUT');
+    return requete;
+  }
+
+  it('En-tête : titre de l’Album, Repère de Section, Module, Thème par défaut, compteur, Temps passé', async () => {
     expect(racine.querySelector('app-squelette')).not.toBeNull();
 
-    serveur.expectOne(`/api/preparations/${ID}`).flush(PREPARATION);
-    await stabiliser();
+    await ouvrir({ ...PREPARATION, tempsPasseMinutes: 90 });
 
     expect(texte('h1')).toBe('La Roule Galette');
     expect(texte('app-repere-section')).toBe('Section MS');
-    expect(texte('.entete__module')).toBe('Module 1');
-    expect(texte('.entete__theme')).toBe('Thème par défaut : cuisine');
+    expect(valeurListe('Module')).toBe('Module 1');
+    expect(valeurListe('Thème par défaut')).toBe('cuisine');
     expect(texte('.entete__compteur')).toBe('0 mots, 0 déjà illustrés');
+    expect(champTemps().value).toBe('1,5');
+    expect(
+      champ('Temps passé (facultatif)')!.querySelector('mat-icon')!.getAttribute('svgicon'),
+    ).toBe('horloge');
+    expect(texte('.entete__temps .mat-mdc-form-field-text-suffix')).toBe('h');
     expect(TestBed.inject(Title).getTitle()).toBe('La Roule Galette · corpus-mots');
     expect(racine.querySelector('app-squelette')).toBeNull();
   });
 
-  it('autre identifiant après un premier chargement : la nouvelle Préparation est lue', async () => {
+  it('les listes proposent « Aucun … » puis les Modules dans leur ordre et les Thèmes', async () => {
+    await ouvrir();
+
+    champ('Module')!.querySelector<HTMLElement>('.mat-mdc-select-trigger')!.click();
+    await stabiliser();
+    expect(
+      [...document.querySelectorAll('.cdk-overlay-pane mat-option')].map((o) =>
+        o.textContent?.trim(),
+      ),
+    ).toEqual(['Aucun module', 'Module 1', 'Module 2']);
+  });
+
+  it('chaque champ a une étiquette et se rejoint au clavier', async () => {
+    await ouvrir();
+
+    for (const etiquette of ['Module', 'Thème par défaut']) {
+      const liste = champ(etiquette)!.querySelector<HTMLElement>('mat-select')!;
+      expect(liste.getAttribute('tabindex')).toBe('0');
+      const libelle = liste.getAttribute('aria-labelledby')!.split(' ')[0];
+      expect(racine.querySelector(`#${libelle}`)?.textContent?.trim()).toBe(etiquette);
+    }
+    const temps = champTemps();
+    expect(temps.labels?.[0]?.textContent?.trim()).toBe('Temps passé (facultatif)');
+    expect(temps.getAttribute('inputmode')).toBe('decimal');
+  });
+
+  it('Module choisi : enregistré aussitôt avec les trois valeurs, l’En-tête prend la Préparation renvoyée', async () => {
+    await ouvrir({ ...PREPARATION, tempsPasseMinutes: 60 });
+
+    await choisir('Module', 'Module 2');
+    const requete = reglage();
+    expect(requete.request.body).toEqual({
+      moduleId: MODULE_2,
+      themeDefautId: CUISINE,
+      tempsPasseMinutes: 60,
+    });
+    requete.flush({
+      ...PREPARATION,
+      moduleId: MODULE_2,
+      nomModule: 'Module 2',
+      tempsPasseMinutes: 60,
+    });
+    await stabiliser();
+
+    expect(valeurListe('Module')).toBe('Module 2');
+    expect(racine.querySelector('app-bandeau-erreur')).toBeNull();
+  });
+
+  it('« Aucun thème » : le Thème par défaut est retiré (null)', async () => {
+    await ouvrir();
+
+    await choisir('Thème par défaut', 'Aucun thème');
+    const requete = reglage();
+    expect(requete.request.body).toEqual({
+      moduleId: MODULE_1,
+      themeDefautId: null,
+      tempsPasseMinutes: null,
+    });
+    requete.flush({ ...PREPARATION, themeDefautId: undefined, nomThemeDefaut: undefined });
+    await stabiliser();
+  });
+
+  it('Temps passé : enregistré à la sortie du champ, converti d’heures en minutes, virgule ou point', async () => {
+    await ouvrir();
+
+    await saisirTemps('3,5');
+    let requete = reglage();
+    expect(requete.request.body).toEqual({
+      moduleId: MODULE_1,
+      themeDefautId: CUISINE,
+      tempsPasseMinutes: 210,
+    });
+    requete.flush({ ...PREPARATION, tempsPasseMinutes: 210 });
+    await stabiliser();
+    expect(champTemps().value).toBe('3,5');
+
+    await saisirTemps('0.5');
+    requete = reglage();
+    expect(requete.request.body.tempsPasseMinutes).toBe(30);
+    requete.flush({ ...PREPARATION, tempsPasseMinutes: 30 });
+    await stabiliser();
+
+    await saisirTemps('');
+    requete = reglage();
+    expect(requete.request.body.tempsPasseMinutes).toBeNull();
+    requete.flush(PREPARATION);
+    await stabiliser();
+  });
+
+  it('Temps passé inchangé à la sortie du champ : rien n’est envoyé', async () => {
+    await ouvrir({ ...PREPARATION, tempsPasseMinutes: 90 });
+
+    await saisirTemps('1,5');
+    await saisirTemps('1.50');
+
+    serveur.expectNone(URL_REGLAGES);
+  });
+
+  it.each(['3,2', '101', '-1', 'deux', '1,5h'])(
+    'Temps passé « %s » invalide : rien n’est envoyé, le champ l’explique',
+    async (saisie) => {
+      await ouvrir();
+
+      await saisirTemps(saisie);
+
+      serveur.expectNone(URL_REGLAGES);
+      expect(champTemps().value).toBe(saisie);
+      expect(texte('.entete__temps mat-error')).toBe(MESSAGE_TEMPS_PASSE_INVALIDE);
+      expect(MESSAGE_TEMPS_PASSE_INVALIDE).toBe(
+        "Saisissez un nombre d'heures entre 0 et 100, par demi-heure.",
+      );
+    },
+  );
+
+  it('Temps passé invalide puis Module changé : le Temps passé enregistré est renvoyé', async () => {
+    await ouvrir({ ...PREPARATION, tempsPasseMinutes: 60 });
+
+    await saisirTemps('3,2');
+    await choisir('Module', 'Aucun module');
+
+    const requete = reglage();
+    expect(requete.request.body).toEqual({
+      moduleId: null,
+      themeDefautId: CUISINE,
+      tempsPasseMinutes: 60,
+    });
+    requete.flush({
+      ...PREPARATION,
+      moduleId: undefined,
+      nomModule: undefined,
+      tempsPasseMinutes: 60,
+    });
+    await stabiliser();
+  });
+
+  it('échec du Temps passé : la saisie reste, Bandeau d’erreur, « Réessayer » renvoie la même valeur', async () => {
+    await ouvrir();
+
+    await saisirTemps('2');
+    reglage().error(new ProgressEvent('error'));
+    await stabiliser();
+
+    expect(champTemps().value).toBe('2');
+    expect(bandeau('erreur-enregistrement')).toBe(MESSAGE_RESEAU);
+    expect(texte('h1')).toBe('La Roule Galette');
+
+    await reessayer('erreur-enregistrement');
+    const requete = reglage();
+    expect(requete.request.body).toEqual({
+      moduleId: MODULE_1,
+      themeDefautId: CUISINE,
+      tempsPasseMinutes: 120,
+    });
+    requete.flush({ ...PREPARATION, tempsPasseMinutes: 120 });
+    await stabiliser();
+
+    expect(racine.querySelector('app-bandeau-erreur')).toBeNull();
+    expect(champTemps().value).toBe('2');
+  });
+
+  it('échec du Module : le choix reste affiché, « Réessayer » le renvoie', async () => {
+    await ouvrir();
+
+    await choisir('Module', 'Module 2');
+    reglage().flush(
+      { status: 400, code: 'preparation.module_invalide' },
+      { status: 400, statusText: 'Bad Request' },
+    );
+    await stabiliser();
+
+    expect(valeurListe('Module')).toBe('Module 2');
+    expect(bandeau('erreur-enregistrement')).toBe(
+      "Ce module n'appartient plus à l'album. Choisissez-en un autre.",
+    );
+
+    await reessayer('erreur-enregistrement');
+    const requete = reglage();
+    expect(requete.request.body.moduleId).toBe(MODULE_2);
+    requete.flush({ ...PREPARATION, moduleId: MODULE_2, nomModule: 'Module 2' });
+    await stabiliser();
+    expect(racine.querySelector('app-bandeau-erreur')).toBeNull();
+  });
+
+  it('échec du Thème par défaut : le choix reste affiché, « Réessayer » le renvoie', async () => {
+    await ouvrir();
+
+    await choisir('Thème par défaut', 'animaux');
+    reglage().error(new ProgressEvent('error'));
+    await stabiliser();
+
+    expect(valeurListe('Thème par défaut')).toBe('animaux');
+    expect(bandeau('erreur-enregistrement')).toBe(MESSAGE_RESEAU);
+
+    await reessayer('erreur-enregistrement');
+    const requete = reglage();
+    expect(requete.request.body.themeDefautId).toBe(ANIMAUX);
+    requete.flush({ ...PREPARATION, themeDefautId: ANIMAUX, nomThemeDefaut: 'animaux' });
+    await stabiliser();
+  });
+
+  it('un enregistrement à la fois : un changement pendant l’envoi part ensuite, avec toutes les valeurs', async () => {
+    await ouvrir();
+
+    await choisir('Module', 'Module 2');
+    const premier = reglage();
+    await saisirTemps('1');
+    serveur.expectNone(URL_REGLAGES);
+
+    premier.flush({ ...PREPARATION, moduleId: MODULE_2, nomModule: 'Module 2' });
+    await stabiliser();
+    const second = reglage();
+    expect(second.request.body).toEqual({
+      moduleId: MODULE_2,
+      themeDefautId: CUISINE,
+      tempsPasseMinutes: 60,
+    });
+    second.flush({
+      ...PREPARATION,
+      moduleId: MODULE_2,
+      nomModule: 'Module 2',
+      tempsPasseMinutes: 60,
+    });
+    await stabiliser();
+  });
+
+  it('listes vides : ni Module ni Thème par défaut, le Temps passé reste', async () => {
+    await ouvrir(
+      {
+        ...PREPARATION,
+        section: 'ps',
+        moduleId: undefined,
+        nomModule: undefined,
+        themeDefautId: undefined,
+        nomThemeDefaut: undefined,
+      },
+      [],
+      [],
+    );
+
+    expect(texte('app-repere-section')).toBe('Section PS');
+    expect(champ('Module')).toBeUndefined();
+    expect(champ('Thème par défaut')).toBeUndefined();
+    expect(racine.querySelector('.entete__nom-module')).toBeNull();
+    expect(racine.querySelector('.entete__nom-theme')).toBeNull();
+    expect(champ('Temps passé (facultatif)')).toBeDefined();
+  });
+
+  it('échec des listes : leur propre Bandeau, l’En-tête reste avec ses valeurs, « Réessayer » recharge', async () => {
     serveur.expectOne(`/api/preparations/${ID}`).flush(PREPARATION);
     await stabiliser();
+    serveur.expectOne(`/api/albums/${ALBUM}/modules`).error(new ProgressEvent('error'));
+    serveur.expectOne('/api/themes').flush(THEMES);
+    await stabiliser();
+
+    expect(bandeau('erreur-listes')).toBe(MESSAGE_RESEAU);
+    expect(texte('h1')).toBe('La Roule Galette');
+    expect(texte('.entete__nom-module')).toBe('Module 1');
+    expect(texte('.entete__nom-theme')).toBe('Thème par défaut : cuisine');
+
+    await reessayer('erreur-listes');
+    serveur.expectOne(`/api/albums/${ALBUM}/modules`).flush(MODULES);
+    serveur.expectOne('/api/themes').flush(THEMES);
+    await stabiliser();
+
+    expect(racine.querySelector('app-bandeau-erreur')).toBeNull();
+    expect(valeurListe('Module')).toBe('Module 1');
+  });
+
+  it('autre identifiant après un premier chargement : la nouvelle Préparation est lue', async () => {
+    await ouvrir();
 
     fixture.componentRef.setInput('id', AUTRE_ID);
     await stabiliser();
-    serveur.expectOne(`/api/preparations/${AUTRE_ID}`).flush(LOUP);
+    await ouvrir(LOUP, [], THEMES);
+
+    expect(texte('h1')).toBe(LOUP.titreAlbum);
+    // `null` (« Aucun thème ») : mat-select n'affiche aucune valeur, seulement l'étiquette.
+    expect(valeurListe('Thème par défaut')).toBe('');
+    expect(champ('Module')).toBeUndefined();
+    expect(TestBed.inject(Title).getTitle()).toBe(`${LOUP.titreAlbum} · corpus-mots`);
+  });
+
+  it('un enregistrement de la Préparation quittée, répondu après l’ouverture de la nouvelle, n’écrit rien', async () => {
+    await ouvrir();
+    await choisir('Module', 'Module 2');
+    const enregistrementA = reglage();
+
+    fixture.componentRef.setInput('id', AUTRE_ID);
+    await stabiliser();
+    await ouvrir(LOUP, MODULES_LOUP, THEMES);
+    enregistrementA.flush({ ...PREPARATION, moduleId: MODULE_2, nomModule: 'Module 2' });
     await stabiliser();
 
     expect(texte('h1')).toBe(LOUP.titreAlbum);
-    expect(TestBed.inject(Title).getTitle()).toBe(`${LOUP.titreAlbum} · corpus-mots`);
+    expect(valeurListe('Module')).toBe('');
+    expect(racine.querySelector('app-bandeau-erreur')).toBeNull();
+
+    await choisir('Module', 'Couleurs');
+    const enregistrementB = serveur.expectOne(`/api/preparations/${AUTRE_ID}/reglages`);
+    expect(enregistrementB.request.body).toEqual({
+      moduleId: MODULE_LOUP,
+      themeDefautId: null,
+      tempsPasseMinutes: null,
+    });
+    enregistrementB.flush({ ...LOUP, moduleId: MODULE_LOUP, nomModule: 'Couleurs' });
+    await stabiliser();
+    expect(valeurListe('Module')).toBe('Couleurs');
+  });
+
+  it('les listes de la Préparation quittée, répondues après celles de la nouvelle, n’écrivent rien', async () => {
+    serveur.expectOne(`/api/preparations/${ID}`).flush(PREPARATION);
+    await stabiliser();
+    const modulesA = serveur.expectOne(`/api/albums/${ALBUM}/modules`);
+    const [themesA] = serveur.match('/api/themes');
+
+    fixture.componentRef.setInput('id', AUTRE_ID);
+    await stabiliser();
+    await ouvrir(LOUP, MODULES_LOUP, THEMES);
+    modulesA.flush(MODULES);
+    themesA.flush(THEMES);
+    await stabiliser();
+
+    champ('Module')!.querySelector<HTMLElement>('.mat-mdc-select-trigger')!.click();
+    await stabiliser();
+    expect(
+      [...document.querySelectorAll('.cdk-overlay-pane mat-option')].map((o) =>
+        o.textContent?.trim(),
+      ),
+    ).toEqual(['Aucun module', 'Couleurs']);
+  });
+
+  it('après un échec, quitter le Temps passé inchangé renvoie les valeurs affichées', async () => {
+    await ouvrir({ ...PREPARATION, tempsPasseMinutes: 60 });
+
+    await choisir('Module', 'Module 2');
+    reglage().error(new ProgressEvent('error'));
+    await stabiliser();
+    expect(bandeau('erreur-enregistrement')).toBe(MESSAGE_RESEAU);
+
+    await saisirTemps('1');
+    const requete = reglage();
+    expect(requete.request.body).toEqual({
+      moduleId: MODULE_2,
+      themeDefautId: CUISINE,
+      tempsPasseMinutes: 60,
+    });
+    requete.flush({
+      ...PREPARATION,
+      moduleId: MODULE_2,
+      nomModule: 'Module 2',
+      tempsPasseMinutes: 60,
+    });
+    await stabiliser();
+    expect(racine.querySelector('app-bandeau-erreur')).toBeNull();
   });
 
   it('la réponse d’une Préparation quittée, arrivée après la nouvelle, n’écrit rien', async () => {
     const ancienne = serveur.expectOne(`/api/preparations/${ID}`);
     fixture.componentRef.setInput('id', AUTRE_ID);
     await stabiliser();
-    serveur.expectOne(`/api/preparations/${AUTRE_ID}`).flush(LOUP);
-    await stabiliser();
+    await ouvrir(LOUP, [], []);
     ancienne.flush(PREPARATION);
     await stabiliser();
 
     expect(texte('h1')).toBe(LOUP.titreAlbum);
     expect(TestBed.inject(Title).getTitle()).toBe(`${LOUP.titreAlbum} · corpus-mots`);
-  });
-
-  it('sans Module ni Thème par défaut : ni l’un ni l’autre', async () => {
-    serveur.expectOne(`/api/preparations/${ID}`).flush({
-      ...PREPARATION,
-      section: 'ps',
-      moduleId: undefined,
-      nomModule: undefined,
-      themeDefautId: undefined,
-      nomThemeDefaut: undefined,
-    });
-    await stabiliser();
-
-    expect(texte('app-repere-section')).toBe('Section PS');
-    expect(racine.querySelector('.entete__module')).toBeNull();
-    expect(racine.querySelector('.entete__theme')).toBeNull();
   });
 
   it('Préparation d’un collègue (404) : message traduit, « Réessayer » relit', async () => {
@@ -140,8 +559,8 @@ describe('Preparation (En-tête)', () => {
     [...racine.querySelectorAll<HTMLButtonElement>('app-bandeau-erreur button')]
       .find((bouton) => bouton.textContent?.trim() === 'Réessayer')!
       .click();
-    serveur.expectOne(`/api/preparations/${ID}`).flush(PREPARATION);
     await stabiliser();
+    await ouvrir();
 
     expect(racine.querySelector('app-bandeau-erreur')).toBeNull();
     expect(texte('h1')).toBe('La Roule Galette');
@@ -155,5 +574,39 @@ describe('Libellés', () => {
       '1 déjà illustré',
       '3 déjà illustrés',
     ]);
+  });
+});
+
+describe('Temps passé', () => {
+  it.each([
+    ['3,5', 210],
+    ['3.5', 210],
+    [' 1 ', 60],
+    ['0', 0],
+    ['0,5', 30],
+    ['100', 6000],
+    ['', null],
+    ['  ', null],
+  ])('« %s » h → %s minutes', (saisie, minutes) => {
+    expect(heuresEnMinutes(saisie)).toBe(minutes);
+  });
+
+  it.each(['3,2', '100,5', '101', '-1', 'abc', '1,5h', '1e1', ',5', '1,'])(
+    '« %s » est refusé',
+    (saisie) => {
+      expect(heuresEnMinutes(saisie)).toBeUndefined();
+    },
+  );
+
+  it.each([
+    [210, '3,5'],
+    [60, '1'],
+    [0, '0'],
+    [6000, '100'],
+    [45, '0,75'],
+    [null, ''],
+    [undefined, ''],
+  ])('%s minutes → « %s » h', (minutes, heures) => {
+    expect(minutesEnHeures(minutes)).toBe(heures);
   });
 });
