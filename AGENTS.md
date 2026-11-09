@@ -11,6 +11,7 @@ Application web gratuite pour les enseignants de maternelle : banque mot-image p
 - Sens des termes du domaine (Mot, Sens, Image, Préparation, verser, Banque…) : Glossaire, §3 de `docs/prd/prd-corpus-mots-2026-10-27/prd.md`.
 - Écrans et comportements : `docs/ux-designs/ux-corpus-mots-2026-10-28/DESIGN.md` et `EXPERIENCE.md`.
 - Stories et critères d'acceptation : `docs/epics/epics-corpus-mots-2026-10-29/epics.md`.
+- Une story qui change un parcours d'exploitation (déploiement, sauvegarde, restauration, comptes, journaux, données conservées) relit et met à jour `deploiement/README.md`, `deploiement/RESTAURATION.md` et le texte de la page Données personnelles (`front/src/app/compte/donnees-personnelles.ts`).
 
 ## Lancer et vérifier
 

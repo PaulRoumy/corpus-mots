@@ -29,7 +29,7 @@
 # - Dev moves story to 'review', then runs code-review (fresh context, different LLM recommended)
 # - Retrospective appends its action items to action_items; the status view surfaces open ones
 generated: 10-30-2026 18:50
-last_updated: 11-05-2026 11:52
+last_updated: 11-09-2026 12:00
 project: corpus-mots
 project_key: NOKEY
 tracking_system: file-system
@@ -103,7 +103,7 @@ action_items:
       StatutEnseignant des signatures de comptes.service, règle ArchUnit service ↛
       persistance (A-1, A-2)"
     owner: "dev (bmad-build), avant la story 2.1"
-    status: open
+    status: done
     ref: "docs/realisation/epic-1-retro-2026-11-05.md"
   - id: "epic-1-retro-item-2-empêcher-keycloak-de-journaliser-l-e-mai"
     epic: 1
@@ -147,7 +147,7 @@ action_items:
     action: "Règle ArchUnit : aucune méthode @Transactional n'appelle Identites, sauf
       sousVerrouAdministrateurs (A-7)"
     owner: "dev, avec l'action 1"
-    status: open
+    status: done
     ref: "docs/realisation/epic-1-retro-2026-11-05.md"
   - id: "epic-1-retro-item-8-rattacher-à-la-story-6-8-en-têtes-de-séc"
     epic: 1
@@ -170,7 +170,7 @@ action_items:
       relit deploiement/README.md, RESTAURATION.md et la page Données personnelles
       (L-2)"
     owner: "Paul, avant l'Epic 2"
-    status: open
+    status: done
     ref: "docs/realisation/epic-1-retro-2026-11-05.md"
   - id: "epic-1-retro-item-11-revue-bmad-review-du-diff-cumulé-en-mili"
     epic: 1
