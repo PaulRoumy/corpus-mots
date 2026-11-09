@@ -40,6 +40,75 @@
   color: var(--mat-sys-on-surface-variant);
 }
 
+// Dernière option de l'autocomplete : « Créer l'album « … » », en primary, séparée des suggestions.
+.nouvelle-preparation__creer {
+  border-top: var(--cm-epaisseur-separateur) solid var(--mat-sys-outline-variant);
+  color: var(--mat-sys-primary);
+  font: var(--cm-typo-label);
+
+  mat-icon {
+    color: var(--mat-sys-primary);
+  }
+}
+
+// Volet « Créer l'album », déplié dans le dialogue à la place du champ Album.
+.nouvelle-preparation__volet {
+  display: flex;
+  flex-direction: column;
+  gap: var(--cm-espace-3);
+  padding: var(--cm-espace-4);
+  border-radius: var(--cm-arrondi-md);
+  background: var(--mat-sys-surface-container);
+}
+
+.nouvelle-preparation__titre-volet {
+  margin: 0;
+  font: var(--cm-typo-title);
+  color: var(--mat-sys-on-surface);
+}
+
+.nouvelle-preparation__proches {
+  display: flex;
+  flex-direction: column;
+  gap: var(--cm-espace-2);
+
+  h4 {
+    margin: 0;
+  }
+
+  ul {
+    display: flex;
+    flex-direction: column;
+    gap: var(--cm-espace-1);
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+}
+
+.nouvelle-preparation__proche {
+  display: flex;
+  align-items: center;
+  gap: var(--cm-espace-3);
+
+  mat-icon {
+    flex: none;
+    color: var(--mat-sys-on-surface-variant);
+  }
+}
+
+.nouvelle-preparation__auteur {
+  display: block;
+  font: var(--cm-typo-body-sm);
+  color: var(--mat-sys-on-surface-variant);
+}
+
+.nouvelle-preparation__actions-volet {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--cm-espace-2);
+}
+
 .nouvelle-preparation__groupe {
   display: flex;
   flex-direction: column;

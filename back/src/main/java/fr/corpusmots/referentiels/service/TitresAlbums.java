@@ -21,12 +21,17 @@ public final class TitresAlbums {
     private TitresAlbums() {
     }
 
+    /** {@code texte} aux espaces réduites et rognées, tel qu'il est enregistré ; chaîne vide pour {@code null}. */
+    public static String nettoyer(String texte) {
+        return texte == null ? "" : ESPACES.matcher(texte).replaceAll(" ").strip();
+    }
+
     /** Forme de recherche de {@code titre} ; chaîne vide pour {@code null}. */
     public static String normaliser(String titre) {
         if (titre == null) {
             return "";
         }
-        String texte = ESPACES.matcher(titre).replaceAll(" ").strip()
+        String texte = nettoyer(titre)
                 .replace('’', '\'')
                 .toLowerCase(Locale.ROOT);
         texte = DIACRITIQUES.matcher(Normalizer.normalize(texte, Normalizer.Form.NFD)).replaceAll("");

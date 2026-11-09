@@ -8,8 +8,8 @@ import jakarta.persistence.EntityManager;
 import java.util.UUID;
 
 /**
- * Albums, Modules et Thèmes des {@code @QuarkusTest}, insérés en SQL (leur création arrive avec la story 2.1,
- * partie 2, et la story 2.2). Chaque méthode s'exécute dans sa propre transaction.
+ * Albums, Modules et Thèmes des {@code @QuarkusTest}, insérés et lus en SQL (la création des Modules et des Thèmes
+ * arrive avec la story 2.2). Chaque méthode s'exécute dans sa propre transaction.
  */
 @ApplicationScoped
 public class ReferentielsDeTest {
@@ -38,6 +38,28 @@ public class ReferentielsDeTest {
                 .setParameter("recherche", TitresAlbums.normaliser(titre))
                 .setParameter("auteur", auteur)
                 .setParameter("createur", CREATEUR)
+                .getSingleResult());
+    }
+
+    /** Nombre d'Albums en base. */
+    public long nombreAlbums() {
+        return QuarkusTransaction.requiringNew().call(() -> ((Number) entityManager
+                .createNativeQuery("select count(*) from album").getSingleResult()).longValue());
+    }
+
+    /** {@code createur_id} de l'Album. */
+    public UUID createur(UUID albumId) {
+        return QuarkusTransaction.requiringNew().call(() -> (UUID) entityManager
+                .createNativeQuery("select createur_id from album where id = :id")
+                .setParameter("id", albumId)
+                .getSingleResult());
+    }
+
+    /** {@code editeur} de l'Album, {@code null} s'il est absent. */
+    public String editeur(UUID albumId) {
+        return QuarkusTransaction.requiringNew().call(() -> (String) entityManager
+                .createNativeQuery("select editeur from album where id = :id")
+                .setParameter("id", albumId)
                 .getSingleResult());
     }
 

@@ -6,6 +6,8 @@ import { MATERIAL_ANIMATIONS } from '@angular/material/core';
 import { provideRouter, Router } from '@angular/router';
 import { AlbumDto } from '../api/models/album-dto';
 import { PreparationDto } from '../api/models/preparation-dto';
+import { ThemeDto } from '../api/models/theme-dto';
+import { MESSAGE_RESEAU } from '../commun/erreurs/message-erreur';
 import { provideIcones } from '../commun/icones';
 import { NouvellePreparation } from './nouvelle-preparation';
 import { DELAI_RECHERCHE_ALBUMS_MS, libelleModules } from './nouvelle-preparation-dialogue';
@@ -83,13 +85,21 @@ describe('Dialogue « Nouvelle préparation »', () => {
   });
 
   /** Ouvre le dialogue et sert la dernière Section et les Thèmes. */
-  async function ouvrir(derniereSection: 'ps' | 'ms' | 'gs' | null = null, themes = [CUISINE]) {
+  async function ouvrir(
+    derniereSection: 'ps' | 'ms' | 'gs' | null = null,
+    themes: ThemeDto[] | 'echec' = [CUISINE],
+  ) {
     declencheur.focus();
     ouverture = TestBed.inject(NouvellePreparation).ouvrir(declencheur);
     await import('./nouvelle-preparation-dialogue');
     await stabiliser();
     serveur.expectOne('/api/preparations/derniere-section').flush({ section: derniereSection });
-    serveur.expectOne('/api/themes').flush(themes);
+    const requeteThemes = serveur.expectOne('/api/themes');
+    if (themes === 'echec') {
+      requeteThemes.error(new ProgressEvent('error'));
+    } else {
+      requeteThemes.flush(themes);
+    }
     await stabiliser();
   }
 
@@ -196,7 +206,7 @@ describe('Dialogue « Nouvelle préparation »', () => {
       .flush({ elements: [ROULE_GALETTE], total: 1 });
     await stabiliser();
 
-    expect(options()).toHaveLength(1);
+    expect(options()).toEqual(['La Roule Galette2 modules', "Créer l'album « roule gal »"]);
     expect(
       option('La Roule Galette').querySelector('.nouvelle-preparation__titre')?.textContent,
     ).toBe('La Roule Galette');
@@ -208,7 +218,7 @@ describe('Dialogue « Nouvelle préparation »', () => {
     serveur.expectOne('/api/albums?recherche=zzz&taille=20').flush({ elements: [], total: 0 });
     await stabiliser();
 
-    expect(options()).toEqual(['Aucun album trouvé']);
+    expect(options()).toEqual(['Aucun album trouvé', "Créer l'album « zzz »"]);
     bouton('Annuler').click();
     await ouverture;
   });
@@ -328,6 +338,447 @@ describe('Dialogue « Nouvelle préparation »', () => {
     expect(dialogue()).toBeNull();
     expect(TestBed.inject(Router).url).toBe('/');
     expect(document.activeElement).toBe(declencheur);
+  });
+
+  // Story 2.1, partie 2 : « Créer l'album » et titres proches.
+
+  const LA_MOUFLE: AlbumDto = {
+    id: '0190f0a0-0000-7000-8000-00000000a002',
+    titre: 'La Moufle',
+    auteur: 'Jan Brett',
+    editeur: "L'école des loisirs",
+    nombreModules: 0,
+  };
+
+  const volet = () => dialogue()!.querySelector<HTMLElement>('.nouvelle-preparation__volet');
+  const boutonVolet = (libelle: string) =>
+    [...volet()!.querySelectorAll<HTMLButtonElement>('button')].find(
+      (element) => element.textContent?.trim() === libelle,
+    )!;
+  /** Bouton des actions du dialogue (hors volet). */
+  const boutonDialogue = (libelle: string) =>
+    [...document.querySelectorAll<HTMLButtonElement>('mat-dialog-actions button')].find(
+      (element) => element.textContent?.trim() === libelle,
+    )!;
+  const champ = (etiquette: string) =>
+    [...dialogue()!.querySelectorAll('mat-form-field')]
+      .find((element) => element.querySelector('mat-label')?.textContent?.trim() === etiquette)!
+      .querySelector<HTMLInputElement>('input')!;
+  const proches = () =>
+    [
+      ...volet()!.querySelectorAll('.nouvelle-preparation__proche .nouvelle-preparation__titre'),
+    ].map((element) => element.textContent?.replace(/\s+/g, ' ').trim());
+  const bandeau = (source: string) =>
+    dialogue()!.querySelector<HTMLElement>(`.nouvelle-preparation__erreur--${source}`);
+  const messageBandeau = (source: string) =>
+    bandeau(source)?.querySelector('[role="alert"]')?.textContent?.trim();
+  const reessayer = async (source: string) => {
+    [...bandeau(source)!.querySelectorAll<HTMLButtonElement>('button')]
+      .find((element) => element.textContent?.trim() === 'Réessayer')!
+      .click();
+    await stabiliser();
+  };
+
+  async function saisir(element: HTMLInputElement, texte: string) {
+    element.value = texte;
+    element.dispatchEvent(new Event('input'));
+    await stabiliser();
+  }
+
+  const urlProches = (titre: string) =>
+    `/api/albums/titres-proches?titre=${encodeURIComponent(titre)}`;
+
+  /** Tape `texte`, sert la recherche (sans résultat par défaut) et choisit « Créer l'album « texte » ». */
+  async function ouvrirVolet(texte: string, trouves: AlbumDto[] = []) {
+    await taper(texte);
+    serveur
+      .expectOne(`/api/albums?recherche=${encodeURIComponent(texte)}&taille=20`)
+      .flush({ elements: trouves, total: trouves.length });
+    await stabiliser();
+    option("Créer l'album").click();
+    await stabiliser();
+  }
+
+  it('« Créer l’album » : dernière option, après « Aucun album trouvé », avec le pictogramme plus', async () => {
+    await ouvrir();
+    await taper('la moufle');
+    serveur
+      .expectOne('/api/albums?recherche=la%20moufle&taille=20')
+      .flush({ elements: [], total: 0 });
+    await stabiliser();
+
+    expect(options()).toEqual(['Aucun album trouvé', "Créer l'album « la moufle »"]);
+    const creer = option("Créer l'album");
+    expect(creer.classList).toContain('nouvelle-preparation__creer');
+    expect(creer.querySelector('mat-icon')?.getAttribute('data-mat-icon-name')).toBe('plus');
+    bouton('Annuler').click();
+    await ouverture;
+  });
+
+  it('« Créer l’album » est proposé dès 2 caractères, avant même la réponse de la recherche', async () => {
+    await ouvrir();
+    champAlbum().focus();
+    await saisir(champAlbum(), 'mo');
+
+    expect(options()).toEqual(["Créer l'album « mo »"]);
+    await attendre(DELAI_RECHERCHE_ALBUMS_MS + 50);
+    serveur.expectOne('/api/albums?recherche=mo&taille=20').flush({ elements: [], total: 0 });
+    await stabiliser();
+    bouton('Annuler').click();
+    await ouverture;
+  });
+
+  it('le volet s’ouvre dans le dialogue, Titre prérempli et focus dans le Titre', async () => {
+    await ouvrir('ms');
+    await ouvrirVolet('La Moufle');
+    serveur.expectOne(urlProches('La Moufle')).flush([]);
+    await stabiliser();
+
+    expect(document.querySelectorAll('mat-dialog-container')).toHaveLength(1);
+    expect(volet()?.querySelector('h3')?.textContent?.trim()).toBe("Créer l'album");
+    expect(etiquettes()).toEqual([
+      'Titre',
+      'Auteur',
+      'Éditeur (facultatif)',
+      'Thème par défaut (facultatif)',
+    ]);
+    expect(champ('Titre').value).toBe('La Moufle');
+    expect(document.activeElement).toBe(champ('Titre'));
+    expect(volet()!.textContent).not.toContain('Albums au titre proche');
+    // Titre seul : « Créer l'album » attend l'auteur ; « Créer » reste désactivé, aucun Album n'étant choisi.
+    expect(boutonVolet("Créer l'album").disabled).toBe(true);
+    expect(bouton('Créer').disabled).toBe(true);
+    await saisir(champ('Auteur'), 'Jan Brett');
+    expect(boutonVolet("Créer l'album").disabled).toBe(false);
+    await saisir(champ('Titre'), '  ');
+    expect(boutonVolet("Créer l'album").disabled).toBe(true);
+    await attendre(DELAI_RECHERCHE_ALBUMS_MS + 50);
+    await stabiliser();
+    boutonVolet('Annuler').click();
+    await stabiliser();
+    bouton('Annuler').click();
+    await ouverture;
+  });
+
+  it('titres proches : listés sous « Albums au titre proche », rechargés quand le titre change', async () => {
+    await ouvrir();
+    await ouvrirVolet('La roule galette');
+    serveur.expectOne(urlProches('La roule galette')).flush([ROULE_GALETTE]);
+    await stabiliser();
+
+    expect(volet()!.querySelector('h4')?.textContent?.trim()).toBe('Albums au titre proche');
+    expect(proches()).toEqual(['La Roule Galette Natha Caputo']);
+
+    await saisir(champ('Titre'), 'La roule galette 2');
+    await attendre(DELAI_RECHERCHE_ALBUMS_MS + 50);
+    await stabiliser();
+    serveur.expectOne(urlProches('La roule galette 2')).flush([]);
+    await stabiliser();
+
+    expect(volet()!.textContent).not.toContain('Albums au titre proche');
+    boutonVolet('Annuler').click();
+    await stabiliser();
+    bouton('Annuler').click();
+    await ouverture;
+  });
+
+  it('« Choisir cet album » sélectionne l’Album proche sans rien créer', async () => {
+    await ouvrir('ms');
+    await ouvrirVolet('La roule galette');
+    serveur.expectOne(urlProches('La roule galette')).flush([ROULE_GALETTE]);
+    await stabiliser();
+
+    boutonVolet('Choisir cet album').click();
+    await stabiliser();
+    serveur.expectOne(`/api/albums/${ROULE_GALETTE.id}/modules`).flush(MODULES);
+    await stabiliser();
+
+    serveur.expectNone({ method: 'POST', url: '/api/albums' });
+    expect(volet()).toBeNull();
+    expect(champAlbum().value).toBe('La Roule Galette');
+    expect(document.activeElement).toBe(champAlbum());
+    expect(etiquettes()).toContain('Module (facultatif)');
+    expect(bouton('Créer').disabled).toBe(false);
+    bouton('Annuler').click();
+    await ouverture;
+  });
+
+  it('« Créer l’album » crée l’Album, le choisit, puis la Préparation se crée avec lui', async () => {
+    await ouvrir('gs');
+    await ouvrirVolet('La Moufle');
+    serveur.expectOne(urlProches('La Moufle')).flush([ROULE_GALETTE]);
+    await stabiliser();
+    await saisir(champ('Auteur'), ' Jan Brett ');
+    await saisir(champ('Éditeur (facultatif)'), "L'école des loisirs");
+
+    boutonVolet("Créer l'album").click();
+    await stabiliser();
+    const creation = serveur.expectOne({ method: 'POST', url: '/api/albums' });
+    expect(boutonVolet("Créer l'album").disabled).toBe(true);
+    // Pendant la création, ni « Annuler », ni « Choisir cet album », ni Échap.
+    expect(boutonVolet('Annuler').disabled).toBe(true);
+    expect(boutonDialogue('Annuler').disabled).toBe(true);
+    expect(boutonVolet('Choisir cet album').disabled).toBe(true);
+    const echap = new KeyboardEvent('keydown', { key: 'Escape', bubbles: true });
+    Object.defineProperty(echap, 'keyCode', { get: () => 27 });
+    dialogue()!.dispatchEvent(echap);
+    await stabiliser();
+    expect(dialogue()).not.toBeNull();
+    expect(volet()).not.toBeNull();
+    expect(creation.request.body).toEqual({
+      titre: 'La Moufle',
+      auteur: 'Jan Brett',
+      editeur: "L'école des loisirs",
+    });
+    creation.flush(LA_MOUFLE, { status: 201, statusText: 'Created' });
+    await stabiliser();
+    serveur.expectOne(`/api/albums/${LA_MOUFLE.id}/modules`).flush([]);
+    await stabiliser();
+
+    expect(volet()).toBeNull();
+    expect(champAlbum().value).toBe('La Moufle');
+    expect(document.activeElement).toBe(champAlbum());
+    expect(bouton('Créer').disabled).toBe(false);
+    bouton('Créer').click();
+    const preparation = serveur.expectOne({ method: 'POST', url: '/api/preparations' });
+    expect(preparation.request.body).toEqual({ albumId: LA_MOUFLE.id, section: 'gs' });
+    preparation.flush({ ...CREEE, albumId: LA_MOUFLE.id, titreAlbum: LA_MOUFLE.titre });
+    await ouverture;
+
+    expect(TestBed.inject(Router).url).toBe(`/preparations/${CREEE.id}`);
+  });
+
+  it('Album déjà existant (409) : message traduit dans le volet et titres proches rechargés', async () => {
+    await ouvrir();
+    await ouvrirVolet('LA MOUFLE');
+    serveur.expectOne(urlProches('LA MOUFLE')).flush([]);
+    await stabiliser();
+    await saisir(champ('Auteur'), 'jan brett');
+
+    boutonVolet("Créer l'album").click();
+    await stabiliser();
+    serveur
+      .expectOne({ method: 'POST', url: '/api/albums' })
+      .flush({ status: 409, code: 'album.deja_existant' }, { status: 409, statusText: 'Conflict' });
+    await stabiliser();
+    serveur.expectOne(urlProches('LA MOUFLE')).flush([LA_MOUFLE]);
+    await stabiliser();
+
+    expect(
+      volet()!
+        .querySelector('.nouvelle-preparation__erreur--album [role="alert"]')
+        ?.textContent?.trim(),
+    ).toBe('Cet album existe déjà. Choisissez-le dans la liste des albums au titre proche.');
+    expect(proches()).toEqual(['La Moufle Jan Brett']);
+    expect(bandeau('creation')).toBeNull();
+
+    // Un doublon échouerait à l'identique : « Réessayer » n'envoie rien et efface le message.
+    await reessayer('album');
+    serveur.expectNone({ method: 'POST', url: '/api/albums' });
+    expect(bandeau('album')).toBeNull();
+    boutonVolet('Annuler').click();
+    await stabiliser();
+    bouton('Annuler').click();
+    await ouverture;
+  });
+
+  it('échec réseau de la création d’Album : message traduit, « Réessayer » renvoie la même création', async () => {
+    await ouvrir();
+    await ouvrirVolet('La Moufle');
+    serveur.expectOne(urlProches('La Moufle')).flush([]);
+    await stabiliser();
+    await saisir(champ('Auteur'), 'Jan Brett');
+
+    boutonVolet("Créer l'album").click();
+    await stabiliser();
+    const corps = { titre: 'La Moufle', auteur: 'Jan Brett' };
+    const creation = serveur.expectOne({ method: 'POST', url: '/api/albums' });
+    expect(creation.request.body).toEqual(corps);
+    creation.error(new ProgressEvent('error'));
+    await stabiliser();
+
+    expect(messageBandeau('album')).toBe(MESSAGE_RESEAU);
+    serveur.expectNone((requete) => requete.url.startsWith('/api/albums/titres-proches'));
+    await reessayer('album');
+    const nouvelEssai = serveur.expectOne({ method: 'POST', url: '/api/albums' });
+    expect(nouvelEssai.request.body).toEqual(corps);
+    nouvelEssai.flush(LA_MOUFLE, { status: 201, statusText: 'Created' });
+    await stabiliser();
+    serveur.expectOne(`/api/albums/${LA_MOUFLE.id}/modules`).flush([]);
+    await stabiliser();
+
+    expect(volet()).toBeNull();
+    expect(champAlbum().value).toBe('La Moufle');
+    bouton('Annuler').click();
+    await ouverture;
+  });
+
+  it('échec des titres proches : message traduit dans le volet, « Réessayer » redemande le même titre', async () => {
+    await ouvrir();
+    await ouvrirVolet('La Moufle');
+    serveur.expectOne(urlProches('La Moufle')).error(new ProgressEvent('error'));
+    await stabiliser();
+
+    expect(messageBandeau('titres-proches')).toBe(MESSAGE_RESEAU);
+    await reessayer('titres-proches');
+    serveur.expectOne(urlProches('La Moufle')).flush([LA_MOUFLE]);
+    await stabiliser();
+
+    expect(bandeau('titres-proches')).toBeNull();
+    expect(proches()).toEqual(['La Moufle Jan Brett']);
+    boutonVolet('Annuler').click();
+    await stabiliser();
+    bouton('Annuler').click();
+    await ouverture;
+  });
+
+  it('« Annuler » du volet : rien n’est créé, le volet se replie, le focus revient au champ Album', async () => {
+    await ouvrir();
+    await ouvrirVolet('La Moufle');
+    serveur.expectOne(urlProches('La Moufle')).flush([]);
+    await stabiliser();
+    await saisir(champ('Auteur'), 'Jan Brett');
+
+    boutonVolet('Annuler').click();
+    await stabiliser();
+
+    serveur.expectNone({ method: 'POST', url: '/api/albums' });
+    expect(volet()).toBeNull();
+    expect(champAlbum().value).toBe('La Moufle');
+    expect(document.activeElement).toBe(champAlbum());
+    expect(bouton('Créer').disabled).toBe(true);
+    bouton('Annuler').click();
+    await ouverture;
+  });
+
+  // Erreurs par source (report de la revue de la partie 1).
+
+  it('échec de la recherche : message traduit, « Réessayer » relance la même recherche', async () => {
+    await ouvrir();
+    await taper('roule');
+    serveur.expectOne('/api/albums?recherche=roule&taille=20').error(new ProgressEvent('error'));
+    await stabiliser();
+
+    expect(messageBandeau('recherche')).toBe(MESSAGE_RESEAU);
+    await reessayer('recherche');
+    serveur
+      .expectOne('/api/albums?recherche=roule&taille=20')
+      .flush({ elements: [ROULE_GALETTE], total: 1 });
+    await stabiliser();
+
+    expect(bandeau('recherche')).toBeNull();
+    bouton('Annuler').click();
+    await ouverture;
+  });
+
+  it('« Réessayer » d’une recherche dont le texte a changé ne relance rien', async () => {
+    await ouvrir();
+    await taper('roule');
+    serveur.expectOne('/api/albums?recherche=roule&taille=20').error(new ProgressEvent('error'));
+    await stabiliser();
+    await taper('r');
+
+    await reessayer('recherche');
+
+    serveur.expectNone((requete) => requete.url.startsWith('/api/albums'));
+    expect(bandeau('recherche')).toBeNull();
+    bouton('Annuler').click();
+    await ouverture;
+  });
+
+  it('échec des Thèmes : message traduit, une recherche réussie ne l’efface pas, « Réessayer » recharge', async () => {
+    await ouvrir(null, 'echec');
+
+    expect(messageBandeau('themes')).toBe(MESSAGE_RESEAU);
+    await taper('roule');
+    serveur
+      .expectOne('/api/albums?recherche=roule&taille=20')
+      .flush({ elements: [ROULE_GALETTE], total: 1 });
+    await stabiliser();
+    expect(messageBandeau('themes')).toBe(MESSAGE_RESEAU);
+
+    await reessayer('themes');
+    serveur.expectOne('/api/themes').flush([CUISINE]);
+    await stabiliser();
+
+    expect(bandeau('themes')).toBeNull();
+    expect(etiquettes()).toContain('Thème par défaut (facultatif)');
+    bouton('Annuler').click();
+    await ouverture;
+  });
+
+  it('échec des Modules : message traduit, « Réessayer » recharge les Modules du même Album', async () => {
+    await ouvrir();
+    await taper('la roule');
+    serveur
+      .expectOne('/api/albums?recherche=la%20roule&taille=20')
+      .flush({ elements: [ROULE_GALETTE], total: 1 });
+    await stabiliser();
+    option('La Roule Galette').click();
+    await stabiliser();
+    serveur.expectOne(`/api/albums/${ROULE_GALETTE.id}/modules`).error(new ProgressEvent('error'));
+    await stabiliser();
+
+    expect(messageBandeau('modules')).toBe(MESSAGE_RESEAU);
+    await reessayer('modules');
+    serveur.expectOne(`/api/albums/${ROULE_GALETTE.id}/modules`).flush(MODULES);
+    await stabiliser();
+
+    expect(bandeau('modules')).toBeNull();
+    expect(etiquettes()).toContain('Module (facultatif)');
+    bouton('Annuler').click();
+    await ouverture;
+  });
+
+  it('« Réessayer » des Modules après avoir quitté l’Album ne charge rien', async () => {
+    await ouvrir();
+    await taper('la roule');
+    serveur
+      .expectOne('/api/albums?recherche=la%20roule&taille=20')
+      .flush({ elements: [ROULE_GALETTE], total: 1 });
+    await stabiliser();
+    option('La Roule Galette').click();
+    await stabiliser();
+    serveur.expectOne(`/api/albums/${ROULE_GALETTE.id}/modules`).error(new ProgressEvent('error'));
+    await stabiliser();
+    await taper('loup');
+    serveur.expectOne('/api/albums?recherche=loup&taille=20').flush({ elements: [], total: 0 });
+    await stabiliser();
+
+    await reessayer('modules');
+
+    serveur.expectNone(`/api/albums/${ROULE_GALETTE.id}/modules`);
+    expect(bandeau('modules')).toBeNull();
+    bouton('Annuler').click();
+    await ouverture;
+  });
+
+  it('choisir un autre Album efface l’erreur des Modules du précédent', async () => {
+    await ouvrir();
+    await taper('la roule');
+    serveur
+      .expectOne('/api/albums?recherche=la%20roule&taille=20')
+      .flush({ elements: [ROULE_GALETTE], total: 1 });
+    await stabiliser();
+    option('La Roule Galette').click();
+    await stabiliser();
+    serveur.expectOne(`/api/albums/${ROULE_GALETTE.id}/modules`).error(new ProgressEvent('error'));
+    await stabiliser();
+    expect(bandeau('modules')).not.toBeNull();
+
+    await taper('moufle');
+    serveur
+      .expectOne('/api/albums?recherche=moufle&taille=20')
+      .flush({ elements: [LA_MOUFLE], total: 1 });
+    await stabiliser();
+    option('La Moufle').click();
+    await stabiliser();
+    serveur.expectOne(`/api/albums/${LA_MOUFLE.id}/modules`).flush([]);
+    await stabiliser();
+
+    expect(bandeau('modules')).toBeNull();
+    bouton('Annuler').click();
+    await ouverture;
   });
 
   it('libellé du nombre de Modules', () => {

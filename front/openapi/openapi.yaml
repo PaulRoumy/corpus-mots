@@ -169,6 +169,22 @@ components:
           type: string
           description: "De 1 à 100 caractères, une fois retirés les espaces de dé\
             but et de fin"
+    NouvelAlbumDto:
+      type: object
+      required:
+      - titre
+      - auteur
+      properties:
+        titre:
+          type: string
+          maxLength: 200
+        auteur:
+          type: string
+          maxLength: 200
+        editeur:
+          type: string
+          maxLength: 200
+          description: "Facultatif ; vide ou absent, l'Album n'a pas d'éditeur"
     NouvellePreparationDto:
       type: object
       required:
@@ -322,6 +338,49 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/PageAlbumsDto"
+      tags:
+      - Albums Resource
+    post:
+      summary: "Créer un Album, visible aussitôt de toute l'école"
+      operationId: creerAlbum
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/NouvelAlbumDto"
+      responses:
+        "201":
+          description: "Album créé, dont l'enseignant connecté est le créateur"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AlbumDto"
+        "400":
+          description: Bad Request
+      tags:
+      - Albums Resource
+  /api/albums/titres-proches:
+    get:
+      summary: "Au plus 5 Albums de titre identique ou proche, à signaler avant de\
+        \ créer un Album"
+      operationId: listerTitresProches
+      parameters:
+      - description: "Titre de l'Album à créer, sans tenir compte de la casse, des\
+          \ accents ni de l'article ; moins de 2 caractères : aucun résultat"
+        name: titre
+        in: query
+        schema:
+          type: string
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/AlbumDto"
       tags:
       - Albums Resource
   /api/albums/{id}/modules:

@@ -12,6 +12,9 @@ public class AlbumRepository implements PanacheRepositoryBase<Album, UUID> {
     /** Seuil de similarité trigramme ({@code pg_trgm}) à partir duquel un titre « ressemble » à la recherche. */
     static final double SEUIL_SIMILARITE = 0.3;
 
+    /** Seuil de similarité trigramme à partir duquel un titre est « proche » d'un titre à créer. */
+    static final double SEUIL_PROCHE = 0.4;
+
     private static final String CORRESPONDANCE = " from album a"
             + " where a.titre_recherche like :motif escape '!' or similarity(a.titre_recherche, :texte) >= :seuil";
 
@@ -34,6 +37,34 @@ public class AlbumRepository implements PanacheRepositoryBase<Album, UUID> {
                 .setMaxResults(taille)
                 .getResultList();
         return lignes.stream().map(AlbumRepository::album).toList();
+    }
+
+    /** Identifiant d'un nouvel Album, tiré par PostgreSQL ({@code uuidv7()}). */
+    public UUID nouvelIdentifiant() {
+        return (UUID) getEntityManager().createNativeQuery("select uuidv7()").getSingleResult();
+    }
+
+    /**
+     * Au plus {@code limite} Albums de titre normalisé égal à {@code texte} ou proche de lui (similarité trigramme
+     * d'au moins {@value #SEUIL_PROCHE}), du plus proche au moins proche, puis par titre. {@code texte} est déjà
+     * normalisé.
+     */
+    public List<AlbumTrouve> proches(String texte, int limite) {
+        @SuppressWarnings("unchecked")
+        List<Object[]> lignes = getEntityManager()
+                .createNativeQuery(COLONNES + " from album a"
+                        + " where a.titre_recherche = :texte or similarity(a.titre_recherche, :texte) >= :seuil"
+                        + " order by similarity(a.titre_recherche, :texte) desc, a.titre, a.id")
+                .setParameter("texte", texte)
+                .setParameter("seuil", SEUIL_PROCHE)
+                .setMaxResults(limite)
+                .getResultList();
+        return lignes.stream().map(AlbumRepository::album).toList();
+    }
+
+    /** Albums dont le titre normalisé est exactement {@code texte}, déjà normalisé. */
+    public List<Album> memeTitre(String texte) {
+        return list("titreRecherche", texte);
     }
 
     /** Nombre total d'Albums que trouve {@link #rechercher}. */

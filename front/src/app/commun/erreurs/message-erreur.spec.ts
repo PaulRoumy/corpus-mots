@@ -40,6 +40,15 @@ describe('messageErreur', () => {
       "Ce module n'appartient plus à l'album. Choisissez-en un autre.",
     ],
     [400, 'preparation.theme_introuvable', "Ce thème n'existe plus. Choisissez-en un autre."],
+    // referentiels.service.ReferentielsService
+    [400, 'album.titre_invalide', 'Saisissez un titre de 1 à 200 caractères.'],
+    [400, 'album.auteur_invalide', 'Saisissez un auteur de 1 à 200 caractères.'],
+    [400, 'album.editeur_invalide', 'Saisissez un éditeur de 200 caractères au plus.'],
+    [
+      409,
+      'album.deja_existant',
+      'Cet album existe déjà. Choisissez-le dans la liste des albums au titre proche.',
+    ],
     [404, 'ressource.introuvable', "Cet élément n'existe plus. Rechargez la page."],
     [400, 'requete.invalide', 'La demande est incomplète. Vérifiez la saisie, puis réessayez.'],
     [

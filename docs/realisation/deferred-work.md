@@ -81,6 +81,11 @@
 - source_spec: `docs/realisation/spec-2-1-creer-une-preparation-pour-un-album.md`
   summary: Story 2.1, partie 2 : « Créer l'album » dans le Dialogue « Nouvelle préparation » (titre, auteur, éditeur facultatif), signalement des titres proches (casse, accents, article, trigramme) avec choix de l'existant, et refus `409 album.deja_existant` d'un Album de même titre et même auteur normalisés (décision de Paul).
   evidence: Découpage de la story 2.1 choisi par Paul (spec d'environ 4 500 tokens) ; la partie 1 livre la Préparation sur un Album existant, la création d'Album s'y ajoute sans la modifier.
+  status: fait (`docs/realisation/spec-2-1-2-creer-un-album.md`).
 - source_spec: `docs/realisation/spec-2-1-creer-une-preparation-pour-un-album.md`
   summary: Dialogue « Nouvelle préparation » : une erreur par source (recherche, Modules, Thèmes, création), réessais liés à l'Album et au texte courants, et tests des chemins d'échec de la recherche, des Modules et des Thèmes.
   evidence: Revue de la story 2.1, partie 1, lignes 9 et 21 du journal de tri. Le signal unique `erreur` est effacé par une recherche réussie, si bien qu'un échec du chargement des Thèmes laisse le champ masqué sans « Réessayer ». Un réessai du chargement des Modules après un changement d'Album affiche les Modules de l'ancien Album. Aucun test ne fait échouer `rechercherAlbums`, `listerModulesDeLAlbum` ni `listerThemes`. À reprendre avec la partie 2, qui retravaille le champ Album.
+  status: fait (`docs/realisation/spec-2-1-2-creer-un-album.md`).
+- source_spec: `docs/realisation/spec-2-1-2-creer-un-album.md`
+  summary: Fixer par des tests le seuil des titres proches (0,4) et leur ordre complet (similarité, puis titre), avec un Album juste sous le seuil.
+  evidence: Revue de la story 2.1, partie 2, ligne 21 du journal de tri : remplacer `SEUIL_PROCHE` par `SEUIL_SIMILARITE` ou retirer le départage par titre ne ferait échouer aucun test. Il faut des données dont la similarité trigramme a été mesurée.
