@@ -1,5 +1,13 @@
 import { BreakpointObserver, Breakpoints } from '@angular/cdk/layout';
-import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
+import {
+  ChangeDetectionStrategy,
+  Component,
+  computed,
+  ElementRef,
+  inject,
+  signal,
+  viewChild,
+} from '@angular/core';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { MatButtonModule } from '@angular/material/button';
 import { MatIconModule } from '@angular/material/icon';
@@ -10,6 +18,7 @@ import { map } from 'rxjs';
 import { Authentification } from '../commun/authentification/authentification';
 import { CompteCourant } from '../commun/compte-courant';
 import { MESSAGE_COMPTE_NON_CHARGE, MESSAGES_PAR_CODE } from '../commun/erreurs/message-erreur';
+import { NouvellePreparation } from '../preparations/nouvelle-preparation';
 
 /**
  * Coquille de l'application (UX-DR-3, 5, 6) : barre supérieure fixe (marque, Champ de recherche, Bouton « + »,
@@ -82,17 +91,23 @@ import { MESSAGE_COMPTE_NON_CHARGE, MESSAGES_PAR_CODE } from '../commun/erreurs/
 
               <span class="coquille__espace"></span>
 
-              <!-- Désactivé tant qu'aucun de ses trois choix n'est livré (Epics 2 et 5) ; reste focalisable. -->
+              <!-- « Ajouter une image » et « Importer des fichiers » s'ajoutent avec les stories 2.5 et 5.x. -->
               <button
+                #plus
                 matButton="filled"
                 class="coquille__plus"
                 type="button"
                 aria-label="Ajouter"
-                [disabled]="true"
-                disabledInteractive
+                [matMenuTriggerFor]="menuAjouter"
               >
                 <mat-icon svgIcon="plus" aria-hidden="true" />
               </button>
+              <mat-menu #menuAjouter="matMenu" xPosition="before">
+                <button mat-menu-item type="button" (click)="ouvrirNouvellePreparation()">
+                  <mat-icon svgIcon="preparation" aria-hidden="true" />
+                  Nouvelle préparation
+                </button>
+              </mat-menu>
 
               <button
                 matIconButton
@@ -181,6 +196,8 @@ export class Coquille {
   protected readonly compteCourant = inject(CompteCourant);
   private readonly authentification = inject(Authentification);
   private readonly router = inject(Router);
+  private readonly nouvellePreparation = inject(NouvellePreparation);
+  private readonly boutonPlus = viewChild('plus', { read: ElementRef<HTMLElement> });
 
   protected readonly messageInactif = MESSAGES_PAR_CODE['compte.inconnu_ou_inactif'];
   protected readonly messageNonCharge = MESSAGE_COMPTE_NON_CHARGE;
@@ -222,6 +239,11 @@ export class Coquille {
   protected allerAuContenu(evenement: Event): void {
     evenement.preventDefault();
     document.getElementById('contenu')?.focus();
+  }
+
+  /** Choix « Nouvelle préparation » du Bouton « + » : le focus revient au « + » quand le dialogue se ferme. */
+  protected ouvrirNouvellePreparation(): void {
+    void this.nouvellePreparation.ouvrir(this.boutonPlus()?.nativeElement);
   }
 
   protected deconnecter(): void {

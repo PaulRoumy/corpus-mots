@@ -12,11 +12,17 @@ import { provideIcones } from './commun/icones';
 const tour = () => new Promise((fin) => setTimeout(fin));
 
 /**
- * Mon compte et les pages « Données personnelles » sont chargées à la demande : les importer d'avance pour que la
- * navigation, donc la coquille et sa requête du compte, ne prennent pas plus de tours qu'une route ordinaire.
+ * Préparations, Mon compte et les pages « Données personnelles » sont chargées à la demande : les importer d'avance
+ * pour que la navigation, donc la coquille et sa requête du compte, ne prennent pas plus de tours qu'une route
+ * ordinaire.
  */
 const precharger = () =>
-  Promise.all([import('./compte/mon-compte'), import('./compte/donnees-personnelles')]);
+  Promise.all([
+    import('./preparations/preparations'),
+    import('./preparations/preparation'),
+    import('./compte/mon-compte'),
+    import('./compte/donnees-personnelles'),
+  ]);
 
 describe('App', () => {
   beforeEach(() => {
@@ -57,14 +63,41 @@ describe('App', () => {
     expect(TestBed.createComponent(App).componentInstance).toBeTruthy();
   });
 
-  it('accueil : la rubrique Préparations, en État vide', async () => {
+  it('accueil : la rubrique Préparations, en État vide avec « Nouvelle préparation »', async () => {
     const page = await ouvrir('/');
+    TestBed.inject(HttpTestingController)
+      .expectOne('/api/preparations?page=0&taille=100')
+      .flush({ elements: [], total: 0 });
+    await tour();
+    await tour();
 
     expect(TestBed.inject(Router).url).toBe('/preparations');
     expect(page.querySelector('h1')?.textContent).toBe('Préparations');
     expect(page.querySelector('app-etat-vide')?.textContent).toContain(
       "Pas encore de préparation. Choisissez un album : les mots déjà illustrés par l'équipe arrivent tout seuls.",
     );
+    expect(page.querySelector('app-etat-vide button')?.textContent?.trim()).toBe(
+      'Nouvelle préparation',
+    );
+  });
+
+  it('/preparations/:id : la route lie l’identifiant et l’En-tête affiche l’Album', async () => {
+    const id = '0190f0a0-0000-7000-8000-00000000d001';
+    const page = await ouvrir(`/preparations/${id}`);
+    TestBed.inject(HttpTestingController).expectOne(`/api/preparations/${id}`).flush({
+      id,
+      albumId: '0190f0a0-0000-7000-8000-00000000a001',
+      titreAlbum: 'La Roule Galette',
+      section: 'ms',
+      nombreMots: 0,
+      nombreIllustres: 0,
+      creeLe: '2026-11-09T10:00:00Z',
+    });
+    await tour();
+    await tour();
+
+    expect(TestBed.inject(Router).url).toBe(`/preparations/${id}`);
+    expect(page.querySelector('h1')?.textContent?.trim()).toBe('La Roule Galette');
   });
 
   it('URL inconnue : retour à l’accueil', async () => {

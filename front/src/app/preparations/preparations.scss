@@ -1,0 +1,63 @@
+// Cartes de Préparation (key-accueil.html › `.cards`, `.prep`).
+.preparations {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(var(--cm-largeur-carte-preparation-min), 1fr));
+  gap: var(--cm-espace-3);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.carte {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  overflow: hidden;
+  border-radius: var(--cm-arrondi-lg);
+  background: var(--mat-sys-surface);
+  box-shadow: var(--cm-elevation-1);
+  color: var(--mat-sys-on-surface);
+  text-decoration: none;
+
+  &:hover {
+    box-shadow: var(--cm-elevation-2);
+  }
+}
+
+// Sans Image encore (story 2.3 et suivantes), la couverture montre le pictogramme de l'Album.
+.carte__couverture {
+  display: grid;
+  place-items: center;
+  height: var(--cm-hauteur-couverture-carte);
+  background: var(--mat-sys-tertiary-container);
+  color: var(--mat-sys-on-tertiary-container);
+
+  mat-icon {
+    width: var(--cm-taille-illustration);
+    height: var(--cm-taille-illustration);
+  }
+}
+
+.carte__corps {
+  display: flex;
+  flex-direction: column;
+  gap: var(--cm-espace-2);
+  padding: var(--cm-espace-3) var(--cm-espace-4) var(--cm-espace-4);
+}
+
+.carte__titre {
+  font: var(--cm-typo-title);
+}
+
+.carte__meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--cm-espace-2);
+}
+
+.carte__module,
+.carte__compteur {
+  font: var(--cm-typo-body-sm);
+  color: var(--mat-sys-on-surface-variant);
+}

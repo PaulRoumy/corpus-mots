@@ -1,0 +1,70 @@
+@use '../commun/repere-section/formes-section';
+
+:host {
+  display: block;
+  width: var(--cm-largeur-dialogue);
+  max-width: 100%;
+}
+
+.nouvelle-preparation {
+  display: flex;
+  flex-direction: column;
+  gap: var(--cm-espace-4);
+}
+
+.nouvelle-preparation__champ {
+  width: 100%;
+}
+
+// Suggestion d'Album (rendue dans la surcouche, mais issue de ce gabarit) : titre, puis « n modules » à droite.
+.nouvelle-preparation__suggestion {
+  display: flex;
+  align-items: center;
+  gap: var(--cm-espace-3);
+  width: 100%;
+
+  mat-icon {
+    flex: none;
+    color: var(--mat-sys-on-surface-variant);
+  }
+}
+
+.nouvelle-preparation__titre {
+  flex: 1;
+  min-width: 0;
+}
+
+.nouvelle-preparation__modules {
+  margin-left: auto;
+  font: var(--cm-typo-body-sm);
+  color: var(--mat-sys-on-surface-variant);
+}
+
+.nouvelle-preparation__groupe {
+  display: flex;
+  flex-direction: column;
+  gap: var(--cm-espace-2);
+}
+
+.nouvelle-preparation__etiquette {
+  font: var(--cm-typo-label-sm);
+  color: var(--mat-sys-on-surface-variant);
+}
+
+.nouvelle-preparation__sections {
+  display: flex;
+  width: 100%;
+
+  mat-button-toggle {
+    flex: 1;
+  }
+}
+
+.nouvelle-preparation__section {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--cm-espace-2);
+  font: var(--cm-typo-label);
+}
+
+@include formes-section.formes;

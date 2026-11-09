@@ -1,0 +1,78 @@
+// En-tête de Préparation (key-preparation.html › `.hero`).
+.entete {
+  display: flex;
+  align-items: center;
+  gap: var(--cm-espace-4);
+  padding: var(--cm-espace-5);
+  border-radius: var(--cm-arrondi-xl);
+  background: var(--mat-sys-surface-container-low);
+}
+
+.entete__couverture {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: var(--cm-largeur-couverture-entete);
+  height: var(--cm-hauteur-couverture-entete);
+  border-radius: var(--cm-arrondi-md);
+  background: var(--mat-sys-tertiary-container);
+  box-shadow: var(--cm-elevation-1);
+  color: var(--mat-sys-on-tertiary-container);
+
+  mat-icon {
+    width: var(--cm-taille-illustration);
+    height: var(--cm-taille-illustration);
+  }
+}
+
+.entete__corps {
+  display: flex;
+  flex-direction: column;
+  gap: var(--cm-espace-2);
+  min-width: 0;
+}
+
+.entete__rubrique {
+  margin: 0;
+  font: var(--cm-typo-label-sm);
+  color: var(--mat-sys-on-surface-variant);
+}
+
+.entete__titre {
+  margin: 0;
+  font: var(--cm-typo-headline);
+}
+
+.entete__meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--cm-espace-2);
+}
+
+.entete__module {
+  font: var(--cm-typo-body-sm);
+  color: var(--mat-sys-on-surface);
+}
+
+// Thème par défaut en étiquette (`.tag` de la maquette) ; le Champ à étiquettes arrive avec la story 2.2.
+.entete__theme {
+  display: inline-flex;
+  align-items: center;
+  padding: var(--cm-espace-1) var(--cm-espace-3);
+  border-radius: var(--cm-arrondi-sm);
+  background: var(--mat-sys-secondary-container);
+  color: var(--mat-sys-on-secondary-container);
+  font: var(--cm-typo-label-sm);
+}
+
+.entete__compteur {
+  margin: 0;
+  font: var(--cm-typo-body-sm);
+  color: var(--mat-sys-on-surface-variant);
+
+  strong {
+    color: var(--mat-sys-on-surface);
+    font-weight: var(--cm-graisse-forte);
+  }
+}

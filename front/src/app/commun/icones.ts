@@ -30,6 +30,9 @@ const TRACES = {
     '<path d="M10.3 4.2 2.6 18a2 2 0 0 0 1.7 3h15.4a2 2 0 0 0 1.7-3L13.7 4.2a2 2 0 0 0-3.4 0z"/>' +
     '<path d="M12 9.5v4M12 17h.01"/>',
   fermer: '<path d="M6 6l12 12M18 6 6 18"/>',
+  // Album (`i-book` de la maquette) : suggestions du Dialogue « Nouvelle préparation », couverture des Cartes.
+  livre:
+    '<path d="M4 5c3-1 6-1 8 1 2-2 5-2 8-1v14c-3-1-6-1-8 1-2-2-5-2-8-1z"/><path d="M12 6v14"/>',
 } as const satisfies Record<string, string>;
 
 /** Nom des pictogrammes enregistrés, pour `<mat-icon svgIcon="…">`. */

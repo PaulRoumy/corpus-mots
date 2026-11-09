@@ -31,6 +31,15 @@ describe('messageErreur', () => {
     [409, 'compte.auto_desactivation', 'Vous ne pouvez pas désactiver votre propre compte.'],
     [400, 'compte.nom_affiche_invalide', 'Saisissez un nom de 1 à 100 caractères.'],
     [409, 'compte.statut_incompatible', 'Ce compte a changé entre-temps. La liste est rechargée.'],
+    // preparations.service.PreparationsService
+    [400, 'preparation.section_invalide', 'Choisissez la section : PS, MS ou GS.'],
+    [400, 'preparation.album_introuvable', "Cet album n'existe plus. Choisissez-en un autre."],
+    [
+      400,
+      'preparation.module_invalide',
+      "Ce module n'appartient plus à l'album. Choisissez-en un autre.",
+    ],
+    [400, 'preparation.theme_introuvable', "Ce thème n'existe plus. Choisissez-en un autre."],
     [404, 'ressource.introuvable', "Cet élément n'existe plus. Rechargez la page."],
     [400, 'requete.invalide', 'La demande est incomplète. Vérifiez la saisie, puis réessayez.'],
     [

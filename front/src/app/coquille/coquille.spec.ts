@@ -55,8 +55,9 @@ describe('Coquille', () => {
     url: string,
     reponse: (requete: TestRequest) => void,
   ): Promise<ComponentFixture<App>> {
-    // Mon compte est chargée à la demande : l'importer d'avance garde à la navigation son nombre de tours habituel.
-    await import('../compte/mon-compte');
+    // Préparations et Mon compte sont chargées à la demande : les importer d'avance garde à la navigation son nombre
+    // de tours habituel.
+    await Promise.all([import('../preparations/preparations'), import('../compte/mon-compte')]);
     const fixture = TestBed.createComponent(App);
     const navigation = TestBed.inject(Router).navigateByUrl(url);
     await tour();
@@ -180,16 +181,44 @@ describe('Coquille', () => {
         'coquille__rubrique--active',
       );
       expect(page(fixture).querySelector('mat-sidenav')?.classList).toContain('mat-drawer-side');
+      TestBed.inject(HttpTestingController)
+        .expectOne('/api/preparations?page=0&taille=100')
+        .flush({ elements: [], total: 0 });
+      await tour();
+      await fixture.whenStable();
       expect(page(fixture).textContent).toContain('Pas encore de préparation.');
       expect(bouton(page(fixture), 'Rubriques')).toBeUndefined();
     });
 
-    it('Bouton « + » visible, désactivé mais focalisable', async () => {
+    it('Bouton « + » : un menu à une entrée, « Nouvelle préparation », qui ouvre le dialogue', async () => {
       const fixture = await ouvrir('/', enCompte(ENSEIGNANTE));
       const plus = bouton(page(fixture), 'Ajouter')!;
+      plus.click();
+      await fixture.whenStable();
 
-      expect(plus.getAttribute('aria-disabled')).toBe('true');
-      expect(plus.hasAttribute('disabled')).toBe(false);
+      expect(plus.getAttribute('aria-expanded')).toBe('true');
+      expect(entreesDuMenu()).toEqual(['Nouvelle préparation']);
+
+      bouton(document, 'Nouvelle préparation')!.click();
+      // Le dialogue est chargé à la demande.
+      await import('../preparations/nouvelle-preparation-dialogue');
+      await tour();
+      await fixture.whenStable();
+
+      expect(document.querySelector('mat-dialog-container h2')?.textContent?.trim()).toBe(
+        'Nouvelle préparation',
+      );
+
+      // « Annuler » : le focus revient au « + », pas à l'entrée de menu retirée du DOM.
+      [...document.querySelectorAll<HTMLButtonElement>('mat-dialog-container button')]
+        .find((element) => element.textContent?.trim() === 'Annuler')!
+        .click();
+      await tour();
+      await fixture.whenStable();
+      await tour();
+
+      expect(document.querySelector('mat-dialog-container')).toBeNull();
+      expect(document.activeElement).toBe(plus);
     });
 
     it('Notifications : « Aucune notification »', async () => {

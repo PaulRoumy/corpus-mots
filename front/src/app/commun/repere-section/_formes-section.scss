@@ -1,0 +1,24 @@
+// Formes des Sections (● PS, ▲ MS, ■ GS), dans la couleur de la Section : Repère de Section et choix de la Section
+// du Dialogue « Nouvelle préparation ». À inclure dans la feuille du composant qui porte `.forme-section`.
+@mixin formes {
+  .forme-section {
+    display: inline-block;
+    flex: none;
+    width: var(--cm-taille-forme-section);
+    height: var(--cm-taille-forme-section);
+  }
+
+  .forme-section--ps {
+    border-radius: var(--cm-arrondi-plein);
+    background: var(--cm-section-ps);
+  }
+
+  .forme-section--ms {
+    clip-path: polygon(50% 0, 100% 100%, 0 100%);
+    background: var(--cm-section-ms);
+  }
+
+  .forme-section--gs {
+    background: var(--cm-section-gs);
+  }
+}

@@ -27,6 +27,10 @@ export const MESSAGES_PAR_CODE: Readonly<Record<string, string>> = {
   'compte.auto_desactivation': 'Vous ne pouvez pas désactiver votre propre compte.',
   'compte.nom_affiche_invalide': 'Saisissez un nom de 1 à 100 caractères.',
   'compte.statut_incompatible': 'Ce compte a changé entre-temps. La liste est rechargée.',
+  'preparation.section_invalide': 'Choisissez la section : PS, MS ou GS.',
+  'preparation.album_introuvable': "Cet album n'existe plus. Choisissez-en un autre.",
+  'preparation.module_invalide': "Ce module n'appartient plus à l'album. Choisissez-en un autre.",
+  'preparation.theme_introuvable': "Ce thème n'existe plus. Choisissez-en un autre.",
   'ressource.introuvable': "Cet élément n'existe plus. Rechargez la page.",
   'requete.invalide': 'La demande est incomplète. Vérifiez la saisie, puis réessayez.',
   'requete.trop_volumineuse':

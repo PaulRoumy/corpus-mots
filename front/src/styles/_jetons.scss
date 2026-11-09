@@ -172,6 +172,17 @@ $typographie-material: (
   --cm-duree-pulsation-squelette: 1.6s;
   --cm-opacite-pulsation-squelette: 0.45;
 
+  // Repère de Section (forme ● ▲ ■ + couleur + libellé, `.sb` de key-accueil.html), Dialogue « Nouvelle préparation »,
+  // Cartes de Préparation de l'accueil et couverture de l'En-tête de Préparation (key-preparation.html, `.hero`).
+  --cm-hauteur-repere-section: 22px;
+  --cm-epaisseur-repere-section: 2px;
+  --cm-taille-forme-section: 9px;
+  --cm-largeur-dialogue: 480px;
+  --cm-largeur-carte-preparation-min: 232px;
+  --cm-hauteur-couverture-carte: 128px;
+  --cm-largeur-couverture-entete: 74px;
+  --cm-hauteur-couverture-entete: 90px;
+
   // Graisse forte (entrée active de la navigation) et plan du lien d'évitement, au-dessus de la coquille
   --cm-graisse-forte: 900;
   --cm-plan-evitement: 2;

@@ -5,7 +5,6 @@ import { PAGE_PUBLIQUE } from './commun/authentification/authentification';
 import { CompteCourant } from './commun/compte-courant';
 import { Coquille } from './coquille/coquille';
 import { Fiches } from './fiches/fiches';
-import { Preparations } from './preparations/preparations';
 
 /** L'Administration n'existe que pour un administrateur (rôle lu par le back dans le jeton) ; sinon, l'accueil. */
 export const administrateurSeulement: CanMatchFn = async () => {
@@ -28,7 +27,17 @@ export const routes: Routes = [
     component: Coquille,
     children: [
       { path: '', pathMatch: 'full', redirectTo: 'preparations' },
-      { path: 'preparations', component: Preparations, title: 'Préparations · corpus-mots' },
+      {
+        path: 'preparations',
+        // Chargée à la demande, comme la page d'une Préparation : Cartes, Repères et Bandeaux hors du paquet initial.
+        loadComponent: () => import('./preparations/preparations').then((m) => m.Preparations),
+        title: 'Préparations · corpus-mots',
+      },
+      {
+        path: 'preparations/:id',
+        loadComponent: () => import('./preparations/preparation').then((m) => m.Preparation),
+        title: 'Préparation · corpus-mots',
+      },
       { path: 'banque', component: Banque, title: 'Banque · corpus-mots' },
       { path: 'fiches', component: Fiches, title: 'Fiches · corpus-mots' },
       {

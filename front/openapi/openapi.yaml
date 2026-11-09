@@ -2,6 +2,66 @@
 openapi: 3.1.0
 components:
   schemas:
+    AlbumDto:
+      type: object
+      required:
+      - id
+      - titre
+      - auteur
+      - nombreModules
+      properties:
+        id:
+          $ref: "#/components/schemas/UUID"
+        titre:
+          type: string
+        auteur:
+          type: string
+        editeur:
+          type: string
+          description: Absent si l'éditeur n'a pas été saisi
+        nombreModules:
+          type: integer
+          format: int64
+    CartePreparationDto:
+      type: object
+      required:
+      - id
+      - albumId
+      - titreAlbum
+      - section
+      - nombreMots
+      - nombreAIllustrer
+      - creeLe
+      properties:
+        id:
+          $ref: "#/components/schemas/UUID"
+        albumId:
+          $ref: "#/components/schemas/UUID"
+        titreAlbum:
+          type: string
+        section:
+          type: string
+          enum:
+          - ps
+          - ms
+          - gs
+        moduleId:
+          description: Absent si aucun Module n'est choisi
+          type: string
+          $ref: "#/components/schemas/UUID"
+        nomModule:
+          type: string
+          description: Absent si aucun Module n'est choisi
+        nombreMots:
+          type: integer
+          format: int32
+        nombreAIllustrer:
+          type: integer
+          format: int32
+          description: Mots sans Image
+        creeLe:
+          type: string
+          $ref: "#/components/schemas/OffsetDateTime"
     CompteDto:
       type: object
       required:
@@ -27,6 +87,20 @@ components:
           - suppression_en_cours
         administrateur:
           type: boolean
+    DerniereSectionDto:
+      type: object
+      required:
+      - section
+      properties:
+        section:
+          type:
+          - string
+          - "null"
+          description: null si l'enseignant n'a encore aucune Préparation
+          enum:
+          - ps
+          - ms
+          - gs
     EnseignantDto:
       type: object
       required:
@@ -52,6 +126,23 @@ components:
       properties:
         email:
           type: string
+    ModuleDto:
+      type: object
+      required:
+      - id
+      - albumId
+      - nom
+      - ordre
+      properties:
+        id:
+          $ref: "#/components/schemas/UUID"
+        albumId:
+          $ref: "#/components/schemas/UUID"
+        nom:
+          type: string
+        ordre:
+          type: integer
+          format: int32
     MonCompteDto:
       type: object
       required:
@@ -78,6 +169,106 @@ components:
           type: string
           description: "De 1 à 100 caractères, une fois retirés les espaces de dé\
             but et de fin"
+    NouvellePreparationDto:
+      type: object
+      required:
+      - albumId
+      - section
+      properties:
+        albumId:
+          $ref: "#/components/schemas/UUID"
+        section:
+          type: string
+          enum:
+          - ps
+          - ms
+          - gs
+        moduleId:
+          description: "Module de l'Album, facultatif"
+          type: string
+          $ref: "#/components/schemas/UUID"
+        themeDefautId:
+          description: "Thème par défaut, facultatif"
+          type: string
+          $ref: "#/components/schemas/UUID"
+    OffsetDateTime:
+      type: string
+      format: date-time
+      examples:
+      - 2022-03-10T12:15:50-04:00
+    PageAlbumsDto:
+      type: object
+      required:
+      - elements
+      - total
+      properties:
+        elements:
+          type: array
+          items:
+            $ref: "#/components/schemas/AlbumDto"
+        total:
+          type: integer
+          format: int64
+    PageCartesPreparationDto:
+      type: object
+      required:
+      - elements
+      - total
+      properties:
+        elements:
+          type: array
+          items:
+            $ref: "#/components/schemas/CartePreparationDto"
+        total:
+          type: integer
+          format: int64
+    PreparationDto:
+      type: object
+      required:
+      - id
+      - albumId
+      - titreAlbum
+      - section
+      - nombreMots
+      - nombreIllustres
+      - creeLe
+      properties:
+        id:
+          $ref: "#/components/schemas/UUID"
+        albumId:
+          $ref: "#/components/schemas/UUID"
+        titreAlbum:
+          type: string
+        section:
+          type: string
+          enum:
+          - ps
+          - ms
+          - gs
+        moduleId:
+          description: Absent si aucun Module n'est choisi
+          type: string
+          $ref: "#/components/schemas/UUID"
+        nomModule:
+          type: string
+          description: Absent si aucun Module n'est choisi
+        themeDefautId:
+          description: Absent si aucun Thème par défaut n'est choisi
+          type: string
+          $ref: "#/components/schemas/UUID"
+        nomThemeDefaut:
+          type: string
+          description: Absent si aucun Thème par défaut n'est choisi
+        nombreMots:
+          type: integer
+          format: int32
+        nombreIllustres:
+          type: integer
+          format: int32
+          description: Mots qui ont une Image
+        creeLe:
+          type: string
+          $ref: "#/components/schemas/OffsetDateTime"
     RoleAdministrateurDto:
       type: object
       required:
@@ -85,11 +276,75 @@ components:
       properties:
         administrateur:
           type: boolean
+    ThemeDto:
+      type: object
+      required:
+      - id
+      - nom
+      properties:
+        id:
+          $ref: "#/components/schemas/UUID"
+        nom:
+          type: string
     UUID:
       type: string
       format: uuid
       pattern: "[a-fA-F0-9]{8}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{12}"
 paths:
+  /api/albums:
+    get:
+      summary: "Albums dont le titre contient le texte cherché ou lui ressemble, du\
+        \ plus proche au moins proche"
+      operationId: rechercherAlbums
+      parameters:
+      - description: "Numéro de page, à partir de 0"
+        name: page
+        in: query
+        schema:
+          type: integer
+          format: int32
+      - description: "Texte cherché, sans tenir compte de la casse, des accents ni\
+          \ de l'article ; moins de 2 caractères : aucun résultat"
+        name: recherche
+        in: query
+        schema:
+          type: string
+      - description: "Taille de la page, 100 au plus (20 par défaut)"
+        name: taille
+        in: query
+        schema:
+          type: integer
+          format: int32
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PageAlbumsDto"
+      tags:
+      - Albums Resource
+  /api/albums/{id}/modules:
+    get:
+      summary: "Modules de l'Album, dans leur ordre"
+      operationId: listerModulesDeLAlbum
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          $ref: "#/components/schemas/UUID"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ModuleDto"
+      tags:
+      - Albums Resource
   /api/comptes:
     get:
       summary: "Comptes de l'équipe, invités d'abord"
@@ -245,6 +500,99 @@ paths:
           description: Bad Request
       tags:
       - Mon Compte Resource
+  /api/preparations:
+    get:
+      summary: "Préparations de l'enseignant connecté, les plus récentes d'abord"
+      operationId: listerMesPreparations
+      parameters:
+      - description: "Numéro de page, à partir de 0"
+        name: page
+        in: query
+        schema:
+          type: integer
+          format: int32
+      - description: "Taille de la page, 100 au plus (20 par défaut)"
+        name: taille
+        in: query
+        schema:
+          type: integer
+          format: int32
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PageCartesPreparationDto"
+      tags:
+      - Preparations Resource
+    post:
+      summary: Créer une Préparation pour un Album existant
+      operationId: creerPreparation
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/NouvellePreparationDto"
+      responses:
+        "201":
+          description: "Préparation créée, propriété de l'enseignant connecté"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PreparationDto"
+        "400":
+          description: Bad Request
+      tags:
+      - Preparations Resource
+  /api/preparations/derniere-section:
+    get:
+      summary: Section de la Préparation la plus récente de l'enseignant connecté
+      operationId: lireDerniereSection
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DerniereSectionDto"
+      tags:
+      - Preparations Resource
+  /api/preparations/{id}:
+    get:
+      summary: Une Préparation de l'enseignant connecté
+      operationId: lirePreparation
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          $ref: "#/components/schemas/UUID"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PreparationDto"
+      tags:
+      - Preparations Resource
+  /api/themes:
+    get:
+      summary: "Thèmes de l'école, par nom"
+      operationId: listerThemes
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ThemeDto"
+      tags:
+      - Themes Resource
 info:
   title: corpus-mots
   version: 1.0.0-SNAPSHOT
