@@ -6,7 +6,7 @@ import java.util.UUID;
  * Enseignant auteur de la requête en cours, lu dans le jeton et jamais dans un paramètre (AD-6). Interface de
  * {@code commun} pour que tout module puisse le connaître sans dépendre de {@code comptes}, qui l'implémente (AD-1).
  *
- * <p>Seul l'identifiant est exposé : le rôle se lit par {@code @RolesAllowed}, le nom par l'annuaire (AD-20).
+ * <p>Seuls l'identifiant et le rôle d'administrateur sont exposés : le nom se lit par l'annuaire (AD-20).
  */
 public interface EnseignantCourant {
 
@@ -21,4 +21,10 @@ public interface EnseignantCourant {
      *         démarrage)
      */
     UUID id();
+
+    /**
+     * Vrai si le jeton porte le rôle {@code admin} : pour qu'un service décide seul d'un droit réservé au créateur et
+     * à l'administrateur. {@code false} dans une requête qui n'est pas authentifiée.
+     */
+    boolean administrateur();
 }

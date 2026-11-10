@@ -10,6 +10,7 @@ import { Title } from '@angular/platform-browser';
 import { ModuleDto } from '../api/models/module-dto';
 import { PreparationDto } from '../api/models/preparation-dto';
 import { ThemeDto } from '../api/models/theme-dto';
+import { CompteCourant } from '../commun/compte-courant';
 import { MESSAGE_RESEAU } from '../commun/erreurs/message-erreur';
 import { provideIcones } from '../commun/icones';
 import {
@@ -41,9 +42,12 @@ const PREPARATION: PreparationDto = {
   creeLe: '2026-11-09T10:00:00Z',
 };
 
+/** Enseignant connecté, créateur de Module 1 ; Module 2 est d'un collègue. */
+const MOI = '0190f0a0-0000-7000-8000-00000000e001';
+const COLLEGUE = '0190f0a0-0000-7000-8000-00000000e002';
 const MODULES: ModuleDto[] = [
-  { id: MODULE_1, albumId: ALBUM, nom: 'Module 1', ordre: 1 },
-  { id: MODULE_2, albumId: ALBUM, nom: 'Module 2', ordre: 2 },
+  { id: MODULE_1, albumId: ALBUM, nom: 'Module 1', ordre: 1, createurId: MOI },
+  { id: MODULE_2, albumId: ALBUM, nom: 'Module 2', ordre: 2, createurId: COLLEGUE },
 ];
 const THEMES: ThemeDto[] = [
   { id: ANIMAUX, nom: 'animaux' },
@@ -184,7 +188,7 @@ describe('Preparation (En-tête)', () => {
       [...document.querySelectorAll('.cdk-overlay-pane mat-option')].map((o) =>
         o.textContent?.trim(),
       ),
-    ).toEqual(['Aucun module', 'Module 1', 'Module 2']);
+    ).toEqual(['Aucun module', 'Module 1', 'Module 2', 'Nouveau module']);
   });
 
   it('chaque champ a une étiquette et se rejoint au clavier', async () => {
@@ -339,16 +343,11 @@ describe('Preparation (En-tête)', () => {
     await ouvrir();
 
     await choisir('Module', 'Module 2');
-    reglage().flush(
-      { status: 400, code: 'preparation.module_invalide' },
-      { status: 400, statusText: 'Bad Request' },
-    );
+    reglage().error(new ProgressEvent('error'));
     await stabiliser();
 
     expect(valeurListe('Module')).toBe('Module 2');
-    expect(bandeau('erreur-enregistrement')).toBe(
-      "Ce module n'appartient plus à l'album. Choisissez-en un autre.",
-    );
+    expect(bandeau('erreur-enregistrement')).toBe(MESSAGE_RESEAU);
 
     await reessayer('erreur-enregistrement');
     const requete = reglage();
@@ -400,7 +399,7 @@ describe('Preparation (En-tête)', () => {
     await stabiliser();
   });
 
-  it('listes vides : ni Module ni Thème par défaut, le Temps passé reste', async () => {
+  it('listes vides : Module avec « Nouveau module » seulement, pas de Thème par défaut, le Temps passé reste', async () => {
     await ouvrir(
       {
         ...PREPARATION,
@@ -415,7 +414,14 @@ describe('Preparation (En-tête)', () => {
     );
 
     expect(texte('app-repere-section')).toBe('Section PS');
-    expect(champ('Module')).toBeUndefined();
+    champ('Module')!.querySelector<HTMLElement>('.mat-mdc-select-trigger')!.click();
+    await stabiliser();
+    expect(
+      [...document.querySelectorAll('.cdk-overlay-pane mat-option')].map((o) =>
+        o.textContent?.trim(),
+      ),
+    ).toEqual(['Aucun module', 'Nouveau module']);
+    expect(racine.querySelector('.entete__actions-module')).toBeNull();
     expect(champ('Thème par défaut')).toBeUndefined();
     expect(racine.querySelector('.entete__nom-module')).toBeNull();
     expect(racine.querySelector('.entete__nom-theme')).toBeNull();
@@ -453,7 +459,8 @@ describe('Preparation (En-tête)', () => {
     expect(texte('h1')).toBe(LOUP.titreAlbum);
     // `null` (« Aucun thème ») : mat-select n'affiche aucune valeur, seulement l'étiquette.
     expect(valeurListe('Thème par défaut')).toBe('');
-    expect(champ('Module')).toBeUndefined();
+    // Album sans Module : la liste reste, avec « Nouveau module ».
+    expect(valeurListe('Module')).toBe('');
     expect(TestBed.inject(Title).getTitle()).toBe(`${LOUP.titreAlbum} · corpus-mots`);
   });
 
@@ -503,7 +510,7 @@ describe('Preparation (En-tête)', () => {
       [...document.querySelectorAll('.cdk-overlay-pane mat-option')].map((o) =>
         o.textContent?.trim(),
       ),
-    ).toEqual(['Aucun module', 'Couleurs']);
+    ).toEqual(['Aucun module', 'Couleurs', 'Nouveau module']);
   });
 
   it('après un échec, quitter le Temps passé inchangé renvoie les valeurs affichées', async () => {
@@ -564,6 +571,446 @@ describe('Preparation (En-tête)', () => {
 
     expect(racine.querySelector('app-bandeau-erreur')).toBeNull();
     expect(texte('h1')).toBe('La Roule Galette');
+  });
+
+  describe('Modules (story 2.2, partie 2)', () => {
+    const URL_MODULES = `/api/albums/${ALBUM}/modules`;
+    const MODULE_3 = '0190f0a0-0000-7000-8000-00000000b009';
+    const SAISONS: ModuleDto = {
+      id: MODULE_3,
+      albumId: ALBUM,
+      nom: 'Les saisons',
+      ordre: 3,
+      createurId: MOI,
+    };
+
+    afterEach(() =>
+      document
+        .querySelectorAll('.cdk-overlay-container')
+        .forEach((surcouche) => surcouche.remove()),
+    );
+
+    /** L'enseignant connecté est `MOI`, administrateur ou non. */
+    function connecter(administrateur = false) {
+      TestBed.inject(CompteCourant).mettreAJour({
+        id: MOI,
+        administrateur,
+        email: 'moi@ecole.fr',
+        nomAffiche: 'Moi',
+      });
+    }
+
+    const champNom = () => racine.querySelector<HTMLInputElement>('app-champ-nom-module input');
+    const etiquetteChampNom = () =>
+      racine.querySelector('app-champ-nom-module mat-label')?.textContent?.trim();
+    const erreurChampNom = () => racine.querySelector('app-champ-nom-module [role="alert"]');
+    const boutonActions = () =>
+      racine.querySelector<HTMLButtonElement>('button[aria-label="Actions du module"]');
+    const listeModule = () => champ('Module')!.querySelector<HTMLElement>('mat-select')!;
+    const boutonDuChamp = (libelle: string) =>
+      [...racine.querySelectorAll<HTMLButtonElement>('app-champ-nom-module button')].find(
+        (bouton) => bouton.textContent?.trim() === libelle,
+      )!;
+    const optionsOuvertes = () =>
+      [...document.querySelectorAll('.cdk-overlay-pane mat-option')].map((option) =>
+        option.textContent?.trim(),
+      );
+
+    async function taperNom(nom: string) {
+      champNom()!.value = nom;
+      champNom()!.dispatchEvent(new Event('input'));
+      await stabiliser();
+    }
+
+    async function touche(key: 'Enter' | 'Escape') {
+      champNom()!.dispatchEvent(new KeyboardEvent('keydown', { key, bubbles: true }));
+      await stabiliser();
+    }
+
+    async function actionDuMenu(libelle: 'Renommer' | 'Supprimer') {
+      boutonActions()!.click();
+      await stabiliser();
+      [...document.querySelectorAll<HTMLElement>('.cdk-overlay-pane [mat-menu-item]')]
+        .find((item) => item.textContent?.trim() === libelle)!
+        .click();
+      await stabiliser();
+    }
+
+    async function repondreConfirmation(bouton: 'confirmer' | 'annuler') {
+      document.querySelector<HTMLButtonElement>(`.dialogue-confirmation__${bouton}`)!.click();
+      await stabiliser();
+    }
+
+    /** Répond à la relecture qui suit une suppression : Préparation sans Module, puis listes. */
+    async function relire(modules: ModuleDto[]) {
+      serveur
+        .expectOne(`/api/preparations/${ID}`)
+        .flush({ ...PREPARATION, moduleId: undefined, nomModule: undefined });
+      await stabiliser();
+      serveur.expectOne(URL_MODULES).flush(modules);
+      serveur.expectOne('/api/themes').flush(THEMES);
+      await stabiliser();
+    }
+
+    it('« Nouveau module », dernière option : champ en ligne étiqueté, qui prend le focus', async () => {
+      await ouvrir();
+
+      await choisir('Module', 'Nouveau module');
+
+      expect(champ('Module')).toBeUndefined();
+      expect(etiquetteChampNom()).toBe('Nom du nouveau module');
+      expect(champNom()!.labels?.[0]?.textContent?.trim()).toBe('Nom du nouveau module');
+      expect(document.activeElement).toBe(champNom());
+      expect(boutonDuChamp('Ajouter').disabled).toBe(true);
+    });
+
+    it('Entrée crée le Module, l’ajoute en fin de liste, le choisit et l’enregistre', async () => {
+      await ouvrir({ ...PREPARATION, tempsPasseMinutes: 60 });
+
+      await choisir('Module', 'Nouveau module');
+      await taperNom('Les saisons');
+      await touche('Enter');
+      const creation = serveur.expectOne(URL_MODULES);
+      expect(creation.request.method).toBe('POST');
+      expect(creation.request.body).toEqual({ nom: 'Les saisons' });
+      creation.flush(SAISONS);
+      await stabiliser();
+
+      const requete = reglage();
+      expect(requete.request.body).toEqual({
+        moduleId: MODULE_3,
+        themeDefautId: CUISINE,
+        tempsPasseMinutes: 60,
+      });
+      requete.flush({
+        ...PREPARATION,
+        moduleId: MODULE_3,
+        nomModule: 'Les saisons',
+        tempsPasseMinutes: 60,
+      });
+      await stabiliser();
+
+      expect(champNom()).toBeNull();
+      expect(valeurListe('Module')).toBe('Les saisons');
+      expect(document.activeElement).toBe(listeModule());
+      listeModule().querySelector<HTMLElement>('.mat-mdc-select-trigger')!.click();
+      await stabiliser();
+      expect(optionsOuvertes()).toEqual([
+        'Aucun module',
+        'Module 1',
+        'Module 2',
+        'Les saisons',
+        'Nouveau module',
+      ]);
+    });
+
+    it('« Ajouter » crée aussi le Module', async () => {
+      await ouvrir();
+
+      await choisir('Module', 'Nouveau module');
+      await taperNom('Les saisons');
+      boutonDuChamp('Ajouter').click();
+      await stabiliser();
+      serveur.expectOne(URL_MODULES).flush(SAISONS);
+      await stabiliser();
+      reglage().flush({ ...PREPARATION, moduleId: MODULE_3, nomModule: 'Les saisons' });
+      await stabiliser();
+
+      expect(valeurListe('Module')).toBe('Les saisons');
+    });
+
+    it('Échap referme le champ sans rien créer, le focus revient à la liste Module', async () => {
+      await ouvrir();
+
+      await choisir('Module', 'Nouveau module');
+      await taperNom('Les saisons');
+      await touche('Escape');
+
+      serveur.expectNone(URL_MODULES);
+      expect(champNom()).toBeNull();
+      expect(valeurListe('Module')).toBe('Module 1');
+      expect(document.activeElement).toBe(listeModule());
+    });
+
+    it('« Annuler » referme le champ sans rien créer', async () => {
+      await ouvrir();
+
+      await choisir('Module', 'Nouveau module');
+      boutonDuChamp('Annuler').click();
+      await stabiliser();
+
+      serveur.expectNone(URL_MODULES);
+      expect(champNom()).toBeNull();
+      expect(valeurListe('Module')).toBe('Module 1');
+    });
+
+    it('échec de la création : message traduit sous le champ, la saisie reste, rien n’est enregistré', async () => {
+      await ouvrir();
+
+      await choisir('Module', 'Nouveau module');
+      await taperNom('module 2');
+      await touche('Enter');
+      serveur
+        .expectOne(URL_MODULES)
+        .flush(
+          { status: 409, code: 'module.deja_existant' },
+          { status: 409, statusText: 'Conflict' },
+        );
+      await stabiliser();
+
+      expect(erreurChampNom()?.textContent?.trim()).toBe(
+        'Un module de ce nom existe déjà pour cet album.',
+      );
+      expect(champNom()!.getAttribute('aria-describedby')).toBe(erreurChampNom()!.id);
+      expect(champNom()!.value).toBe('module 2');
+      serveur.expectNone(URL_REGLAGES);
+    });
+
+    it('après un échec, modifier le nom masque le message, qu’un nouvel échec identique réaffiche', async () => {
+      await ouvrir();
+
+      await choisir('Module', 'Nouveau module');
+      await taperNom('module 2');
+      await touche('Enter');
+      const conflit = () =>
+        serveur
+          .expectOne(URL_MODULES)
+          .flush(
+            { status: 409, code: 'module.deja_existant' },
+            { status: 409, statusText: 'Conflict' },
+          );
+      conflit();
+      await stabiliser();
+      expect(erreurChampNom()).not.toBeNull();
+
+      await taperNom('Module 2');
+      expect(erreurChampNom()).toBeNull();
+      expect(champNom()!.hasAttribute('aria-describedby')).toBe(false);
+
+      await touche('Enter');
+      conflit();
+      await stabiliser();
+      expect(erreurChampNom()?.textContent?.trim()).toBe(
+        'Un module de ce nom existe déjà pour cet album.',
+      );
+      expect(champNom()!.getAttribute('aria-describedby')).toBe(erreurChampNom()!.id);
+    });
+
+    it('menu « Actions du module » : affiché pour le créateur du Module choisi, étiqueté, au clavier', async () => {
+      connecter();
+      await ouvrir();
+
+      expect(boutonActions()).not.toBeNull();
+      expect(boutonActions()!.tabIndex).toBe(0);
+    });
+
+    it('menu « Actions du module » : absent pour le Module d’un collègue et sans Module choisi', async () => {
+      connecter();
+      await ouvrir({ ...PREPARATION, moduleId: MODULE_2, nomModule: 'Module 2' });
+      expect(boutonActions()).toBeNull();
+
+      await choisir('Module', 'Aucun module');
+      reglage().flush({ ...PREPARATION, moduleId: undefined, nomModule: undefined });
+      await stabiliser();
+      expect(boutonActions()).toBeNull();
+    });
+
+    it('menu « Actions du module » : affiché pour l’administrateur sur le Module d’un collègue', async () => {
+      connecter(true);
+      await ouvrir({ ...PREPARATION, moduleId: MODULE_2, nomModule: 'Module 2' });
+
+      expect(boutonActions()).not.toBeNull();
+    });
+
+    it('« Renommer » : champ prérempli, Entrée renomme, la liste montre le nouveau nom', async () => {
+      connecter();
+      await ouvrir();
+
+      await actionDuMenu('Renommer');
+      expect(etiquetteChampNom()).toBe('Nouveau nom du module');
+      expect(champNom()!.value).toBe('Module 1');
+      expect(document.activeElement).toBe(champNom());
+
+      await taperNom('Les saisons');
+      await touche('Enter');
+      const renommage = serveur.expectOne(`/api/modules/${MODULE_1}/nom`);
+      expect(renommage.request.method).toBe('PUT');
+      expect(renommage.request.body).toEqual({ nom: 'Les saisons' });
+      renommage.flush({ ...MODULES[0], nom: 'Les saisons' });
+      await stabiliser();
+
+      serveur.expectNone(URL_REGLAGES);
+      expect(champNom()).toBeNull();
+      expect(valeurListe('Module')).toBe('Les saisons');
+    });
+
+    it('échec du renommage : message traduit sous le champ, qui reste ouvert', async () => {
+      connecter();
+      await ouvrir();
+
+      await actionDuMenu('Renommer');
+      await taperNom('Module 2');
+      await touche('Enter');
+      serveur
+        .expectOne(`/api/modules/${MODULE_1}/nom`)
+        .flush(
+          { status: 403, code: 'module.reserve_au_createur' },
+          { status: 403, statusText: 'Forbidden' },
+        );
+      await stabiliser();
+
+      expect(erreurChampNom()?.textContent?.trim()).toBe(
+        "Seuls le créateur du module et l'administrateur peuvent le modifier.",
+      );
+      expect(champNom()!.value).toBe('Module 2');
+    });
+
+    it('« Supprimer » confirmé : suppression, puis la Préparation et les Modules sont relus', async () => {
+      connecter();
+      await ouvrir();
+
+      await actionDuMenu('Supprimer');
+      expect(document.querySelector('app-dialogue-confirmation h2')?.textContent?.trim()).toBe(
+        'Supprimer le module ?',
+      );
+      expect(document.querySelector('.dialogue-confirmation__phrase')?.textContent).toContain(
+        '« Module 1 »',
+      );
+      await repondreConfirmation('confirmer');
+
+      const suppression = serveur.expectOne(`/api/modules/${MODULE_1}`);
+      expect(suppression.request.method).toBe('DELETE');
+      suppression.flush('');
+      await stabiliser();
+      await relire([MODULES[1]]);
+
+      expect(valeurListe('Module')).toBe('');
+      expect(boutonActions()).toBeNull();
+      expect(document.activeElement).toBe(listeModule());
+      serveur.expectNone(URL_REGLAGES);
+    });
+
+    it('« Supprimer » annulé : rien n’est envoyé', async () => {
+      connecter();
+      await ouvrir();
+
+      await actionDuMenu('Supprimer');
+      await repondreConfirmation('annuler');
+
+      serveur.expectNone(`/api/modules/${MODULE_1}`);
+      expect(valeurListe('Module')).toBe('Module 1');
+    });
+
+    it('échec de la suppression : Bandeau d’erreur, « Réessayer » renvoie la suppression', async () => {
+      connecter();
+      await ouvrir();
+
+      await actionDuMenu('Supprimer');
+      await repondreConfirmation('confirmer');
+      serveur.expectOne(`/api/modules/${MODULE_1}`).error(new ProgressEvent('error'));
+      await stabiliser();
+
+      expect(bandeau('erreur-module')).toBe(MESSAGE_RESEAU);
+      expect(valeurListe('Module')).toBe('Module 1');
+
+      await reessayer('erreur-module');
+      serveur.expectOne(`/api/modules/${MODULE_1}`).flush('');
+      await stabiliser();
+      await relire([MODULES[1]]);
+
+      expect(racine.querySelector('app-bandeau-erreur')).toBeNull();
+    });
+
+    it('suppression répondue 404 (déjà supprimé) : la Préparation et les Modules sont relus, sans Bandeau', async () => {
+      connecter();
+      await ouvrir();
+
+      await actionDuMenu('Supprimer');
+      await repondreConfirmation('confirmer');
+      // Opération sans corps de réponse : le client généré lit l'erreur RFC 9457 en texte.
+      serveur
+        .expectOne(`/api/modules/${MODULE_1}`)
+        .flush(JSON.stringify({ status: 404, code: 'ressource.introuvable' }), {
+          status: 404,
+          statusText: 'Not Found',
+        });
+      await stabiliser();
+      await relire([MODULES[1]]);
+
+      expect(racine.querySelector('app-bandeau-erreur')).toBeNull();
+      expect(valeurListe('Module')).toBe('');
+    });
+
+    it('suppression refusée 403 : Bandeau d’erreur, « Réessayer » ne renvoie pas la suppression', async () => {
+      connecter();
+      await ouvrir();
+
+      await actionDuMenu('Supprimer');
+      await repondreConfirmation('confirmer');
+      serveur
+        .expectOne(`/api/modules/${MODULE_1}`)
+        .flush(JSON.stringify({ status: 403, code: 'module.reserve_au_createur' }), {
+          status: 403,
+          statusText: 'Forbidden',
+        });
+      await stabiliser();
+
+      expect(bandeau('erreur-module')).toBe(
+        "Seuls le créateur du module et l'administrateur peuvent le modifier.",
+      );
+      await reessayer('erreur-module');
+
+      serveur.expectNone(`/api/modules/${MODULE_1}`);
+      expect(racine.querySelector('app-bandeau-erreur.erreur-module')).toBeNull();
+      expect(valeurListe('Module')).toBe('Module 1');
+    });
+
+    it('échec de la relecture après suppression : Bandeau d’erreur, « Réessayer » relit la Préparation', async () => {
+      connecter();
+      await ouvrir();
+
+      await actionDuMenu('Supprimer');
+      await repondreConfirmation('confirmer');
+      serveur.expectOne(`/api/modules/${MODULE_1}`).flush('');
+      await stabiliser();
+      serveur.expectOne(`/api/preparations/${ID}`).error(new ProgressEvent('error'));
+      await stabiliser();
+
+      expect(bandeau('erreur-module')).toBe(MESSAGE_RESEAU);
+
+      await reessayer('erreur-module');
+      serveur.expectNone(`/api/modules/${MODULE_1}`);
+      await relire([MODULES[1]]);
+
+      expect(racine.querySelector('app-bandeau-erreur')).toBeNull();
+      expect(valeurListe('Module')).toBe('');
+    });
+
+    it('après `preparation.module_invalide`, les Modules sont relus et le Module disparu n’est plus choisi', async () => {
+      await ouvrir();
+
+      await choisir('Module', 'Module 2');
+      reglage().flush(
+        { status: 400, code: 'preparation.module_invalide' },
+        { status: 400, statusText: 'Bad Request' },
+      );
+      await stabiliser();
+      serveur.expectOne(URL_MODULES).flush([MODULES[0]]);
+      serveur.expectOne('/api/themes').flush(THEMES);
+      await stabiliser();
+
+      expect(bandeau('erreur-enregistrement')).toBe(
+        "Ce module n'appartient plus à l'album. Choisissez-en un autre.",
+      );
+      expect(valeurListe('Module')).toBe('');
+
+      await reessayer('erreur-enregistrement');
+      const requete = reglage();
+      expect(requete.request.body.moduleId).toBeNull();
+      requete.flush({ ...PREPARATION, moduleId: undefined, nomModule: undefined });
+      await stabiliser();
+      expect(racine.querySelector('app-bandeau-erreur')).toBeNull();
+    });
   });
 });
 

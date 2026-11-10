@@ -38,6 +38,10 @@ export const MESSAGES_PAR_CODE: Readonly<Record<string, string>> = {
   'album.editeur_invalide': 'Saisissez un éditeur de 200 caractères au plus.',
   'album.deja_existant':
     'Cet album existe déjà. Choisissez-le dans la liste des albums au titre proche.',
+  'module.nom_invalide': 'Le nom du module doit compter de 1 à 200 caractères.',
+  'module.reserve_au_createur':
+    "Seuls le créateur du module et l'administrateur peuvent le modifier.",
+  'module.deja_existant': 'Un module de ce nom existe déjà pour cet album.',
   'ressource.introuvable': "Cet élément n'existe plus. Rechargez la page.",
   'requete.invalide': 'La demande est incomplète. Vérifiez la saisie, puis réessayez.',
   'requete.trop_volumineuse':

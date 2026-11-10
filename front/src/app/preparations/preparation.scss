@@ -99,3 +99,25 @@
     font-weight: var(--cm-graisse-forte);
   }
 }
+
+// Dernière option de la liste Module : « Nouveau module », en primary, séparée des Modules (comme « Créer l'album »).
+.entete__nouveau-module {
+  border-top: var(--cm-epaisseur-separateur) solid var(--mat-sys-outline-variant);
+  color: var(--mat-sys-primary);
+  font: var(--cm-typo-label);
+
+  mat-icon {
+    color: var(--mat-sys-primary);
+  }
+}
+
+// Bouton du menu « Actions du module », collé à la liste Module.
+.entete__actions-module {
+  margin-left: calc(-1 * var(--cm-espace-2));
+  color: var(--mat-sys-on-surface-variant);
+}
+
+// Champ en ligne du nom d'un Module, à la place de la liste Module.
+.entete__saisie-module {
+  flex-basis: 100%;
+}

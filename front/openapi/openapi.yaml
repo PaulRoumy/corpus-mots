@@ -143,6 +143,12 @@ components:
         ordre:
           type: integer
           format: int32
+        createurId:
+          description: "Enseignant qui a créé le Module, seul avec l'administrateur\
+            \ à pouvoir le renommer ou le supprimer ; absent pour un Module antérieur,\
+            \ géré par l'administrateur seul"
+          type: string
+          $ref: "#/components/schemas/UUID"
     MonCompteDto:
       type: object
       required:
@@ -169,6 +175,14 @@ components:
           type: string
           description: "De 1 à 100 caractères, une fois retirés les espaces de dé\
             but et de fin"
+    NomModuleDto:
+      type: object
+      required:
+      - nom
+      properties:
+        nom:
+          type: string
+          maxLength: 200
     NouvelAlbumDto:
       type: object
       required:
@@ -436,6 +450,33 @@ paths:
                   $ref: "#/components/schemas/ModuleDto"
       tags:
       - Albums Resource
+    post:
+      summary: "Créer un Module de l'Album, ajouté après le dernier et visible aussitô\
+        t de toute l'école"
+      operationId: creerModule
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          $ref: "#/components/schemas/UUID"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/NomModuleDto"
+      responses:
+        "201":
+          description: "Module créé, dont l'enseignant connecté est le créateur"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ModuleDto"
+        "400":
+          description: Bad Request
+      tags:
+      - Albums Resource
   /api/comptes:
     get:
       summary: "Comptes de l'équipe, invités d'abord"
@@ -556,6 +597,50 @@ paths:
                   $ref: "#/components/schemas/EnseignantDto"
       tags:
       - Enseignants Resource
+  /api/modules/{id}:
+    delete:
+      summary: "Supprimer un Module (son créateur ou l'administrateur) : les Préparations\
+        \ qui l'avaient n'en ont plus"
+      operationId: supprimerModule
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          $ref: "#/components/schemas/UUID"
+      responses:
+        "204":
+          description: Module supprimé
+      tags:
+      - Modules Resource
+  /api/modules/{id}/nom:
+    put:
+      summary: "Renommer un Module (son créateur ou l'administrateur), visible aussitô\
+        t de toute l'école"
+      operationId: renommerModule
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          $ref: "#/components/schemas/UUID"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/NomModuleDto"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ModuleDto"
+        "400":
+          description: Bad Request
+      tags:
+      - Modules Resource
   /api/mon-compte:
     get:
       summary: Compte de l'enseignant connecté

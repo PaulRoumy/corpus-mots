@@ -2,6 +2,7 @@ package fr.corpusmots.referentiels.api;
 
 import fr.corpusmots.commun.api.ErreurMetier;
 import fr.corpusmots.commun.service.Pagination;
+import fr.corpusmots.referentiels.service.NouveauModuleCommande;
 import fr.corpusmots.referentiels.service.ReferentielsService;
 import jakarta.inject.Inject;
 import jakarta.ws.rs.Consumes;
@@ -64,6 +65,22 @@ public class AlbumsResource {
             @Parameter(description = "Titre de l'Album à créer, sans tenir compte de la casse, des accents ni de"
                     + " l'article ; moins de 2 caractères : aucun résultat") @QueryParam("titre") String titre) {
         return referentiels.titresProches(titre).stream().map(AlbumDto::de).toList();
+    }
+
+    @POST
+    @Path("/{id}/modules")
+    @Consumes(MediaType.APPLICATION_JSON)
+    @ResponseStatus(201)
+    @Operation(operationId = "creerModule",
+            summary = "Créer un Module de l'Album, ajouté après le dernier et visible aussitôt de toute l'école")
+    @APIResponse(responseCode = "201", description = "Module créé, dont l'enseignant connecté est le créateur",
+            content = @Content(mediaType = MediaType.APPLICATION_JSON,
+                    schema = @Schema(implementation = ModuleDto.class)))
+    public ModuleDto creerModule(@PathParam("id") UUID id, @RequestBody(required = true) NomModuleDto nom) {
+        if (nom == null) {
+            throw new ErreurMetier(400, "requete.invalide", "Le corps de la requête est obligatoire");
+        }
+        return ModuleDto.de(referentiels.creerModule(id, new NouveauModuleCommande(nom.nom())));
     }
 
     @GET

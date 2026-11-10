@@ -35,6 +35,9 @@ const TRACES = {
     '<path d="M4 5c3-1 6-1 8 1 2-2 5-2 8-1v14c-3-1-6-1-8 1-2-2-5-2-8-1z"/><path d="M12 6v14"/>',
   // Horloge (`i-clock` de la maquette) : « Temps passé » de l'En-tête de Préparation.
   horloge: '<circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 2"/>',
+  // Trois points verticaux : bouton du menu « Actions du module » de l'En-tête de Préparation.
+  actions:
+    '<circle cx="12" cy="5.5" r="1.2"/><circle cx="12" cy="12" r="1.2"/><circle cx="12" cy="18.5" r="1.2"/>',
 } as const satisfies Record<string, string>;
 
 /** Nom des pictogrammes enregistrés, pour `<mat-icon svgIcon="…">`. */

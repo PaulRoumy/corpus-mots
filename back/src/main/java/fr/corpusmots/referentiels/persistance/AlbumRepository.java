@@ -2,8 +2,10 @@ package fr.corpusmots.referentiels.persistance;
 
 import io.quarkus.hibernate.orm.panache.PanacheRepositoryBase;
 import jakarta.enterprise.context.ApplicationScoped;
+import jakarta.persistence.LockModeType;
 import java.util.Collection;
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 
 @ApplicationScoped
@@ -60,6 +62,14 @@ public class AlbumRepository implements PanacheRepositoryBase<Album, UUID> {
                 .setMaxResults(limite)
                 .getResultList();
         return lignes.stream().map(AlbumRepository::album).toList();
+    }
+
+    /**
+     * Album {@code id} verrouillé jusqu'à la fin de la transaction ({@code SELECT … FOR UPDATE}) : les créations et
+     * renommages de ses Modules passent ainsi un à un (place en fin d'Album, nom unique). Vide s'il n'existe pas.
+     */
+    public Optional<Album> verrouiller(UUID id) {
+        return findByIdOptional(id, LockModeType.PESSIMISTIC_WRITE);
     }
 
     /** Albums dont le titre normalisé est exactement {@code texte}, déjà normalisé. */

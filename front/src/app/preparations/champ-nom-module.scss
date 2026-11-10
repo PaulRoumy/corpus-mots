@@ -1,0 +1,24 @@
+// Champ en ligne du nom d'un Module : champ, puis « Annuler » et le bouton de validation, message d'échec dessous.
+:host {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--cm-espace-2);
+}
+
+.champ-nom-module__champ {
+  flex: 1;
+  min-width: var(--cm-largeur-champ-entete);
+}
+
+.champ-nom-module__actions {
+  display: flex;
+  gap: var(--cm-espace-2);
+}
+
+.champ-nom-module__erreur {
+  flex-basis: 100%;
+  margin: 0;
+  font: var(--cm-typo-body-sm);
+  color: var(--mat-sys-error);
+}

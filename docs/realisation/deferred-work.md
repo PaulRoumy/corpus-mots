@@ -92,6 +92,7 @@
 - source_spec: `docs/realisation/spec-2-2-en-tete-de-preparation-modifiable.md`
   summary: Story 2.2, partie 2 : Modules. « Nouveau module » depuis l'En-tête et le Dialogue « Nouvelle préparation », ajouté en fin d'Album et visible aussitôt de tous ; renommer ou supprimer, réservé au créateur et à l'administrateur (`403` pour les autres) ; événement synchrone `ModuleSupprime`, observé par `preparations`, qui retire le Module de ses Préparations dans la même transaction.
   evidence: Découpage de la story 2.2 choisi par Paul (quatre objectifs livrables séparément) ; la partie 1 rend l'En-tête modifiable, qui sert de cadre.
+  status: fait (`docs/realisation/spec-2-2-2-modules.md`).
 - source_spec: `docs/realisation/spec-2-2-en-tete-de-preparation-modifiable.md`
   summary: Story 2.2, partie 3 : Thèmes. Champ à étiquettes (UX-DR-17) qui propose les Thèmes existants, « Créer le thème « … » » pour toute l'école, Entrée pour ajouter, Retour arrière pour retirer ; renommer ou supprimer, réservé au créateur et à l'administrateur (`403`) ; suppression refusée si le Thème est encore utilisé, par les interfaces `…Utilisation` des modules aval (AD-15).
   evidence: Découpage de la story 2.2 choisi par Paul.
@@ -104,3 +105,7 @@
 - source_spec: `docs/realisation/spec-2-2-en-tete-de-preparation-modifiable.md`
   summary: Story 2.2, partie 2 : après `preparation.module_invalide` dans l'En-tête, recharger la liste des Modules et retirer le Module disparu, au lieu de renvoyer la même valeur.
   evidence: Revue de la story 2.2, partie 1, ligne 17 du journal de tri. Une fois un Module supprimé, « Réessayer » renverrait le même Module invalide, et tout enregistrement suivant échouerait.
+  status: fait (`docs/realisation/spec-2-2-2-modules.md`).
+- source_spec: `docs/realisation/spec-2-2-2-modules.md`
+  summary: Page Données personnelles : déclarer les Albums et les Modules créés par l'enseignant, et le lien au créateur gardé sur eux (`album.createur_id`, `module.createur_id`), visible des collègues par `createurId`.
+  evidence: Revue de la story 2.2, partie 2, ligne 13 du journal de tri. AGENTS.md demande cette mise à jour quand les données conservées changent ; `donnees-personnelles.ts` ne cite que les Préparations, et l'oubli date de la story 2.1.

@@ -229,7 +229,7 @@ describe('Dialogue « Nouvelle préparation »', () => {
 
     expect(etiquettes()).toEqual(['Album', 'Module (facultatif)', 'Thème par défaut (facultatif)']);
     await ouvrirListe('Module (facultatif)');
-    expect(options()).toEqual(['Aucun module', 'Module 1', 'Module 2']);
+    expect(options()).toEqual(['Aucun module', 'Module 1', 'Module 2', 'Nouveau module']);
     option('Module 2').click();
     await stabiliser();
     bouton('Annuler').click();
@@ -779,6 +779,213 @@ describe('Dialogue « Nouvelle préparation »', () => {
     expect(bandeau('modules')).toBeNull();
     bouton('Annuler').click();
     await ouverture;
+  });
+
+  describe('« Nouveau module » (story 2.2, partie 2)', () => {
+    const URL_MODULES = `/api/albums/${ROULE_GALETTE.id}/modules`;
+    const SAISONS = {
+      id: '0190f0a0-0000-7000-8000-00000000b009',
+      albumId: ROULE_GALETTE.id,
+      nom: 'Les saisons',
+      ordre: 3,
+      createurId: '0190f0a0-0000-7000-8000-00000000e001',
+    };
+
+    const champNom = () =>
+      dialogue()!.querySelector<HTMLInputElement>('app-champ-nom-module input');
+    const erreurChampNom = () => dialogue()!.querySelector('app-champ-nom-module [role="alert"]');
+    const valeurModule = () =>
+      [...dialogue()!.querySelectorAll('mat-form-field')]
+        .find(
+          (champ) =>
+            champ.querySelector('mat-label')?.textContent?.trim() === 'Module (facultatif)',
+        )
+        ?.querySelector('.mat-mdc-select-value')
+        ?.textContent?.trim();
+
+    async function ouvrirChampNom() {
+      await ouvrirListe('Module (facultatif)');
+      option('Nouveau module').click();
+      await stabiliser();
+    }
+
+    async function taperNom(nom: string) {
+      champNom()!.value = nom;
+      champNom()!.dispatchEvent(new Event('input'));
+      await stabiliser();
+    }
+
+    /** Touche au clavier dans le champ, avec le `keyCode` que lit la surcouche du dialogue. */
+    async function touche(key: 'Enter' | 'Escape') {
+      const evenement = new KeyboardEvent('keydown', { key, bubbles: true });
+      Object.defineProperty(evenement, 'keyCode', { get: () => (key === 'Enter' ? 13 : 27) });
+      champNom()!.dispatchEvent(evenement);
+      await stabiliser();
+    }
+
+    it('Album sans Module : la liste Module propose « Aucun module » puis « Nouveau module »', async () => {
+      await ouvrir();
+      await taper('moufle');
+      serveur
+        .expectOne('/api/albums?recherche=moufle&taille=20')
+        .flush({
+          elements: [{ ...ROULE_GALETTE, titre: 'La Moufle', nombreModules: 0 }],
+          total: 1,
+        });
+      await stabiliser();
+      option('La Moufle').click();
+      await stabiliser();
+      serveur.expectOne(URL_MODULES).flush([]);
+      await stabiliser();
+
+      expect(etiquettes()).toEqual([
+        'Album',
+        'Module (facultatif)',
+        'Thème par défaut (facultatif)',
+      ]);
+      await ouvrirListe('Module (facultatif)');
+      expect(options()).toEqual(['Aucun module', 'Nouveau module']);
+      option('Aucun module').click();
+      await stabiliser();
+      bouton('Annuler').click();
+      await ouverture;
+    });
+
+    it('Entrée crée le Module, qui est choisi puis envoyé avec la Préparation', async () => {
+      await ouvrir();
+      await choisirRouleGalette();
+      await choisirSection('MS');
+      await ouvrirChampNom();
+
+      expect(etiquettes()).toContain('Nom du nouveau module');
+      expect(document.activeElement).toBe(champNom());
+      expect(bouton('Créer').disabled).toBe(true);
+
+      await taperNom('Les saisons');
+      await touche('Enter');
+      const creation = serveur.expectOne({ method: 'POST', url: URL_MODULES });
+      expect(creation.request.body).toEqual({ nom: 'Les saisons' });
+      creation.flush(SAISONS, { status: 201, statusText: 'Created' });
+      await stabiliser();
+
+      expect(champNom()).toBeNull();
+      expect(valeurModule()).toBe('Les saisons');
+      await ouvrirListe('Module (facultatif)');
+      expect(options()).toEqual([
+        'Aucun module',
+        'Module 1',
+        'Module 2',
+        'Les saisons',
+        'Nouveau module',
+      ]);
+      option('Les saisons').click();
+      await stabiliser();
+
+      bouton('Créer').click();
+      await stabiliser();
+      const preparation = serveur.expectOne({ method: 'POST', url: '/api/preparations' });
+      expect(preparation.request.body).toEqual({
+        albumId: ROULE_GALETTE.id,
+        section: 'ms',
+        moduleId: SAISONS.id,
+      });
+      preparation.flush(CREEE, { status: 201, statusText: 'Created' });
+      await ouverture;
+    });
+
+    it('Échap referme le champ sans rien créer ni fermer le dialogue', async () => {
+      await ouvrir();
+      await choisirRouleGalette();
+      await ouvrirChampNom();
+      await taperNom('Les saisons');
+
+      await touche('Escape');
+
+      serveur.expectNone(URL_MODULES);
+      expect(dialogue()).not.toBeNull();
+      expect(champNom()).toBeNull();
+      expect(etiquettes()).toContain('Module (facultatif)');
+      // Première liste du dialogue : Module, avant Thème par défaut.
+      expect(document.activeElement).toBe(dialogue()!.querySelector('mat-select'));
+      bouton('Annuler').click();
+      await ouverture;
+    });
+
+    it('échec de la création : message traduit dans le champ, qui reste ouvert avec la saisie', async () => {
+      await ouvrir();
+      await choisirRouleGalette();
+      await ouvrirChampNom();
+      await taperNom('module 1');
+
+      bouton('Ajouter').click();
+      await stabiliser();
+      serveur
+        .expectOne({ method: 'POST', url: URL_MODULES })
+        .flush(
+          { status: 409, code: 'module.deja_existant' },
+          { status: 409, statusText: 'Conflict' },
+        );
+      await stabiliser();
+
+      expect(erreurChampNom()?.textContent?.trim()).toBe(
+        'Un module de ce nom existe déjà pour cet album.',
+      );
+      expect(champNom()!.value).toBe('module 1');
+      expect(dialogue()!.querySelectorAll('app-bandeau-erreur')).toHaveLength(0);
+
+      // « Annuler » du champ, puis celui du dialogue.
+      dialogue()!.querySelector<HTMLButtonElement>('app-champ-nom-module button')!.click();
+      await stabiliser();
+      expect(champNom()).toBeNull();
+      bouton('Annuler').click();
+      await ouverture;
+    });
+
+    it('ni renommage ni suppression dans le dialogue', async () => {
+      await ouvrir();
+      await choisirRouleGalette();
+
+      expect(dialogue()!.querySelector('button[aria-label="Actions du module"]')).toBeNull();
+      bouton('Annuler').click();
+      await ouverture;
+    });
+
+    it('Module créé pour un Album quitté entre-temps : ni ajouté ni choisi pour le nouvel Album', async () => {
+      await ouvrir('ms');
+      await choisirRouleGalette();
+      await ouvrirChampNom();
+      await taperNom('Les saisons');
+      await touche('Enter');
+      const creation = serveur.expectOne({ method: 'POST', url: URL_MODULES });
+
+      await taper('moufle');
+      serveur
+        .expectOne('/api/albums?recherche=moufle&taille=20')
+        .flush({ elements: [LA_MOUFLE], total: 1 });
+      await stabiliser();
+      option('La Moufle').click();
+      await stabiliser();
+      serveur.expectOne(`/api/albums/${LA_MOUFLE.id}/modules`).flush([]);
+      await stabiliser();
+      creation.flush(SAISONS, { status: 201, statusText: 'Created' });
+      await stabiliser();
+
+      expect(valeurModule()).toBe('');
+      await ouvrirListe('Module (facultatif)');
+      expect(options()).toEqual(['Aucun module', 'Nouveau module']);
+      option('Aucun module').click();
+      await stabiliser();
+
+      bouton('Créer').click();
+      await stabiliser();
+      const preparation = serveur.expectOne({ method: 'POST', url: '/api/preparations' });
+      expect(preparation.request.body).toEqual({ albumId: LA_MOUFLE.id, section: 'ms' });
+      preparation.flush(
+        { ...CREEE, albumId: LA_MOUFLE.id, moduleId: undefined, nomModule: undefined },
+        { status: 201, statusText: 'Created' },
+      );
+      await ouverture;
+    });
   });
 
   it('libellé du nombre de Modules', () => {

@@ -6,6 +6,7 @@ import static org.hamcrest.Matchers.equalTo;
 import static org.hamcrest.Matchers.notNullValue;
 import static org.hamcrest.Matchers.nullValue;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNull;
 
 import fr.corpusmots.commun.api.EnseignantsDeTest;
 import fr.corpusmots.commun.api.ProblemeDto;
@@ -26,7 +27,10 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
 
-/** Création, liste, lecture et réglages des Préparations, isolées entre enseignants (stories 2.1 et 2.2, partie 1). */
+/**
+ * Création, liste, lecture et réglages des Préparations, isolées entre enseignants, et retrait d'un Module supprimé
+ * (stories 2.1 et 2.2, parties 1 et 2).
+ */
 @QuarkusTest
 class PreparationsResourceTest {
 
@@ -419,6 +423,44 @@ class PreparationsResourceTest {
                 .contentType(ProblemeDto.MEDIA_TYPE)
                 .body("code", equalTo("requete.invalide"));
         assertEquals(new Reglages(module1, cuisine, 60), reglages(id));
+    }
+
+    @Test
+    @TestSecurity(user = CLAIRE)
+    @OidcSecurity(claims = @Claim(key = "sub", value = CLAIRE))
+    void supprimerUnModuleLeRetireDesPreparationsDeTousLesEnseignants() {
+        UUID moduleDeClaire = referentiels.module(rouleGalette, "Module 3", 3, CLAIRE);
+        UUID deClaire = preparationAvecModule(CLAIRE, rouleGalette, "ms", moduleDeClaire, "2026-11-09T09:00:00Z");
+        UUID deZoe = preparationAvecModule(ZOE, rouleGalette, "gs", moduleDeClaire, "2026-11-09T10:00:00Z");
+        UUID autreModule = preparationAvecModule(ZOE, rouleGalette, "ps", module2, "2026-11-09T11:00:00Z");
+
+        given().when().delete("/api/modules/" + moduleDeClaire)
+                .then()
+                .statusCode(204);
+
+        assertNull(reglages(deClaire).moduleId());
+        assertNull(reglages(deZoe).moduleId());
+        assertEquals(module2, reglages(autreModule).moduleId());
+        given().when().get("/api/preparations/" + deClaire)
+                .then()
+                .statusCode(200)
+                .body("moduleId", nullValue())
+                .body("nomModule", nullValue());
+    }
+
+    @Test
+    @TestSecurity(user = ZOE)
+    @OidcSecurity(claims = @Claim(key = "sub", value = ZOE))
+    void unModuleQueLEnseignantNePeutSupprimerResteDansLesPreparations() {
+        UUID moduleDeClaire = referentiels.module(rouleGalette, "Module 3", 3, CLAIRE);
+        UUID deZoe = preparationAvecModule(ZOE, rouleGalette, "gs", moduleDeClaire, "2026-11-09T10:00:00Z");
+
+        given().when().delete("/api/modules/" + moduleDeClaire)
+                .then()
+                .statusCode(403)
+                .body("code", equalTo("module.reserve_au_createur"));
+
+        assertEquals(moduleDeClaire, reglages(deZoe).moduleId());
     }
 
     /** Réglages lus en base. */

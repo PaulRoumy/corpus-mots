@@ -32,6 +32,11 @@ public class PreparationRepository implements PanacheRepositoryBase<Preparation,
         return find("id = ?1 and proprietaireId = ?2", id, proprietaireId).firstResultOptional();
     }
 
+    /** Retire le Module {@code moduleId} de toutes les Préparations qui l'avaient, de tous les enseignants. */
+    public void retirerModule(UUID moduleId) {
+        update("moduleId = null where moduleId = ?1", moduleId);
+    }
+
     /** Préparation la plus récente de l'enseignant. */
     public Optional<Preparation> plusRecente(UUID proprietaireId) {
         return find(DU_PROPRIETAIRE + PLUS_RECENTES_D_ABORD, proprietaireId).firstResultOptional();

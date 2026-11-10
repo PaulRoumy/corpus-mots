@@ -1,11 +1,15 @@
 import {
+  afterNextRender,
   ChangeDetectionStrategy,
   Component,
+  computed,
   effect,
   inject,
+  Injector,
   input,
   signal,
   untracked,
+  viewChild,
 } from '@angular/core';
 import {
   AbstractControl,
@@ -13,13 +17,18 @@ import {
   ReactiveFormsModule,
   ValidationErrors,
 } from '@angular/forms';
+import { MatButtonModule } from '@angular/material/button';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatIconModule } from '@angular/material/icon';
 import { MatInputModule } from '@angular/material/input';
-import { MatSelectModule } from '@angular/material/select';
+import { MatMenuModule } from '@angular/material/menu';
+import { MatSelect, MatSelectModule } from '@angular/material/select';
 import { Title } from '@angular/platform-browser';
 import { Api } from '../api/api';
+import { creerModule } from '../api/fn/albums-resource/creer-module';
 import { listerModulesDeLAlbum } from '../api/fn/albums-resource/lister-modules-de-l-album';
+import { renommerModule } from '../api/fn/modules-resource/renommer-module';
+import { supprimerModule } from '../api/fn/modules-resource/supprimer-module';
 import { lirePreparation } from '../api/fn/preparations-resource/lire-preparation';
 import { reglerPreparation } from '../api/fn/preparations-resource/regler-preparation';
 import { listerThemes } from '../api/fn/themes-resource/lister-themes';
@@ -27,9 +36,12 @@ import { ModuleDto } from '../api/models/module-dto';
 import { PreparationDto } from '../api/models/preparation-dto';
 import { ThemeDto } from '../api/models/theme-dto';
 import { BandeauErreur } from '../commun/bandeau-erreur/bandeau-erreur';
-import { MESSAGES_PAR_CODE, messageErreur } from '../commun/erreurs/message-erreur';
+import { CompteCourant } from '../commun/compte-courant';
+import { DialogueConfirmation } from '../commun/dialogue-confirmation/dialogue-confirmation';
+import { codeErreur, MESSAGES_PAR_CODE, messageErreur } from '../commun/erreurs/message-erreur';
 import { RepereSection } from '../commun/repere-section/repere-section';
 import { Squelette } from '../commun/squelette/squelette';
+import { ChampNomModule } from './champ-nom-module';
 import { libelleMots } from './preparations';
 
 /** « 0 déjà illustrés », « 1 déjà illustré ». */
@@ -72,6 +84,20 @@ function heuresValides(controle: AbstractControl<string>): ValidationErrors | nu
   return heuresEnMinutes(controle.value) === undefined ? { heures: true } : null;
 }
 
+/** Valeur de l'option « Nouveau module » de la liste Module, distincte de tout Module. */
+const OPTION_NOUVEAU_MODULE = Symbol('nouveau-module');
+type ValeurModule = string | null | typeof OPTION_NOUVEAU_MODULE;
+
+/** Champ en ligne du nom d'un Module : création, ou renommage de `module`. */
+interface SaisieModule {
+  readonly module?: ModuleDto;
+}
+
+interface ErreurAffichee {
+  readonly message: string;
+  readonly reessayer: () => void;
+}
+
 /**
  * Page d'une Préparation (`/preparations/:id`), réduite pour l'instant à son En-tête (key-preparation.html › `.hero`) :
  * titre de l'Album, Repère de Section, Module, Thème par défaut, « N mots, M déjà illustrés » et Temps passé.
@@ -82,6 +108,13 @@ function heuresValides(controle: AbstractControl<string>): ValidationErrors | nu
  * la fois. En cas d'échec, la saisie reste affichée et un Bandeau d'erreur propose « Réessayer », qui renvoie les
  * valeurs affichées. Les listes de Modules et de Thèmes se chargent avec la Préparation et ont leur propre Bandeau.
  *
+ * Modules (story 2.2, partie 2) : la liste Module, affichée dès que les listes sont chargées, se termine par
+ * « Nouveau module », qui déplie à sa place un champ en ligne ; le Module créé s'ajoute à la liste, est choisi, donc
+ * enregistré. Le menu « Actions du module », à côté du Module choisi, n'apparaît que pour son créateur et
+ * l'administrateur (le back revérifie) : « Renommer » rouvre le même champ prérempli, « Supprimer » passe par le
+ * Dialogue de confirmation puis relit la Préparation et les Modules. Après `preparation.module_invalide` (Module
+ * supprimé entre-temps par un collègue), les Modules sont relus et le Module disparu retiré du choix.
+ *
  * Le Temps passé est un champ texte en mode de saisie décimal plutôt qu'un `type="number"` : celui-ci, selon la langue
  * du navigateur, refuse la virgule sans le dire (sa valeur devient vide, comme un champ effacé).
  */
@@ -89,9 +122,12 @@ function heuresValides(controle: AbstractControl<string>): ValidationErrors | nu
   selector: 'app-preparation',
   imports: [
     BandeauErreur,
+    ChampNomModule,
+    MatButtonModule,
     MatFormFieldModule,
     MatIconModule,
     MatInputModule,
+    MatMenuModule,
     MatSelectModule,
     ReactiveFormsModule,
     RepereSection,
@@ -119,6 +155,14 @@ function heuresValides(controle: AbstractControl<string>): ValidationErrors | nu
             (fermer)="erreurEnregistrement.set(null)"
           />
         }
+        @if (erreurModule(); as affichee) {
+          <app-bandeau-erreur
+            class="erreur-module"
+            [message]="affichee.message"
+            (reessayer)="affichee.reessayer()"
+            (fermer)="erreurModule.set(null)"
+          />
+        }
         @if (erreurListes(); as message) {
           <app-bandeau-erreur
             class="erreur-listes"
@@ -136,16 +180,55 @@ function heuresValides(controle: AbstractControl<string>): ValidationErrors | nu
             <h1 id="entete-titre" class="entete__titre">{{ courante.titreAlbum }}</h1>
             <div class="entete__meta">
               <app-repere-section [section]="courante.section" />
-              @if (modules().length > 0) {
+              @if (saisieModule(); as saisie) {
+                <app-champ-nom-module
+                  class="entete__saisie-module"
+                  [etiquette]="saisie.module ? 'Nouveau nom du module' : 'Nom du nouveau module'"
+                  [libelleValider]="saisie.module ? 'Renommer' : 'Ajouter'"
+                  [valeurInitiale]="saisie.module?.nom ?? ''"
+                  [enCours]="saisieEnCours()"
+                  [erreur]="erreurSaisieModule()"
+                  (valider)="validerSaisieModule($event)"
+                  (annuler)="fermerSaisieModule()"
+                />
+              } @else if (listesChargees()) {
                 <mat-form-field class="entete__champ entete__module" subscriptSizing="dynamic">
                   <mat-label>Module</mat-label>
-                  <mat-select [value]="module()" (selectionChange)="choisirModule($event.value)">
+                  <mat-select
+                    #listeModule
+                    [value]="module()"
+                    (selectionChange)="choisirModule($event.value)"
+                  >
                     <mat-option [value]="null">Aucun module</mat-option>
                     @for (choix of modules(); track choix.id) {
                       <mat-option [value]="choix.id">{{ choix.nom }}</mat-option>
                     }
+                    <mat-option class="entete__nouveau-module" [value]="optionNouveauModule">
+                      <mat-icon svgIcon="plus" aria-hidden="true" />
+                      Nouveau module
+                    </mat-option>
                   </mat-select>
                 </mat-form-field>
+                @if (moduleGerable(); as gere) {
+                  <button
+                    matIconButton
+                    class="entete__actions-module"
+                    type="button"
+                    aria-label="Actions du module"
+                    [disabled]="suppressionEnCours()"
+                    [matMenuTriggerFor]="menuModule"
+                  >
+                    <mat-icon svgIcon="actions" aria-hidden="true" />
+                  </button>
+                  <mat-menu #menuModule="matMenu">
+                    <button mat-menu-item type="button" (click)="ouvrirRenommage(gere)">
+                      Renommer
+                    </button>
+                    <button mat-menu-item type="button" (click)="supprimerModule(gere)">
+                      Supprimer
+                    </button>
+                  </mat-menu>
+                }
               } @else if (courante.nomModule) {
                 <span class="entete__nom-module">{{ courante.nomModule }}</span>
               }
@@ -200,6 +283,9 @@ function heuresValides(controle: AbstractControl<string>): ValidationErrors | nu
 export class Preparation {
   private readonly api = inject(Api);
   private readonly titre = inject(Title);
+  private readonly compteCourant = inject(CompteCourant);
+  private readonly confirmation = inject(DialogueConfirmation);
+  private readonly injecteur = inject(Injector);
 
   /** Identifiant de la Préparation, lu dans l'URL (`withComponentInputBinding`). */
   readonly id = input.required<string>();
@@ -207,6 +293,7 @@ export class Preparation {
   protected readonly libelleMots = libelleMots;
   protected readonly libelleIllustres = libelleIllustres;
   protected readonly messageTempsInvalide = MESSAGE_TEMPS_PASSE_INVALIDE;
+  protected readonly optionNouveauModule = OPTION_NOUVEAU_MODULE;
 
   /** Préparation telle que le back l'a renvoyée en dernier. */
   protected readonly preparation = signal<PreparationDto | null>(null);
@@ -225,6 +312,27 @@ export class Preparation {
   protected readonly themes = signal<ThemeDto[]>([]);
   protected readonly erreurListes = signal<string | null>(null);
   protected readonly erreurEnregistrement = signal<string | null>(null);
+  /** Vrai une fois les listes chargées : la liste Module, avec « Nouveau module », s'affiche alors toujours. */
+  protected readonly listesChargees = signal(false);
+
+  /** Champ en ligne du nom d'un Module, ouvert à la place de la liste Module. */
+  protected readonly saisieModule = signal<SaisieModule | null>(null);
+  protected readonly saisieEnCours = signal(false);
+  protected readonly erreurSaisieModule = signal<string | null>(null);
+  protected readonly suppressionEnCours = signal(false);
+  /** Échec d'une suppression de Module, ou de la relecture qui la suit. */
+  protected readonly erreurModule = signal<ErreurAffichee | null>(null);
+  private readonly listeModule = viewChild<MatSelect>('listeModule');
+
+  /** Module choisi, si l'enseignant peut le renommer ou le supprimer : son créateur, ou l'administrateur. */
+  protected readonly moduleGerable = computed(() => {
+    const choisi = this.modules().find((module) => module.id === this.module());
+    const compte = this.compteCourant.compte();
+    if (choisi === undefined || compte === null) {
+      return null;
+    }
+    return compte.administrateur || choisi.createurId === compte.id ? choisi : null;
+  });
 
   /** Numéro du dernier chargement : la réponse d'une Préparation quittée depuis n'écrit rien. */
   private dernierChargement = 0;
@@ -247,6 +355,10 @@ export class Preparation {
     this.themes.set([]);
     this.erreurListes.set(null);
     this.erreurEnregistrement.set(null);
+    this.listesChargees.set(false);
+    this.saisieModule.set(null);
+    this.erreurSaisieModule.set(null);
+    this.erreurModule.set(null);
     this.enregistrementEnAttente = false;
     try {
       const preparation = await this.api.invoke(lirePreparation, { id });
@@ -281,6 +393,7 @@ export class Preparation {
       if (numero === this.dernierChargement) {
         this.modules.set(modules);
         this.themes.set(themes);
+        this.listesChargees.set(true);
         this.erreurListes.set(null);
       }
     } catch (erreur) {
@@ -290,9 +403,153 @@ export class Preparation {
     }
   }
 
-  protected choisirModule(moduleId: string | null): void {
-    this.module.set(moduleId);
+  protected choisirModule(valeur: ValeurModule): void {
+    if (valeur === OPTION_NOUVEAU_MODULE) {
+      this.ouvrirSaisieModule({});
+      return;
+    }
+    this.module.set(valeur);
     void this.enregistrer();
+  }
+
+  protected ouvrirRenommage(module: ModuleDto): void {
+    this.ouvrirSaisieModule({ module });
+  }
+
+  private ouvrirSaisieModule(saisie: SaisieModule): void {
+    this.erreurSaisieModule.set(null);
+    this.saisieModule.set(saisie);
+  }
+
+  /** Replie le champ en ligne sans rien enregistrer ; le focus revient à la liste Module. */
+  protected fermerSaisieModule(): void {
+    this.saisieModule.set(null);
+    this.erreurSaisieModule.set(null);
+    this.rendreFocusALaListe();
+  }
+
+  private rendreFocusALaListe(): void {
+    afterNextRender(() => this.listeModule()?.focus(), { injector: this.injecteur });
+  }
+
+  /**
+   * Crée le Module nommé `nom`, l'ajoute à la liste, le choisit et l'enregistre ; ou renomme le Module en cours de
+   * renommage. En échec, le champ reste ouvert avec sa saisie et affiche le message.
+   */
+  protected async validerSaisieModule(nom: string): Promise<void> {
+    const saisie = this.saisieModule();
+    const preparation = this.preparation();
+    if (saisie === null || preparation === null || this.saisieEnCours()) {
+      return;
+    }
+    const numero = this.dernierChargement;
+    this.saisieEnCours.set(true);
+    // Un nouvel échec réaffiche son message, même identique au précédent.
+    this.erreurSaisieModule.set(null);
+    try {
+      if (saisie.module) {
+        const renomme = await this.api.invoke(renommerModule, {
+          id: saisie.module.id,
+          body: { nom },
+        });
+        if (numero === this.dernierChargement) {
+          this.modules.update((modules) =>
+            modules.map((module) => (module.id === renomme.id ? renomme : module)),
+          );
+          this.preparation.update((courante) =>
+            courante?.moduleId === renomme.id ? { ...courante, nomModule: renomme.nom } : courante,
+          );
+          this.fermerSaisieModule();
+        }
+      } else {
+        const cree = await this.api.invoke(creerModule, { id: preparation.albumId, body: { nom } });
+        if (numero === this.dernierChargement) {
+          this.modules.update((modules) => [...modules, cree]);
+          this.module.set(cree.id);
+          this.fermerSaisieModule();
+          void this.enregistrer();
+        }
+      }
+    } catch (erreur) {
+      if (numero === this.dernierChargement) {
+        this.erreurSaisieModule.set(messageErreur(erreur));
+      }
+    } finally {
+      this.saisieEnCours.set(false);
+    }
+  }
+
+  /** « Supprimer » : Dialogue de confirmation, puis suppression et relecture de la Préparation et des Modules. */
+  protected async supprimerModule(module: ModuleDto): Promise<void> {
+    const confirme = await this.confirmation.confirmer({
+      titre: 'Supprimer le module ?',
+      phrase:
+        `Le module « ${module.nom} » sera retiré de l'album et de toutes les préparations qui l'utilisent, ` +
+        'chez tous les enseignants.',
+      libelleConfirmer: 'Supprimer le module',
+    });
+    if (confirme) {
+      await this.envoyerSuppression(module);
+    }
+  }
+
+  private async envoyerSuppression(module: ModuleDto): Promise<void> {
+    const numero = this.dernierChargement;
+    this.suppressionEnCours.set(true);
+    try {
+      await this.api.invoke(supprimerModule, { id: module.id });
+      if (numero === this.dernierChargement) {
+        this.erreurModule.set(null);
+        await this.relire();
+      }
+    } catch (erreur) {
+      if (numero !== this.dernierChargement) {
+        return;
+      }
+      const code = codeErreur(erreur);
+      if (code === 'ressource.introuvable') {
+        // Déjà supprimé par un autre : le résultat attendu est là, il suffit de relire.
+        this.erreurModule.set(null);
+        await this.relire();
+        return;
+      }
+      this.erreurModule.set({
+        message: messageErreur(erreur),
+        // Un refus (403) se répéterait à l'identique : « Réessayer » efface seulement le message.
+        reessayer: () =>
+          code === 'module.reserve_au_createur'
+            ? this.erreurModule.set(null)
+            : void this.envoyerSuppression(module),
+      });
+    } finally {
+      this.suppressionEnCours.set(false);
+    }
+  }
+
+  /**
+   * Relit la Préparation et les Modules après une suppression, sans toucher au Thème ni au Temps passé affichés ;
+   * le focus revient à la liste Module.
+   */
+  private async relire(): Promise<void> {
+    const numero = this.dernierChargement;
+    try {
+      const preparation = await this.api.invoke(lirePreparation, { id: this.id() });
+      if (numero !== this.dernierChargement) {
+        return;
+      }
+      this.module.set(preparation.moduleId ?? null);
+      this.preparation.set(preparation);
+      this.erreurModule.set(null);
+      await this.chargerListes(preparation.albumId);
+      this.rendreFocusALaListe();
+    } catch (erreur) {
+      if (numero === this.dernierChargement) {
+        this.erreurModule.set({
+          message: messageErreur(erreur),
+          reessayer: () => void this.relire(),
+        });
+      }
+    }
   }
 
   protected choisirTheme(themeId: string | null): void {
@@ -347,6 +604,9 @@ export class Preparation {
     } catch (erreur) {
       if (numero === this.dernierChargement) {
         this.erreurEnregistrement.set(messageErreur(erreur));
+        if (codeErreur(erreur) === 'preparation.module_invalide') {
+          void this.retirerModuleDisparu(preparation.albumId, numero);
+        }
       }
     } finally {
       this.enregistrementEnCours = false;
@@ -355,6 +615,23 @@ export class Preparation {
         this.enregistrementEnAttente = false;
         void this.enregistrer();
       }
+    }
+  }
+
+  /**
+   * Après `preparation.module_invalide` : le Module choisi a été supprimé entre-temps. Les Modules sont relus et, s'il
+   * n'y figure plus, il n'est plus choisi (« Réessayer » enverra alors « Aucun module »).
+   */
+  private async retirerModuleDisparu(albumId: string, numero: number): Promise<void> {
+    await this.chargerListes(albumId);
+    const choisi = this.module();
+    if (
+      numero === this.dernierChargement &&
+      this.listesChargees() &&
+      choisi !== null &&
+      !this.modules().some((module) => module.id === choisi)
+    ) {
+      this.module.set(null);
     }
   }
 }

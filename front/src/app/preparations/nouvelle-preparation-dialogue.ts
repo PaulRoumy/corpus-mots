@@ -20,7 +20,7 @@ import { MatDialog, MatDialogModule, MatDialogRef } from '@angular/material/dial
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatIconModule } from '@angular/material/icon';
 import { MatInputModule } from '@angular/material/input';
-import { MatSelectModule } from '@angular/material/select';
+import { MatSelect, MatSelectModule } from '@angular/material/select';
 import {
   debounceTime,
   distinctUntilChanged,
@@ -34,6 +34,7 @@ import {
 } from 'rxjs';
 import { Api } from '../api/api';
 import { creerAlbum } from '../api/fn/albums-resource/creer-album';
+import { creerModule } from '../api/fn/albums-resource/creer-module';
 import { listerModulesDeLAlbum } from '../api/fn/albums-resource/lister-modules-de-l-album';
 import { listerTitresProches } from '../api/fn/albums-resource/lister-titres-proches';
 import { rechercherAlbums } from '../api/fn/albums-resource/rechercher-albums';
@@ -47,6 +48,7 @@ import { ThemeDto } from '../api/models/theme-dto';
 import { BandeauErreur } from '../commun/bandeau-erreur/bandeau-erreur';
 import { codeErreur, messageErreur } from '../commun/erreurs/message-erreur';
 import { LIBELLES_SECTION, Section, SECTIONS } from '../commun/repere-section/repere-section';
+import { ChampNomModule } from './champ-nom-module';
 
 /** Délai de frappe avant de chercher les Albums, ou les titres proches du titre à créer. */
 export const DELAI_RECHERCHE_ALBUMS_MS = 250;
@@ -76,15 +78,23 @@ interface ErreurAffichee {
 const OPTION_CREER_ALBUM = Symbol('creer-album');
 type ValeurOption = AlbumDto | typeof OPTION_CREER_ALBUM;
 
+/** Valeur de l'option « Nouveau module » de la liste Module, distincte de tout Module. */
+const OPTION_NOUVEAU_MODULE = Symbol('nouveau-module');
+type ValeurModule = string | null | typeof OPTION_NOUVEAU_MODULE;
+
 /**
  * Dialogue « Nouvelle préparation » (UJ-1, key-accueil.html › 4) : Album cherché pendant la frappe (à partir de
  * 2 caractères, « n modules » à droite de chaque suggestion, puis « Créer l'album « … » »), Section (PS, MS, GS,
- * préremplie avec celle de la dernière Préparation), Module (seulement si l'Album en a) et Thème par défaut (seulement
- * s'il existe des Thèmes), tous deux facultatifs. « Créer » reste désactivé tant qu'Album et Section manquent ; il crée
- * la Préparation et ferme le dialogue avec elle.
+ * préremplie avec celle de la dernière Préparation), Module (dès que les Modules de l'Album choisi sont chargés) et
+ * Thème par défaut (seulement s'il existe des Thèmes), tous deux facultatifs. « Créer » reste désactivé tant qu'Album
+ * et Section manquent ; il crée la Préparation et ferme le dialogue avec elle.
  *
  * « Créer l'album » déplie sur place le volet de création (pas de dialogue sur un dialogue) : Titre, Auteur, Éditeur,
  * et les Albums au titre proche, que l'enseignant peut choisir à la place. L'Album créé est aussitôt choisi.
+ *
+ * « Nouveau module », dernière option de la liste Module, déplie à sa place le champ « Nom du nouveau module » ; le
+ * Module créé en fin d'Album est aussitôt choisi, et une erreur de création s'affiche dans ce champ. Ni renommage ni
+ * suppression ici : ils se font depuis l'En-tête de la Préparation.
  *
  * Chaque source (recherche, Modules, Thèmes, création de Préparation, titres proches, création d'Album) a son propre
  * Bandeau d'erreur et son « Réessayer » ; un succès n'efface que l'erreur de sa source.
@@ -93,6 +103,7 @@ type ValeurOption = AlbumDto | typeof OPTION_CREER_ALBUM;
   selector: 'app-nouvelle-preparation',
   imports: [
     BandeauErreur,
+    ChampNomModule,
     MatAutocompleteModule,
     MatButtonModule,
     MatButtonToggleModule,
@@ -284,14 +295,34 @@ type ValeurOption = AlbumDto | typeof OPTION_CREER_ALBUM;
         </mat-button-toggle-group>
       </div>
 
-      @if (modules().length > 0) {
+      @if (saisieModuleOuverte()) {
+        <app-champ-nom-module
+          class="nouvelle-preparation__champ"
+          etiquette="Nom du nouveau module"
+          libelleValider="Ajouter"
+          [enCours]="creationModuleEnCours()"
+          [erreur]="erreurCreationModule()"
+          (valider)="ajouterModule($event)"
+          (annuler)="fermerSaisieModule()"
+        />
+      } @else if (modulesCharges()) {
         <mat-form-field class="nouvelle-preparation__champ">
           <mat-label>Module (facultatif)</mat-label>
-          <mat-select [value]="module()" (selectionChange)="module.set($event.value)">
+          <mat-select
+            #listeModule
+            [value]="module()"
+            (selectionChange)="choisirModule($event.value)"
+          >
             <mat-option [value]="null">Aucun module</mat-option>
             @for (choix of modules(); track choix.id) {
               <mat-option [value]="choix.id">{{ choix.nom }}</mat-option>
             }
+            <mat-option class="nouvelle-preparation__creer" [value]="optionNouveauModule">
+              <span class="nouvelle-preparation__suggestion">
+                <mat-icon svgIcon="plus" aria-hidden="true" />
+                <span class="nouvelle-preparation__titre">Nouveau module</span>
+              </span>
+            </mat-option>
           </mat-select>
         </mat-form-field>
       }
@@ -313,14 +344,14 @@ type ValeurOption = AlbumDto | typeof OPTION_CREER_ALBUM;
         matButton
         type="button"
         mat-dialog-close
-        [disabled]="envoiEnCours() || creationAlbumEnCours()"
+        [disabled]="envoiEnCours() || creationAlbumEnCours() || creationModuleEnCours()"
       >
         Annuler
       </button>
       <button
         matButton="filled"
         type="button"
-        [disabled]="!complet() || envoiEnCours() || voletOuvert()"
+        [disabled]="!complet() || envoiEnCours() || voletOuvert() || saisieModuleOuverte()"
         (click)="creer()"
       >
         Créer
@@ -342,9 +373,11 @@ export class NouvellePreparationDialogue implements OnInit {
   protected readonly longueurMin = LONGUEUR_MIN_RECHERCHE;
   protected readonly longueurMax = LONGUEUR_MAX_CHAMP_ALBUM;
   protected readonly optionCreerAlbum = OPTION_CREER_ALBUM;
+  protected readonly optionNouveauModule = OPTION_NOUVEAU_MODULE;
 
   private readonly champAlbum = viewChild<ElementRef<HTMLInputElement>>('champAlbum');
   private readonly champTitre = viewChild<ElementRef<HTMLInputElement>>('champTitre');
+  private readonly listeModule = viewChild<MatSelect>('listeModule');
 
   /** Texte saisi, ou l'Album choisi dans les suggestions. */
   protected readonly rechercheAlbum = new FormControl<string | ValeurOption>('', {
@@ -361,6 +394,12 @@ export class NouvellePreparationDialogue implements OnInit {
   readonly module = signal<string | null>(null);
   readonly theme = signal<string | null>(null);
   protected readonly modules = signal<ModuleDto[]>([]);
+  /** Vrai une fois les Modules de l'Album choisi chargés : la liste Module, avec « Nouveau module », s'affiche. */
+  protected readonly modulesCharges = signal(false);
+  /** Champ en ligne « Nom du nouveau module », ouvert à la place de la liste Module. */
+  protected readonly saisieModuleOuverte = signal(false);
+  protected readonly creationModuleEnCours = signal(false);
+  protected readonly erreurCreationModule = signal<string | null>(null);
   protected readonly themes = signal<ThemeDto[]>([]);
 
   /** Volet « Créer l'album », déplié à la place du champ Album. */
@@ -521,6 +560,8 @@ export class NouvellePreparationDialogue implements OnInit {
       this.dernierChargementModules++;
       this.modules.set([]);
       this.module.set(null);
+      this.modulesCharges.set(false);
+      this.fermerSaisieModule(false);
     }
   }
 
@@ -528,10 +569,13 @@ export class NouvellePreparationDialogue implements OnInit {
     const numero = ++this.dernierChargementModules;
     this.modules.set([]);
     this.module.set(null);
+    this.modulesCharges.set(false);
+    this.fermerSaisieModule(false);
     try {
       const modules = await this.api.invoke(listerModulesDeLAlbum, { id: album.id });
       if (numero === this.dernierChargementModules) {
         this.modules.set(modules);
+        this.modulesCharges.set(true);
         this.erreurModules.set(null);
       }
     } catch (erreur) {
@@ -545,6 +589,58 @@ export class NouvellePreparationDialogue implements OnInit {
               : this.erreurModules.set(null),
         });
       }
+    }
+  }
+
+  protected choisirModule(valeur: ValeurModule): void {
+    if (valeur === OPTION_NOUVEAU_MODULE) {
+      this.erreurCreationModule.set(null);
+      this.saisieModuleOuverte.set(true);
+    } else {
+      this.module.set(valeur);
+    }
+  }
+
+  /** Replie le champ « Nom du nouveau module » sans rien créer ; le focus revient à la liste Module si demandé. */
+  protected fermerSaisieModule(rendreFocus = true): void {
+    if (!this.saisieModuleOuverte()) {
+      return;
+    }
+    this.saisieModuleOuverte.set(false);
+    this.erreurCreationModule.set(null);
+    if (rendreFocus) {
+      afterNextRender(() => this.listeModule()?.focus(), { injector: this.injecteur });
+    }
+  }
+
+  /**
+   * Crée le Module `nom` en fin de l'Album choisi, l'ajoute à la liste et le choisit. En échec, le champ reste ouvert
+   * avec sa saisie et affiche le message.
+   */
+  async ajouterModule(nom: string): Promise<void> {
+    const album = this.album();
+    if (album === null || this.creationModuleEnCours()) {
+      return;
+    }
+    const numero = this.dernierChargementModules;
+    this.creationModuleEnCours.set(true);
+    // Un nouvel échec réaffiche son message, même identique au précédent.
+    this.erreurCreationModule.set(null);
+    this.reference.disableClose = true;
+    try {
+      const cree = await this.api.invoke(creerModule, { id: album.id, body: { nom } });
+      if (numero === this.dernierChargementModules) {
+        this.modules.update((modules) => [...modules, cree]);
+        this.module.set(cree.id);
+        this.fermerSaisieModule();
+      }
+    } catch (erreur) {
+      if (numero === this.dernierChargementModules) {
+        this.erreurCreationModule.set(messageErreur(erreur));
+      }
+    } finally {
+      this.creationModuleEnCours.set(false);
+      this.reference.disableClose = false;
     }
   }
 

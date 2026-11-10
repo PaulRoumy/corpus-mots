@@ -1,7 +1,9 @@
 package fr.corpusmots.comptes.api;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import io.quarkus.security.runtime.QuarkusSecurityIdentity;
 import java.util.Map;
@@ -11,7 +13,10 @@ import org.eclipse.microprofile.jwt.Claims;
 import org.eclipse.microprofile.jwt.JsonWebToken;
 import org.junit.jupiter.api.Test;
 
-/** L'enseignant courant est le {@code sub} du jeton, et n'existe pas hors d'une requête authentifiée (AD-6). */
+/**
+ * L'enseignant courant est le {@code sub} du jeton, administrateur par son rôle {@code admin}, et n'existe pas hors
+ * d'une requête authentifiée (AD-6).
+ */
 class EnseignantDuJetonTest {
 
     private static final String SUB = "0190f0a0-0000-7000-8000-000000000001";
@@ -37,6 +42,23 @@ class EnseignantDuJetonTest {
     @Test
     void unSubQuiNEstPasUnUuidLeveIllegalStateException() {
         assertThrows(IllegalStateException.class, enseignant(jeton("pas-un-uuid"))::id);
+    }
+
+    @Test
+    void leRoleAdminDuJetonFaitLAdministrateur() {
+        EnseignantDuJeton enseignant = new EnseignantDuJeton();
+        enseignant.identite = QuarkusSecurityIdentity.builder().setPrincipal(jeton(SUB)).addRole("admin").build();
+
+        assertTrue(enseignant.administrateur());
+        assertFalse(enseignant(jeton(SUB)).administrateur());
+    }
+
+    @Test
+    void uneRequeteAnonymeNEstPasAdministrateur() {
+        EnseignantDuJeton enseignant = new EnseignantDuJeton();
+        enseignant.identite = QuarkusSecurityIdentity.builder().setAnonymous(true).build();
+
+        assertFalse(enseignant.administrateur());
     }
 
     private static EnseignantDuJeton enseignant(JsonWebToken jeton) {

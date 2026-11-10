@@ -54,6 +54,13 @@ describe('messageErreur', () => {
       'album.deja_existant',
       'Cet album existe déjà. Choisissez-le dans la liste des albums au titre proche.',
     ],
+    [400, 'module.nom_invalide', 'Le nom du module doit compter de 1 à 200 caractères.'],
+    [
+      403,
+      'module.reserve_au_createur',
+      "Seuls le créateur du module et l'administrateur peuvent le modifier.",
+    ],
+    [409, 'module.deja_existant', 'Un module de ce nom existe déjà pour cet album.'],
     [404, 'ressource.introuvable', "Cet élément n'existe plus. Rechargez la page."],
     [400, 'requete.invalide', 'La demande est incomplète. Vérifiez la saisie, puis réessayez.'],
     [

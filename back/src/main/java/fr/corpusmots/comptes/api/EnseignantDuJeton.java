@@ -1,6 +1,7 @@
 package fr.corpusmots.comptes.api;
 
 import fr.corpusmots.commun.service.EnseignantCourant;
+import fr.corpusmots.comptes.service.ComptesService;
 import io.quarkus.security.identity.SecurityIdentity;
 import jakarta.enterprise.context.RequestScoped;
 import jakarta.inject.Inject;
@@ -8,8 +9,9 @@ import java.util.UUID;
 import org.eclipse.microprofile.jwt.JsonWebToken;
 
 /**
- * {@link EnseignantCourant} tiré du {@code sub} du jeton de la requête (AD-6). Sous {@code /api}, le filtre des
- * comptes a déjà vérifié que ce {@code sub} est un Enseignant actif.
+ * {@link EnseignantCourant} tiré du jeton de la requête (AD-6) : identifiant par son {@code sub}, administrateur par
+ * son rôle {@code admin}. Sous {@code /api}, le filtre des comptes a déjà vérifié que ce {@code sub} est un Enseignant
+ * actif.
  */
 @RequestScoped
 public class EnseignantDuJeton implements EnseignantCourant {
@@ -30,5 +32,11 @@ public class EnseignantDuJeton implements EnseignantCourant {
         } catch (IllegalArgumentException invalide) {
             throw new IllegalStateException("Aucun enseignant courant : le sub du jeton n'est pas un UUID", invalide);
         }
+    }
+
+    @Override
+    public boolean administrateur() {
+        return identite != null && !identite.isAnonymous()
+                && identite.hasRole(ComptesService.ROLE_ADMINISTRATEUR);
     }
 }

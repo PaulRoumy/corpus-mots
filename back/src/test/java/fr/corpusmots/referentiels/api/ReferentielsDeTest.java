@@ -5,11 +5,12 @@ import io.quarkus.narayana.jta.QuarkusTransaction;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 import jakarta.persistence.EntityManager;
+import java.util.List;
 import java.util.UUID;
 
 /**
- * Albums, Modules et Thèmes des {@code @QuarkusTest}, insérés et lus en SQL (la création des Modules et des Thèmes
- * arrive avec la story 2.2). Chaque méthode s'exécute dans sa propre transaction.
+ * Albums, Modules et Thèmes des {@code @QuarkusTest}, insérés et lus en SQL (la création des Thèmes arrive avec la story
+ * 2.2, partie 3). Chaque méthode s'exécute dans sa propre transaction.
  */
 @ApplicationScoped
 public class ReferentielsDeTest {
@@ -41,6 +42,19 @@ public class ReferentielsDeTest {
                 .getSingleResult());
     }
 
+    /**
+     * Exécute {@code pendant} en tenant la ligne de l'Album verrouillée ({@code SELECT … FOR UPDATE}) : les requêtes
+     * lancées pendant ce temps qui touchent l'Album attendent toutes la fin de {@code pendant}, puis repartent ensemble.
+     */
+    public void pendantVerrouAlbum(UUID albumId, Runnable pendant) {
+        QuarkusTransaction.requiringNew().run(() -> {
+            entityManager.createNativeQuery("select id from album where id = :id for update")
+                    .setParameter("id", albumId)
+                    .getSingleResult();
+            pendant.run();
+        });
+    }
+
     /** Nombre d'Albums en base. */
     public long nombreAlbums() {
         return QuarkusTransaction.requiringNew().call(() -> ((Number) entityManager
@@ -63,13 +77,33 @@ public class ReferentielsDeTest {
                 .getSingleResult());
     }
 
+    /** Insère un Module sans créateur, comme avant la story 2.2 : seul l'administrateur le gère. */
     public UUID module(UUID albumId, String nom, int ordre) {
+        return module(albumId, nom, ordre, null);
+    }
+
+    /** Insère un Module ; {@code createur} peut être {@code null}. */
+    public UUID module(UUID albumId, String nom, int ordre, String createur) {
         return QuarkusTransaction.requiringNew().call(() -> (UUID) entityManager.createNativeQuery(
-                "insert into module (album_id, nom, ordre) values (:album, :nom, :ordre) returning id")
+                "insert into module (album_id, nom, ordre, createur_id) values (:album, :nom, :ordre,"
+                        + " cast(:createur as uuid)) returning id")
                 .setParameter("album", albumId)
                 .setParameter("nom", nom)
                 .setParameter("ordre", ordre)
+                .setParameter("createur", createur)
                 .getSingleResult());
+    }
+
+    /** Modules de l'Album en base, dans leur ordre, chacun en « nom:ordre ». */
+    public List<String> modules(UUID albumId) {
+        return QuarkusTransaction.requiringNew().call(() -> {
+            @SuppressWarnings("unchecked")
+            List<Object[]> lignes = entityManager
+                    .createNativeQuery("select nom, ordre from module where album_id = :album order by ordre")
+                    .setParameter("album", albumId)
+                    .getResultList();
+            return lignes.stream().map(ligne -> ligne[0] + ":" + ligne[1]).toList();
+        });
     }
 
     public UUID theme(String nom) {

@@ -11,6 +11,7 @@ import fr.corpusmots.referentiels.persistance.ModuleRepository;
 import fr.corpusmots.referentiels.persistance.Theme;
 import fr.corpusmots.referentiels.persistance.ThemeRepository;
 import jakarta.enterprise.context.ApplicationScoped;
+import jakarta.enterprise.event.Event;
 import jakarta.inject.Inject;
 import jakarta.transaction.Transactional;
 import java.util.Collection;
@@ -45,6 +46,9 @@ public class ReferentielsService {
     static final String CODE_AUTEUR_INVALIDE = "album.auteur_invalide";
     static final String CODE_EDITEUR_INVALIDE = "album.editeur_invalide";
     static final String CODE_DEJA_EXISTANT = "album.deja_existant";
+    static final String CODE_NOM_MODULE_INVALIDE = "module.nom_invalide";
+    static final String CODE_MODULE_DEJA_EXISTANT = "module.deja_existant";
+    static final String CODE_MODULE_RESERVE_AU_CREATEUR = "module.reserve_au_createur";
 
     @Inject
     EnseignantCourant enseignantCourant;
@@ -57,6 +61,9 @@ public class ReferentielsService {
 
     @Inject
     ThemeRepository themes;
+
+    @Inject
+    Event<ModuleSupprime> moduleSupprime;
 
     /**
      * Albums dont le titre normalisé ({@link TitresAlbums#normaliser}) contient {@code recherche} normalisée ou lui
@@ -138,6 +145,102 @@ public class ReferentielsService {
         return modules.deLAlbum(albumId).stream().map(ReferentielsService::vue).toList();
     }
 
+    /**
+     * Crée un Module de l'Album, après son dernier Module, dont le créateur est l'enseignant courant ; il est visible
+     * de toute l'école aussitôt. L'Album est verrouillé le temps de la création : deux créations simultanées prennent
+     * deux places distinctes et ne portent pas le même nom.
+     *
+     * @throws ErreurMetier {@code 404 ressource.introuvable} si l'Album n'existe pas ; {@code 400 module.nom_invalide}
+     *         si le nom, espaces réduites et rognées, est vide ou dépasse {@value #LONGUEUR_MAX_CHAMP} caractères ;
+     *         {@code 409 module.deja_existant} si un Module de l'Album porte déjà ce nom, à la casse, aux accents et
+     *         aux espaces près
+     */
+    @Transactional
+    public ModuleVue creerModule(UUID albumId, NouveauModuleCommande commande) {
+        if (albumId == null || albums.verrouiller(albumId).isEmpty()) {
+            throw new ErreurMetier(404, CODE_INTROUVABLE, "Aucun album ne porte cet identifiant");
+        }
+        String nom = nomDeModule(commande.nom());
+        verifierNomLibre(albumId, nom, null);
+        Module module = Module.nouveau(modules.nouvelIdentifiant(), albumId, nom, modules.dernierOrdre(albumId) + 1,
+                enseignantCourant.id());
+        modules.persistAndFlush(module);
+        return vue(module);
+    }
+
+    /**
+     * Renomme le Module {@code id} ; le renommer en son propre nom est accepté. Rien n'est modifié en cas de refus.
+     *
+     * @throws ErreurMetier {@code 404 ressource.introuvable} si le Module n'existe pas ;
+     *         {@code 403 module.reserve_au_createur} si l'enseignant courant n'est ni son créateur ni administrateur ;
+     *         {@code 400 module.nom_invalide} et {@code 409 module.deja_existant} comme {@link #creerModule}
+     */
+    @Transactional
+    public ModuleVue renommerModule(UUID id, String nom) {
+        Module module = moduleGerable(id);
+        String nettoye = nomDeModule(nom);
+        albums.verrouiller(module.albumId());
+        verifierNomLibre(module.albumId(), nettoye, module.id());
+        module.renommer(nettoye);
+        modules.flush();
+        return vue(module);
+    }
+
+    /**
+     * Supprime le Module {@code id}. {@link ModuleSupprime} est d'abord émis, de façon synchrone, pour que les modules
+     * aval le retirent dans cette même transaction (AD-15) : les Préparations qui l'avaient n'ont plus de Module.
+     *
+     * @throws ErreurMetier {@code 404 ressource.introuvable} si le Module n'existe pas ;
+     *         {@code 403 module.reserve_au_createur} si l'enseignant courant n'est ni son créateur ni administrateur
+     */
+    @Transactional
+    public void supprimerModule(UUID id) {
+        Module module = moduleGerable(id);
+        moduleSupprime.fire(new ModuleSupprime(module.id(), module.albumId()));
+        modules.delete(module);
+        modules.flush();
+    }
+
+    /**
+     * Module {@code id}, si l'enseignant courant en est le créateur ou est administrateur. Un Module sans créateur
+     * n'est géré que par l'administrateur.
+     */
+    private Module moduleGerable(UUID id) {
+        Module module = (id == null ? Optional.<Module>empty() : modules.findByIdOptional(id))
+                .orElseThrow(() -> new ErreurMetier(404, CODE_INTROUVABLE, "Aucun module ne porte cet identifiant"));
+        boolean createur = module.createurId() != null && module.createurId().equals(enseignantCourant.id());
+        if (!createur && !enseignantCourant.administrateur()) {
+            throw new ErreurMetier(403, CODE_MODULE_RESERVE_AU_CREATEUR,
+                    "Seuls le créateur du module et l'administrateur peuvent le modifier");
+        }
+        return module;
+    }
+
+    /** Nom de Module, espaces réduites et rognées. */
+    private static String nomDeModule(String nom) {
+        String nettoye = TitresAlbums.nettoyer(nom);
+        if (nettoye.isEmpty() || nettoye.length() > LONGUEUR_MAX_CHAMP) {
+            throw new ErreurMetier(400, CODE_NOM_MODULE_INVALIDE,
+                    "Le nom du module doit compter de 1 à 200 caractères");
+        }
+        return nettoye;
+    }
+
+    /**
+     * Aucun autre Module de l'Album que {@code moduleId} ne porte {@code nom}, comparé par
+     * {@link TitresAlbums#normaliser} (casse, accents, espaces et article initial). L'Album est déjà
+     * verrouillé par l'appelant.
+     */
+    private void verifierNomLibre(UUID albumId, String nom, UUID moduleId) {
+        String cherche = TitresAlbums.normaliser(nom);
+        boolean pris = modules.deLAlbum(albumId).stream()
+                .anyMatch(autre -> !autre.id().equals(moduleId)
+                        && TitresAlbums.normaliser(autre.nom()).equals(cherche));
+        if (pris) {
+            throw new ErreurMetier(409, CODE_MODULE_DEJA_EXISTANT, "Un module de ce nom existe déjà pour cet album");
+        }
+    }
+
     /** Tous les Thèmes de l'école, par nom. */
     @Transactional
     public List<ThemeVue> themes() {
@@ -183,7 +286,7 @@ public class ReferentielsService {
     }
 
     private static ModuleVue vue(Module module) {
-        return new ModuleVue(module.id(), module.albumId(), module.nom(), module.ordre());
+        return new ModuleVue(module.id(), module.albumId(), module.nom(), module.ordre(), module.createurId());
     }
 
     private static ThemeVue vue(Theme theme) {
