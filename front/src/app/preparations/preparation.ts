@@ -31,11 +31,15 @@ import { renommerModule } from '../api/fn/modules-resource/renommer-module';
 import { supprimerModule } from '../api/fn/modules-resource/supprimer-module';
 import { lirePreparation } from '../api/fn/preparations-resource/lire-preparation';
 import { reglerPreparation } from '../api/fn/preparations-resource/regler-preparation';
+import { creerTheme } from '../api/fn/themes-resource/creer-theme';
 import { listerThemes } from '../api/fn/themes-resource/lister-themes';
+import { renommerTheme } from '../api/fn/themes-resource/renommer-theme';
+import { supprimerTheme } from '../api/fn/themes-resource/supprimer-theme';
 import { ModuleDto } from '../api/models/module-dto';
 import { PreparationDto } from '../api/models/preparation-dto';
 import { ThemeDto } from '../api/models/theme-dto';
 import { BandeauErreur } from '../commun/bandeau-erreur/bandeau-erreur';
+import { ChampThemes } from '../commun/champ-themes/champ-themes';
 import { CompteCourant } from '../commun/compte-courant';
 import { DialogueConfirmation } from '../commun/dialogue-confirmation/dialogue-confirmation';
 import { codeErreur, MESSAGES_PAR_CODE, messageErreur } from '../commun/erreurs/message-erreur';
@@ -98,6 +102,14 @@ interface ErreurAffichee {
   readonly reessayer: () => void;
 }
 
+/** Champ de l'En-tête relu après une suppression : le Module ou le Thème par défaut. */
+type Source = 'module' | 'theme';
+
+/** Thèmes de l'école par nom, comme le back les renvoie. */
+function parNom(themes: ThemeDto[]): ThemeDto[] {
+  return [...themes].sort((a, b) => a.nom.localeCompare(b.nom, 'fr'));
+}
+
 /**
  * Page d'une Préparation (`/preparations/:id`), réduite pour l'instant à son En-tête (key-preparation.html › `.hero`) :
  * titre de l'Album, Repère de Section, Module, Thème par défaut, « N mots, M déjà illustrés » et Temps passé.
@@ -115,6 +127,14 @@ interface ErreurAffichee {
  * Dialogue de confirmation puis relit la Préparation et les Modules. Après `preparation.module_invalide` (Module
  * supprimé entre-temps par un collègue), les Modules sont relus et le Module disparu retiré du choix.
  *
+ * Thèmes (story 2.2, partie 3) : le Thème par défaut est un Champ à étiquettes limité à une étiquette ; choisir un
+ * autre Thème la remplace, la retirer laisse la Préparation sans Thème par défaut, chaque changement est enregistré.
+ * « Créer le thème « … » » crée un Thème pour toute l'école, aussitôt choisi. Le menu d'une étiquette (son créateur,
+ * l'administrateur) propose « Renommer », qui ouvre à la place du champ le même champ en ligne que le Module, et
+ * « Supprimer », qui passe par le Dialogue de confirmation puis relit la Préparation et les Thèmes ; un Thème utilisé
+ * par des Images est refusé (`theme.utilise`). Après `preparation.theme_introuvable`, les Thèmes sont relus et le
+ * Thème disparu retiré du choix.
+ *
  * Le Temps passé est un champ texte en mode de saisie décimal plutôt qu'un `type="number"` : celui-ci, selon la langue
  * du navigateur, refuse la virgule sans le dire (sa valeur devient vide, comme un champ effacé).
  */
@@ -123,6 +143,7 @@ interface ErreurAffichee {
   imports: [
     BandeauErreur,
     ChampNomModule,
+    ChampThemes,
     MatButtonModule,
     MatFormFieldModule,
     MatIconModule,
@@ -161,6 +182,14 @@ interface ErreurAffichee {
             [message]="affichee.message"
             (reessayer)="affichee.reessayer()"
             (fermer)="erreurModule.set(null)"
+          />
+        }
+        @if (erreurTheme(); as affichee) {
+          <app-bandeau-erreur
+            class="erreur-theme"
+            [message]="affichee.message"
+            (reessayer)="affichee.reessayer()"
+            (fermer)="erreurTheme.set(null)"
           />
         }
         @if (erreurListes(); as message) {
@@ -232,16 +261,32 @@ interface ErreurAffichee {
               } @else if (courante.nomModule) {
                 <span class="entete__nom-module">{{ courante.nomModule }}</span>
               }
-              @if (themes().length > 0) {
-                <mat-form-field class="entete__champ entete__theme" subscriptSizing="dynamic">
-                  <mat-label>Thème par défaut</mat-label>
-                  <mat-select [value]="theme()" (selectionChange)="choisirTheme($event.value)">
-                    <mat-option [value]="null">Aucun thème</mat-option>
-                    @for (choix of themes(); track choix.id) {
-                      <mat-option [value]="choix.id">{{ choix.nom }}</mat-option>
-                    }
-                  </mat-select>
-                </mat-form-field>
+              @if (themeARenommer(); as aRenommer) {
+                <app-champ-nom-module
+                  class="entete__saisie-module"
+                  etiquette="Nouveau nom du thème"
+                  libelleValider="Renommer"
+                  [valeurInitiale]="aRenommer.nom"
+                  [enCours]="renommageThemeEnCours()"
+                  [erreur]="erreurRenommageTheme()"
+                  (valider)="validerRenommageTheme($event)"
+                  (annuler)="fermerRenommageTheme()"
+                />
+              } @else if (listesChargees()) {
+                <app-champ-themes
+                  class="entete__themes"
+                  etiquette="Thème par défaut"
+                  [themes]="themes()"
+                  [choisis]="themesChoisis()"
+                  [limite]="1"
+                  [gerable]="themeGerable()"
+                  [enCours]="creationThemeEnCours()"
+                  [erreur]="erreurCreationTheme()"
+                  (choisisChange)="choisirTheme($event[0] ?? null)"
+                  (creer)="creerTheme($event)"
+                  (renommer)="ouvrirRenommageTheme($event)"
+                  (supprimer)="supprimerTheme($event)"
+                />
               } @else if (courante.nomThemeDefaut) {
                 <span class="entete__nom-theme"
                   ><span class="cm-visuellement-masque">Thème par défaut : </span
@@ -323,6 +368,29 @@ export class Preparation {
   /** Échec d'une suppression de Module, ou de la relecture qui la suit. */
   protected readonly erreurModule = signal<ErreurAffichee | null>(null);
   private readonly listeModule = viewChild<MatSelect>('listeModule');
+  private readonly champThemes = viewChild(ChampThemes);
+
+  /** Thème par défaut choisi, en liste pour le Champ à étiquettes (une étiquette au plus). */
+  protected readonly themesChoisis = computed(() => {
+    const theme = this.theme();
+    return theme === null ? [] : [theme];
+  });
+  protected readonly creationThemeEnCours = signal(false);
+  protected readonly erreurCreationTheme = signal<string | null>(null);
+  /** Thème en cours de renommage : le champ en ligne remplace le Champ à étiquettes. */
+  protected readonly themeARenommer = signal<ThemeDto | null>(null);
+  protected readonly renommageThemeEnCours = signal(false);
+  protected readonly erreurRenommageTheme = signal<string | null>(null);
+  /** Échec d'une suppression de Thème, ou de la relecture qui la suit. */
+  protected readonly erreurTheme = signal<ErreurAffichee | null>(null);
+  private suppressionThemeEnCours = false;
+
+  /** Le menu d'une étiquette n'est proposé qu'à son créateur et à l'administrateur (le back revérifie). */
+  protected readonly themeGerable = computed(() => {
+    const compte = this.compteCourant.compte();
+    return (theme: ThemeDto) =>
+      compte !== null && (compte.administrateur || theme.createurId === compte.id);
+  });
 
   /** Module choisi, si l'enseignant peut le renommer ou le supprimer : son créateur, ou l'administrateur. */
   protected readonly moduleGerable = computed(() => {
@@ -359,6 +427,10 @@ export class Preparation {
     this.saisieModule.set(null);
     this.erreurSaisieModule.set(null);
     this.erreurModule.set(null);
+    this.erreurCreationTheme.set(null);
+    this.themeARenommer.set(null);
+    this.erreurRenommageTheme.set(null);
+    this.erreurTheme.set(null);
     this.enregistrementEnAttente = false;
     try {
       const preparation = await this.api.invoke(lirePreparation, { id });
@@ -500,7 +572,7 @@ export class Preparation {
       await this.api.invoke(supprimerModule, { id: module.id });
       if (numero === this.dernierChargement) {
         this.erreurModule.set(null);
-        await this.relire();
+        await this.relire('module');
       }
     } catch (erreur) {
       if (numero !== this.dernierChargement) {
@@ -510,7 +582,7 @@ export class Preparation {
       if (code === 'ressource.introuvable') {
         // Déjà supprimé par un autre : le résultat attendu est là, il suffit de relire.
         this.erreurModule.set(null);
-        await this.relire();
+        await this.relire('module');
         return;
       }
       this.erreurModule.set({
@@ -527,26 +599,35 @@ export class Preparation {
   }
 
   /**
-   * Relit la Préparation et les Modules après une suppression, sans toucher au Thème ni au Temps passé affichés ;
-   * le focus revient à la liste Module.
+   * Relit la Préparation et les listes après la suppression d'un Module ou d'un Thème ; seul le champ de cette
+   * `source` reprend la valeur relue, les autres valeurs affichées restent. Le focus revient à ce champ.
    */
-  private async relire(): Promise<void> {
+  private async relire(source: Source): Promise<void> {
     const numero = this.dernierChargement;
+    const erreurSource = source === 'module' ? this.erreurModule : this.erreurTheme;
     try {
       const preparation = await this.api.invoke(lirePreparation, { id: this.id() });
       if (numero !== this.dernierChargement) {
         return;
       }
-      this.module.set(preparation.moduleId ?? null);
+      if (source === 'module') {
+        this.module.set(preparation.moduleId ?? null);
+      } else {
+        this.theme.set(preparation.themeDefautId ?? null);
+      }
       this.preparation.set(preparation);
-      this.erreurModule.set(null);
+      erreurSource.set(null);
       await this.chargerListes(preparation.albumId);
-      this.rendreFocusALaListe();
+      if (source === 'module') {
+        this.rendreFocusALaListe();
+      } else {
+        this.rendreFocusAuxThemes();
+      }
     } catch (erreur) {
       if (numero === this.dernierChargement) {
-        this.erreurModule.set({
+        erreurSource.set({
           message: messageErreur(erreur),
-          reessayer: () => void this.relire(),
+          reessayer: () => void this.relire(source),
         });
       }
     }
@@ -555,6 +636,126 @@ export class Preparation {
   protected choisirTheme(themeId: string | null): void {
     this.theme.set(themeId);
     void this.enregistrer();
+  }
+
+  private rendreFocusAuxThemes(): void {
+    afterNextRender(() => this.champThemes()?.focus(), { injector: this.injecteur });
+  }
+
+  /** « Créer le thème « … » » : le Thème créé, visible de toute l'école, est ajouté, choisi et enregistré. */
+  protected async creerTheme(nom: string): Promise<void> {
+    if (this.creationThemeEnCours()) {
+      return;
+    }
+    const numero = this.dernierChargement;
+    this.creationThemeEnCours.set(true);
+    // Un nouvel échec réaffiche son message, même identique au précédent.
+    this.erreurCreationTheme.set(null);
+    try {
+      const cree = await this.api.invoke(creerTheme, { body: { nom } });
+      if (numero === this.dernierChargement) {
+        this.themes.update((themes) => parNom([...themes, cree]));
+        this.choisirTheme(cree.id);
+      }
+    } catch (erreur) {
+      if (numero === this.dernierChargement) {
+        this.erreurCreationTheme.set(messageErreur(erreur));
+      }
+    } finally {
+      this.creationThemeEnCours.set(false);
+    }
+  }
+
+  protected ouvrirRenommageTheme(theme: ThemeDto): void {
+    this.erreurRenommageTheme.set(null);
+    this.themeARenommer.set(theme);
+  }
+
+  /** Replie le champ en ligne sans rien renommer ; le focus revient au Champ à étiquettes. */
+  protected fermerRenommageTheme(): void {
+    this.themeARenommer.set(null);
+    this.erreurRenommageTheme.set(null);
+    this.rendreFocusAuxThemes();
+  }
+
+  /** Renomme le Thème ; en échec, le champ reste ouvert avec sa saisie et affiche le message. */
+  protected async validerRenommageTheme(nom: string): Promise<void> {
+    const theme = this.themeARenommer();
+    if (theme === null || this.renommageThemeEnCours()) {
+      return;
+    }
+    const numero = this.dernierChargement;
+    this.renommageThemeEnCours.set(true);
+    this.erreurRenommageTheme.set(null);
+    try {
+      const renomme = await this.api.invoke(renommerTheme, { id: theme.id, body: { nom } });
+      if (numero === this.dernierChargement) {
+        this.themes.update((themes) =>
+          parNom(themes.map((existant) => (existant.id === renomme.id ? renomme : existant))),
+        );
+        this.preparation.update((courante) =>
+          courante?.themeDefautId === renomme.id
+            ? { ...courante, nomThemeDefaut: renomme.nom }
+            : courante,
+        );
+        this.fermerRenommageTheme();
+      }
+    } catch (erreur) {
+      if (numero === this.dernierChargement) {
+        this.erreurRenommageTheme.set(messageErreur(erreur));
+      }
+    } finally {
+      this.renommageThemeEnCours.set(false);
+    }
+  }
+
+  /** « Supprimer » : Dialogue de confirmation, puis suppression et relecture de la Préparation et des Thèmes. */
+  protected async supprimerTheme(theme: ThemeDto): Promise<void> {
+    const confirme = await this.confirmation.confirmer({
+      titre: 'Supprimer le thème ?',
+      phrase:
+        `Le thème « ${theme.nom} » sera retiré de la liste de l'école et des préparations qui l'ont pour ` +
+        'thème par défaut, chez tous les enseignants.',
+      libelleConfirmer: 'Supprimer le thème',
+    });
+    if (confirme) {
+      await this.envoyerSuppressionTheme(theme);
+    }
+  }
+
+  private async envoyerSuppressionTheme(theme: ThemeDto): Promise<void> {
+    if (this.suppressionThemeEnCours) {
+      return;
+    }
+    const numero = this.dernierChargement;
+    this.suppressionThemeEnCours = true;
+    try {
+      await this.api.invoke(supprimerTheme, { id: theme.id });
+      if (numero === this.dernierChargement) {
+        this.erreurTheme.set(null);
+        await this.relire('theme');
+      }
+    } catch (erreur) {
+      if (numero !== this.dernierChargement) {
+        return;
+      }
+      const code = codeErreur(erreur);
+      if (code === 'ressource.introuvable') {
+        // Déjà supprimé par un autre : le résultat attendu est là, il suffit de relire.
+        this.erreurTheme.set(null);
+        await this.relire('theme');
+        return;
+      }
+      // Un refus (403, Thème utilisé) se répéterait à l'identique : « Réessayer » efface seulement le message.
+      const refus = code === 'theme.reserve_au_createur' || code === 'theme.utilise';
+      this.erreurTheme.set({
+        message: messageErreur(erreur),
+        reessayer: () =>
+          refus ? this.erreurTheme.set(null) : void this.envoyerSuppressionTheme(theme),
+      });
+    } finally {
+      this.suppressionThemeEnCours = false;
+    }
   }
 
   /** Sortie du champ : une saisie invalide n'est pas envoyée, une valeur inchangée non plus. */
@@ -604,8 +805,11 @@ export class Preparation {
     } catch (erreur) {
       if (numero === this.dernierChargement) {
         this.erreurEnregistrement.set(messageErreur(erreur));
-        if (codeErreur(erreur) === 'preparation.module_invalide') {
+        const code = codeErreur(erreur);
+        if (code === 'preparation.module_invalide') {
           void this.retirerModuleDisparu(preparation.albumId, numero);
+        } else if (code === 'preparation.theme_introuvable') {
+          void this.retirerThemeDisparu(preparation.albumId, numero);
         }
       }
     } finally {
@@ -632,6 +836,23 @@ export class Preparation {
       !this.modules().some((module) => module.id === choisi)
     ) {
       this.module.set(null);
+    }
+  }
+
+  /**
+   * Après `preparation.theme_introuvable` : le Thème choisi a été supprimé entre-temps. Les Thèmes sont relus et, s'il
+   * n'y figure plus, il n'est plus choisi (« Réessayer » enverra alors l'absence de Thème par défaut).
+   */
+  private async retirerThemeDisparu(albumId: string, numero: number): Promise<void> {
+    await this.chargerListes(albumId);
+    const choisi = this.theme();
+    if (
+      numero === this.dernierChargement &&
+      this.listesChargees() &&
+      choisi !== null &&
+      !this.themes().some((theme) => theme.id === choisi)
+    ) {
+      this.theme.set(null);
     }
   }
 }

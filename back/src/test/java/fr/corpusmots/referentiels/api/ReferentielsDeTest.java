@@ -9,8 +9,8 @@ import java.util.List;
 import java.util.UUID;
 
 /**
- * Albums, Modules et Thèmes des {@code @QuarkusTest}, insérés et lus en SQL (la création des Thèmes arrive avec la story
- * 2.2, partie 3). Chaque méthode s'exécute dans sa propre transaction.
+ * Albums, Modules et Thèmes des {@code @QuarkusTest}, insérés et lus en SQL. Chaque méthode s'exécute dans sa propre
+ * transaction.
  */
 @ApplicationScoped
 public class ReferentielsDeTest {
@@ -106,10 +106,39 @@ public class ReferentielsDeTest {
         });
     }
 
+    /** Insère un Thème sans créateur, comme avant la story 2.2, partie 3 : seul l'administrateur le gère. */
     public UUID theme(String nom) {
+        return theme(nom, null);
+    }
+
+    /** Insère un Thème ; {@code createur} peut être {@code null}. */
+    public UUID theme(String nom, String createur) {
         return QuarkusTransaction.requiringNew().call(() -> (UUID) entityManager.createNativeQuery(
-                "insert into theme (nom) values (:nom) returning id")
+                "insert into theme (nom, createur_id) values (:nom, cast(:createur as uuid)) returning id")
                 .setParameter("nom", nom)
+                .setParameter("createur", createur)
                 .getSingleResult());
+    }
+
+    /** Noms des Thèmes en base, par nom. */
+    public List<String> themes() {
+        return QuarkusTransaction.requiringNew().call(() -> {
+            @SuppressWarnings("unchecked")
+            List<String> noms = entityManager.createNativeQuery("select nom from theme order by nom").getResultList();
+            return noms;
+        });
+    }
+
+    /**
+     * Exécute {@code pendant} en tenant le verrou consultatif des Thèmes : les créations et renommages lancés pendant
+     * ce temps l'attendent tous, puis repartent ensemble.
+     */
+    public void pendantVerrouThemes(Runnable pendant) {
+        QuarkusTransaction.requiringNew().run(() -> {
+            entityManager.createNativeQuery(
+                    "select count(*) from (select pg_advisory_xact_lock(hashtext('referentiels.themes'))) verrou")
+                    .getSingleResult();
+            pendant.run();
+        });
     }
 }

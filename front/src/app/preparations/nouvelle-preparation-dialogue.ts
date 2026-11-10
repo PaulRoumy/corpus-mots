@@ -40,12 +40,14 @@ import { listerTitresProches } from '../api/fn/albums-resource/lister-titres-pro
 import { rechercherAlbums } from '../api/fn/albums-resource/rechercher-albums';
 import { creerPreparation } from '../api/fn/preparations-resource/creer-preparation';
 import { lireDerniereSection } from '../api/fn/preparations-resource/lire-derniere-section';
+import { creerTheme } from '../api/fn/themes-resource/creer-theme';
 import { listerThemes } from '../api/fn/themes-resource/lister-themes';
 import { AlbumDto } from '../api/models/album-dto';
 import { ModuleDto } from '../api/models/module-dto';
 import { PreparationDto } from '../api/models/preparation-dto';
 import { ThemeDto } from '../api/models/theme-dto';
 import { BandeauErreur } from '../commun/bandeau-erreur/bandeau-erreur';
+import { ChampThemes } from '../commun/champ-themes/champ-themes';
 import { codeErreur, messageErreur } from '../commun/erreurs/message-erreur';
 import { LIBELLES_SECTION, Section, SECTIONS } from '../commun/repere-section/repere-section';
 import { ChampNomModule } from './champ-nom-module';
@@ -86,7 +88,7 @@ type ValeurModule = string | null | typeof OPTION_NOUVEAU_MODULE;
  * Dialogue « Nouvelle préparation » (UJ-1, key-accueil.html › 4) : Album cherché pendant la frappe (à partir de
  * 2 caractères, « n modules » à droite de chaque suggestion, puis « Créer l'album « … » »), Section (PS, MS, GS,
  * préremplie avec celle de la dernière Préparation), Module (dès que les Modules de l'Album choisi sont chargés) et
- * Thème par défaut (seulement s'il existe des Thèmes), tous deux facultatifs. « Créer » reste désactivé tant qu'Album
+ * Thème par défaut (Champ à étiquettes, dès que les Thèmes sont chargés), tous deux facultatifs. « Créer » reste désactivé tant qu'Album
  * et Section manquent ; il crée la Préparation et ferme le dialogue avec elle.
  *
  * « Créer l'album » déplie sur place le volet de création (pas de dialogue sur un dialogue) : Titre, Auteur, Éditeur,
@@ -96,6 +98,10 @@ type ValeurModule = string | null | typeof OPTION_NOUVEAU_MODULE;
  * Module créé en fin d'Album est aussitôt choisi, et une erreur de création s'affiche dans ce champ. Ni renommage ni
  * suppression ici : ils se font depuis l'En-tête de la Préparation.
  *
+ * Le Thème par défaut porte une étiquette au plus : choisir un autre Thème la remplace. « Créer le thème « … » » crée
+ * un Thème pour toute l'école, aussitôt choisi ; une erreur de création s'affiche sous le champ. Comme pour les
+ * Modules, ni renommage ni suppression ici (pas de dialogue sur un dialogue) : aucun menu d'étiquette.
+ *
  * Chaque source (recherche, Modules, Thèmes, création de Préparation, titres proches, création d'Album) a son propre
  * Bandeau d'erreur et son « Réessayer » ; un succès n'efface que l'erreur de sa source.
  */
@@ -104,6 +110,7 @@ type ValeurModule = string | null | typeof OPTION_NOUVEAU_MODULE;
   imports: [
     BandeauErreur,
     ChampNomModule,
+    ChampThemes,
     MatAutocompleteModule,
     MatButtonModule,
     MatButtonToggleModule,
@@ -327,16 +334,18 @@ type ValeurModule = string | null | typeof OPTION_NOUVEAU_MODULE;
         </mat-form-field>
       }
 
-      @if (themes().length > 0) {
-        <mat-form-field class="nouvelle-preparation__champ">
-          <mat-label>Thème par défaut (facultatif)</mat-label>
-          <mat-select [value]="theme()" (selectionChange)="theme.set($event.value)">
-            <mat-option [value]="null">Aucun thème</mat-option>
-            @for (choix of themes(); track choix.id) {
-              <mat-option [value]="choix.id">{{ choix.nom }}</mat-option>
-            }
-          </mat-select>
-        </mat-form-field>
+      @if (themesCharges()) {
+        <app-champ-themes
+          class="nouvelle-preparation__champ"
+          etiquette="Thème par défaut (facultatif)"
+          [themes]="themes()"
+          [choisis]="themesChoisis()"
+          [limite]="1"
+          [enCours]="creationThemeEnCours()"
+          [erreur]="erreurCreationTheme()"
+          (choisisChange)="theme.set($event[0] ?? null)"
+          (creer)="creerTheme($event)"
+        />
       }
     </mat-dialog-content>
     <mat-dialog-actions>
@@ -344,14 +353,25 @@ type ValeurModule = string | null | typeof OPTION_NOUVEAU_MODULE;
         matButton
         type="button"
         mat-dialog-close
-        [disabled]="envoiEnCours() || creationAlbumEnCours() || creationModuleEnCours()"
+        [disabled]="
+          envoiEnCours() ||
+          creationAlbumEnCours() ||
+          creationModuleEnCours() ||
+          creationThemeEnCours()
+        "
       >
         Annuler
       </button>
       <button
         matButton="filled"
         type="button"
-        [disabled]="!complet() || envoiEnCours() || voletOuvert() || saisieModuleOuverte()"
+        [disabled]="
+          !complet() ||
+          envoiEnCours() ||
+          voletOuvert() ||
+          saisieModuleOuverte() ||
+          creationThemeEnCours()
+        "
         (click)="creer()"
       >
         Créer
@@ -401,6 +421,14 @@ export class NouvellePreparationDialogue implements OnInit {
   protected readonly creationModuleEnCours = signal(false);
   protected readonly erreurCreationModule = signal<string | null>(null);
   protected readonly themes = signal<ThemeDto[]>([]);
+  /** Vrai une fois les Thèmes chargés : le Champ à étiquettes, avec « Créer le thème », s'affiche. */
+  protected readonly themesCharges = signal(false);
+  protected readonly themesChoisis = computed(() => {
+    const theme = this.theme();
+    return theme === null ? [] : [theme];
+  });
+  protected readonly creationThemeEnCours = signal(false);
+  protected readonly erreurCreationTheme = signal<string | null>(null);
 
   /** Volet « Créer l'album », déplié à la place du champ Album. */
   protected readonly voletOuvert = signal(false);
@@ -659,12 +687,39 @@ export class NouvellePreparationDialogue implements OnInit {
   private async chargerThemes(): Promise<void> {
     try {
       this.themes.set(await this.api.invoke(listerThemes));
+      this.themesCharges.set(true);
       this.erreurThemes.set(null);
     } catch (erreur) {
       this.erreurThemes.set({
         message: messageErreur(erreur),
         reessayer: () => void this.chargerThemes(),
       });
+    }
+  }
+
+  /**
+   * Crée le Thème `nom`, visible de toute l'école, l'ajoute à la liste et le choisit. En échec, le message s'affiche
+   * sous le Champ à étiquettes, qui garde la saisie.
+   */
+  async creerTheme(nom: string): Promise<void> {
+    if (this.creationThemeEnCours()) {
+      return;
+    }
+    this.creationThemeEnCours.set(true);
+    // Un nouvel échec réaffiche son message, même identique au précédent.
+    this.erreurCreationTheme.set(null);
+    this.reference.disableClose = true;
+    try {
+      const cree = await this.api.invoke(creerTheme, { body: { nom } });
+      this.themes.update((themes) =>
+        [...themes, cree].sort((a, b) => a.nom.localeCompare(b.nom, 'fr')),
+      );
+      this.theme.set(cree.id);
+    } catch (erreur) {
+      this.erreurCreationTheme.set(messageErreur(erreur));
+    } finally {
+      this.creationThemeEnCours.set(false);
+      this.reference.disableClose = false;
     }
   }
 

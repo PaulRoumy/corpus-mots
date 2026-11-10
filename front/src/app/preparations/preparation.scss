@@ -65,6 +65,11 @@
   }
 }
 
+// Thème par défaut : Champ à étiquettes, de la largeur des autres champs (story 2.2, partie 3).
+.entete__themes {
+  width: var(--cm-largeur-champ-entete);
+}
+
 // Repli en lecture seule quand les listes n'ont pas pu être chargées.
 .entete__nom-module {
   font: var(--cm-typo-body-sm);

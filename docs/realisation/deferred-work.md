@@ -96,6 +96,7 @@
 - source_spec: `docs/realisation/spec-2-2-en-tete-de-preparation-modifiable.md`
   summary: Story 2.2, partie 3 : Thèmes. Champ à étiquettes (UX-DR-17) qui propose les Thèmes existants, « Créer le thème « … » » pour toute l'école, Entrée pour ajouter, Retour arrière pour retirer ; renommer ou supprimer, réservé au créateur et à l'administrateur (`403`) ; suppression refusée si le Thème est encore utilisé, par les interfaces `…Utilisation` des modules aval (AD-15).
   evidence: Découpage de la story 2.2 choisi par Paul.
+  status: fait (`docs/realisation/spec-2-2-3-themes.md`).
 - source_spec: `docs/realisation/spec-2-2-en-tete-de-preparation-modifiable.md`
   summary: Story 2.2, partie 4 : « Corriger l'album » dans le menu de l'En-tête, réservé au créateur de l'Album et à l'administrateur, pour modifier le titre, l'auteur et l'éditeur ; la correction se voit partout.
   evidence: Découpage de la story 2.2 choisi par Paul.
@@ -107,5 +108,8 @@
   evidence: Revue de la story 2.2, partie 1, ligne 17 du journal de tri. Une fois un Module supprimé, « Réessayer » renverrait le même Module invalide, et tout enregistrement suivant échouerait.
   status: fait (`docs/realisation/spec-2-2-2-modules.md`).
 - source_spec: `docs/realisation/spec-2-2-2-modules.md`
-  summary: Page Données personnelles : déclarer les Albums et les Modules créés par l'enseignant, et le lien au créateur gardé sur eux (`album.createur_id`, `module.createur_id`), visible des collègues par `createurId`.
+  summary: Page Données personnelles : déclarer les Albums, les Modules et les Thèmes créés par l'enseignant, et le lien au créateur gardé sur eux (`album.createur_id`, `module.createur_id`, `theme.createur_id` depuis la story 2.2, partie 3), visible des collègues par `createurId`.
   evidence: Revue de la story 2.2, partie 2, ligne 13 du journal de tri. AGENTS.md demande cette mise à jour quand les données conservées changent ; `donnees-personnelles.ts` ne cite que les Préparations, et l'oubli date de la story 2.1.
+- source_spec: `docs/realisation/spec-2-2-3-themes.md`
+  summary: Story 2.6 : quand `vocabulaire` implémentera `UtilisationThemes`, empêcher qu'une Image reçoive un Thème en cours de suppression (verrou partagé entre la vérification `theme.utilise` et l'affectation).
+  evidence: Revue de la story 2.2, partie 3, ligne 10 du journal de tri (non vérifié, gravité moyenne si confirmé) : `supprimerTheme` interroge les utilisations sans verrou ; aucune affectation n'existe encore pour le démontrer.

@@ -42,6 +42,11 @@ export const MESSAGES_PAR_CODE: Readonly<Record<string, string>> = {
   'module.reserve_au_createur':
     "Seuls le créateur du module et l'administrateur peuvent le modifier.",
   'module.deja_existant': 'Un module de ce nom existe déjà pour cet album.',
+  'theme.nom_invalide': 'Le nom du thème doit compter de 1 à 200 caractères.',
+  'theme.deja_existant': 'Un thème de ce nom existe déjà.',
+  'theme.reserve_au_createur':
+    "Seuls le créateur du thème et l'administrateur peuvent le modifier.",
+  'theme.utilise': 'Ce thème est utilisé par des images : réaffectez-les avant de le supprimer.',
   'ressource.introuvable': "Cet élément n'existe plus. Rechargez la page.",
   'requete.invalide': 'La demande est incomplète. Vérifiez la saisie, puis réessayez.',
   'requete.trop_volumineuse':

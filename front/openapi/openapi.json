@@ -189,6 +189,16 @@
           }
         }
       },
+      "NomThemeDto" : {
+        "type" : "object",
+        "required" : [ "nom" ],
+        "properties" : {
+          "nom" : {
+            "type" : "string",
+            "maxLength" : 200
+          }
+        }
+      },
       "NouvelAlbumDto" : {
         "type" : "object",
         "required" : [ "titre", "auteur" ],
@@ -371,6 +381,11 @@
           },
           "nom" : {
             "type" : "string"
+          },
+          "createurId" : {
+            "description" : "Enseignant qui a créé le Thème, seul avec l'administrateur à pouvoir le renommer ou le supprimer ; absent pour un Thème antérieur, géré par l'administrateur seul",
+            "type" : "string",
+            "$ref" : "#/components/schemas/UUID"
           }
         }
       },
@@ -1000,6 +1015,96 @@
                 }
               }
             }
+          }
+        },
+        "tags" : [ "Themes Resource" ]
+      },
+      "post" : {
+        "summary" : "Créer un Thème, visible aussitôt de toute l'école",
+        "operationId" : "creerTheme",
+        "requestBody" : {
+          "required" : true,
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/NomThemeDto"
+              }
+            }
+          }
+        },
+        "responses" : {
+          "201" : {
+            "description" : "Thème créé, dont l'enseignant connecté est le créateur",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ThemeDto"
+                }
+              }
+            }
+          },
+          "400" : {
+            "description" : "Bad Request"
+          }
+        },
+        "tags" : [ "Themes Resource" ]
+      }
+    },
+    "/api/themes/{id}" : {
+      "delete" : {
+        "summary" : "Supprimer un Thème inutilisé (son créateur ou l'administrateur) : les Préparations qui l'avaient pour Thème par défaut n'en ont plus",
+        "operationId" : "supprimerTheme",
+        "parameters" : [ {
+          "name" : "id",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "$ref" : "#/components/schemas/UUID"
+          }
+        } ],
+        "responses" : {
+          "204" : {
+            "description" : "Thème supprimé"
+          }
+        },
+        "tags" : [ "Themes Resource" ]
+      }
+    },
+    "/api/themes/{id}/nom" : {
+      "put" : {
+        "summary" : "Renommer un Thème (son créateur ou l'administrateur), visible aussitôt de toute l'école",
+        "operationId" : "renommerTheme",
+        "parameters" : [ {
+          "name" : "id",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "$ref" : "#/components/schemas/UUID"
+          }
+        } ],
+        "requestBody" : {
+          "required" : true,
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/NomThemeDto"
+              }
+            }
+          }
+        },
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ThemeDto"
+                }
+              }
+            }
+          },
+          "400" : {
+            "description" : "Bad Request"
           }
         },
         "tags" : [ "Themes Resource" ]

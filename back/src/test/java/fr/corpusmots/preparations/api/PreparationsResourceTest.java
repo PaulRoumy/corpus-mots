@@ -28,8 +28,8 @@ import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
 
 /**
- * Création, liste, lecture et réglages des Préparations, isolées entre enseignants, et retrait d'un Module supprimé
- * (stories 2.1 et 2.2, parties 1 et 2).
+ * Création, liste, lecture et réglages des Préparations, isolées entre enseignants, et retrait d'un Module ou d'un
+ * Thème supprimé (stories 2.1 et 2.2, parties 1 à 3).
  */
 @QuarkusTest
 class PreparationsResourceTest {
@@ -461,6 +461,57 @@ class PreparationsResourceTest {
                 .body("code", equalTo("module.reserve_au_createur"));
 
         assertEquals(moduleDeClaire, reglages(deZoe).moduleId());
+    }
+
+    @Test
+    @TestSecurity(user = CLAIRE)
+    @OidcSecurity(claims = @Claim(key = "sub", value = CLAIRE))
+    void supprimerUnThemeLeRetireDesPreparationsDeTousLesEnseignants() {
+        UUID themeDeClaire = referentiels.theme("animaux", CLAIRE);
+        UUID deClaire = preparationAvecModule(CLAIRE, rouleGalette, "ms", module1, "2026-11-09T09:00:00Z");
+        UUID deZoe = preparationAvecModule(ZOE, rouleGalette, "gs", module1, "2026-11-09T10:00:00Z");
+        UUID autreTheme = preparationAvecModule(ZOE, rouleGalette, "ps", module1, "2026-11-09T11:00:00Z");
+        choisirTheme(deClaire, themeDeClaire);
+        choisirTheme(deZoe, themeDeClaire);
+        choisirTheme(autreTheme, cuisine);
+
+        given().when().delete("/api/themes/" + themeDeClaire)
+                .then()
+                .statusCode(204);
+
+        assertEquals(new Reglages(module1, null, null), reglages(deClaire));
+        assertEquals(new Reglages(module1, null, null), reglages(deZoe));
+        assertEquals(cuisine, reglages(autreTheme).themeDefautId());
+        given().when().get("/api/preparations/" + deClaire)
+                .then()
+                .statusCode(200)
+                .body("themeDefautId", nullValue())
+                .body("nomThemeDefaut", nullValue());
+    }
+
+    @Test
+    @TestSecurity(user = ZOE)
+    @OidcSecurity(claims = @Claim(key = "sub", value = ZOE))
+    void unThemeQueLEnseignantNePeutSupprimerResteDansLesPreparations() {
+        UUID themeDeClaire = referentiels.theme("animaux", CLAIRE);
+        UUID deZoe = preparationAvecModule(ZOE, rouleGalette, "gs", module1, "2026-11-09T10:00:00Z");
+        choisirTheme(deZoe, themeDeClaire);
+
+        given().when().delete("/api/themes/" + themeDeClaire)
+                .then()
+                .statusCode(403)
+                .body("code", equalTo("theme.reserve_au_createur"));
+
+        assertEquals(themeDeClaire, reglages(deZoe).themeDefautId());
+    }
+
+    /** Pose en base le Thème par défaut de la Préparation. */
+    private void choisirTheme(UUID preparation, UUID theme) {
+        QuarkusTransaction.requiringNew().run(() -> entityManager.createNativeQuery(
+                "update preparation set theme_defaut_id = :theme where id = :id")
+                .setParameter("theme", theme)
+                .setParameter("id", preparation)
+                .executeUpdate());
     }
 
     /** Réglages lus en base. */

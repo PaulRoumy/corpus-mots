@@ -12,6 +12,7 @@ import fr.corpusmots.referentiels.persistance.Theme;
 import fr.corpusmots.referentiels.persistance.ThemeRepository;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.enterprise.event.Event;
+import jakarta.enterprise.inject.Instance;
 import jakarta.inject.Inject;
 import jakarta.transaction.Transactional;
 import java.util.Collection;
@@ -49,6 +50,10 @@ public class ReferentielsService {
     static final String CODE_NOM_MODULE_INVALIDE = "module.nom_invalide";
     static final String CODE_MODULE_DEJA_EXISTANT = "module.deja_existant";
     static final String CODE_MODULE_RESERVE_AU_CREATEUR = "module.reserve_au_createur";
+    static final String CODE_NOM_THEME_INVALIDE = "theme.nom_invalide";
+    static final String CODE_THEME_DEJA_EXISTANT = "theme.deja_existant";
+    static final String CODE_THEME_RESERVE_AU_CREATEUR = "theme.reserve_au_createur";
+    static final String CODE_THEME_UTILISE = "theme.utilise";
 
     @Inject
     EnseignantCourant enseignantCourant;
@@ -64,6 +69,13 @@ public class ReferentielsService {
 
     @Inject
     Event<ModuleSupprime> moduleSupprime;
+
+    @Inject
+    Event<ThemeSupprime> themeSupprime;
+
+    /** Modules aval qui utilisent des Thèmes (AD-15) ; aucun avant la story 2.6. */
+    @Inject
+    Instance<UtilisationThemes> utilisationsThemes;
 
     /**
      * Albums dont le titre normalisé ({@link TitresAlbums#normaliser}) contient {@code recherche} normalisée ou lui
@@ -247,6 +259,103 @@ public class ReferentielsService {
         return themes.parNom().stream().map(ReferentielsService::vue).toList();
     }
 
+    /**
+     * Crée un Thème, dont le créateur est l'enseignant courant ; il est visible de toute l'école aussitôt. Les créations
+     * et renommages de Thèmes passent un à un ({@link ThemeRepository#verrouillerNoms}) : deux créations simultanées ne
+     * portent pas le même nom.
+     *
+     * @throws ErreurMetier {@code 400 theme.nom_invalide} si le nom, espaces réduites et rognées, est vide ou dépasse
+     *         {@value #LONGUEUR_MAX_CHAMP} caractères ; {@code 409 theme.deja_existant} si un Thème porte déjà ce nom,
+     *         comparé par {@link TitresAlbums#normaliser}
+     */
+    @Transactional
+    public ThemeVue creerTheme(String nom) {
+        String nettoye = nomDeTheme(nom);
+        themes.verrouillerNoms();
+        verifierNomDeThemeLibre(nettoye, null);
+        Theme theme = Theme.nouveau(themes.nouvelIdentifiant(), nettoye, enseignantCourant.id());
+        themes.persistAndFlush(theme);
+        return vue(theme);
+    }
+
+    /**
+     * Renomme le Thème {@code id} ; le renommer en son propre nom est accepté. Rien n'est modifié en cas de refus.
+     *
+     * @throws ErreurMetier {@code 404 ressource.introuvable} si le Thème n'existe pas ;
+     *         {@code 403 theme.reserve_au_createur} si l'enseignant courant n'est ni son créateur ni administrateur ;
+     *         {@code 400 theme.nom_invalide} et {@code 409 theme.deja_existant} comme {@link #creerTheme}
+     */
+    @Transactional
+    public ThemeVue renommerTheme(UUID id, String nom) {
+        Theme theme = themeGerable(id);
+        String nettoye = nomDeTheme(nom);
+        themes.verrouillerNoms();
+        verifierNomDeThemeLibre(nettoye, theme.id());
+        theme.renommer(nettoye);
+        themes.flush();
+        return vue(theme);
+    }
+
+    /**
+     * Supprime le Thème {@code id}, s'il n'est utilisé par aucun module aval ({@link UtilisationThemes}).
+     * {@link ThemeSupprime} est d'abord émis, de façon synchrone, pour que les modules aval le retirent dans cette même
+     * transaction (AD-15) : les Préparations qui l'avaient pour Thème par défaut n'en ont plus.
+     *
+     * @throws ErreurMetier {@code 404 ressource.introuvable} si le Thème n'existe pas ;
+     *         {@code 403 theme.reserve_au_createur} si l'enseignant courant n'est ni son créateur ni administrateur ;
+     *         {@code 409 theme.utilise} si un module aval l'utilise
+     */
+    @Transactional
+    public void supprimerTheme(UUID id) {
+        Theme theme = themeGerable(id);
+        for (UtilisationThemes utilisation : utilisationsThemes) {
+            if (utilisation.utilise(theme.id())) {
+                throw new ErreurMetier(409, CODE_THEME_UTILISE,
+                        "Ce thème est utilisé par des images : réaffectez-les avant de le supprimer");
+            }
+        }
+        themeSupprime.fire(new ThemeSupprime(theme.id()));
+        themes.delete(theme);
+        themes.flush();
+    }
+
+    /**
+     * Thème {@code id}, si l'enseignant courant en est le créateur ou est administrateur. Un Thème sans créateur n'est
+     * géré que par l'administrateur.
+     */
+    private Theme themeGerable(UUID id) {
+        Theme theme = (id == null ? Optional.<Theme>empty() : themes.findByIdOptional(id))
+                .orElseThrow(() -> new ErreurMetier(404, CODE_INTROUVABLE, "Aucun thème ne porte cet identifiant"));
+        boolean createur = theme.createurId() != null && theme.createurId().equals(enseignantCourant.id());
+        if (!createur && !enseignantCourant.administrateur()) {
+            throw new ErreurMetier(403, CODE_THEME_RESERVE_AU_CREATEUR,
+                    "Seuls le créateur du thème et l'administrateur peuvent le modifier");
+        }
+        return theme;
+    }
+
+    /** Nom de Thème, espaces réduites et rognées. */
+    private static String nomDeTheme(String nom) {
+        String nettoye = TitresAlbums.nettoyer(nom);
+        if (nettoye.isEmpty() || nettoye.length() > LONGUEUR_MAX_CHAMP) {
+            throw new ErreurMetier(400, CODE_NOM_THEME_INVALIDE, "Le nom du thème doit compter de 1 à 200 caractères");
+        }
+        return nettoye;
+    }
+
+    /**
+     * Aucun autre Thème que {@code themeId} ne porte {@code nom}, comparé par {@link TitresAlbums#normaliser} (casse,
+     * accents, espaces et article initial). Le verrou des Thèmes est déjà pris par l'appelant.
+     */
+    private void verifierNomDeThemeLibre(String nom, UUID themeId) {
+        String cherche = TitresAlbums.normaliser(nom);
+        boolean pris = themes.parNom().stream()
+                .anyMatch(autre -> !autre.id().equals(themeId) && TitresAlbums.normaliser(autre.nom()).equals(cherche));
+        if (pris) {
+            throw new ErreurMetier(409, CODE_THEME_DEJA_EXISTANT, "Un thème de ce nom existe déjà");
+        }
+    }
+
     /** L'Album {@code id}, vide s'il n'existe pas. */
     @Transactional
     public Optional<AlbumVue> album(UUID id) {
@@ -290,6 +399,6 @@ public class ReferentielsService {
     }
 
     private static ThemeVue vue(Theme theme) {
-        return new ThemeVue(theme.id(), theme.nom());
+        return new ThemeVue(theme.id(), theme.nom(), theme.createurId());
     }
 }

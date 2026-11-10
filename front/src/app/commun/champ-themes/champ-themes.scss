@@ -1,0 +1,47 @@
+@use '@angular/material' as mat;
+
+// Champ à étiquettes des Thèmes (DESIGN « Champ à étiquettes ») : puces d'entrée Material 3 en secondary-container,
+// arrondi sm ; message d'échec de création sous le champ.
+:host {
+  display: flex;
+  flex-direction: column;
+  gap: var(--cm-espace-1);
+
+  @include mat.chips-overrides(
+    (
+      container-shape-radius: var(--cm-arrondi-sm),
+      elevated-container-color: var(--mat-sys-secondary-container),
+      outline-width: 0,
+      label-text-color: var(--mat-sys-on-secondary-container),
+      with-trailing-icon-trailing-icon-color: var(--mat-sys-on-secondary-container),
+    )
+  );
+}
+
+.champ-themes__champ {
+  width: 100%;
+}
+
+.champ-themes__etiquette--gerable {
+  cursor: pointer;
+}
+
+.champ-themes__saisie {
+  min-width: var(--cm-largeur-saisie-etiquette);
+}
+
+// Dernière proposition : « Créer le thème « … » », en primary (comme « Créer l'album »).
+.champ-themes__creer {
+  color: var(--mat-sys-primary);
+  font: var(--cm-typo-label);
+
+  mat-icon {
+    color: var(--mat-sys-primary);
+  }
+}
+
+.champ-themes__erreur {
+  margin: 0;
+  font: var(--cm-typo-body-sm);
+  color: var(--mat-sys-error);
+}

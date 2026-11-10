@@ -147,6 +147,34 @@ describe('Dialogue « Nouvelle préparation »', () => {
     await stabiliser();
   }
 
+  const saisieThemes = () =>
+    dialogue()!.querySelector<HTMLInputElement>('app-champ-themes input')!;
+  const etiquettesThemes = () =>
+    [...dialogue()!.querySelectorAll('app-champ-themes mat-chip-row')].map((puce) =>
+      puce.querySelector('.mdc-evolution-chip__text-label')?.textContent?.trim(),
+    );
+
+  /** Touche au clavier, avec le `keyCode` que lisent les composants Material. */
+  function toucheClavier(cible: HTMLElement, key: string, keyCode: number) {
+    const evenement = new KeyboardEvent('keydown', { key, bubbles: true, cancelable: true });
+    Object.defineProperty(evenement, 'keyCode', { get: () => keyCode });
+    cible.dispatchEvent(evenement);
+  }
+
+  async function taperTheme(texte: string) {
+    saisieThemes().focus();
+    saisieThemes().value = texte;
+    saisieThemes().dispatchEvent(new Event('input'));
+    await stabiliser();
+  }
+
+  /** Tape `texte` dans le Champ à étiquettes et choisit au clavier la proposition mise en avant. */
+  async function choisirThemeAuClavier(texte: string) {
+    await taperTheme(texte);
+    toucheClavier(saisieThemes(), 'Enter', 13);
+    await stabiliser();
+  }
+
   async function choisirSection(libelle: string) {
     [...dialogue()!.querySelectorAll<HTMLElement>('mat-button-toggle button')]
       .find((choix) => choix.textContent?.trim() === libelle)!
@@ -181,10 +209,11 @@ describe('Dialogue « Nouvelle préparation »', () => {
     await ouverture;
   });
 
-  it('aucun Thème dans l’école : le champ Thème par défaut est masqué', async () => {
+  it('aucun Thème dans l’école : le Champ à étiquettes reste, pour en créer un', async () => {
     await ouvrir(null, []);
 
-    expect(etiquettes()).toEqual(['Album']);
+    expect(etiquettes()).toEqual(['Album', 'Thème par défaut (facultatif)']);
+    expect(etiquettesThemes()).toEqual([]);
     bouton('Annuler').click();
     await ouverture;
   });
@@ -244,9 +273,8 @@ describe('Dialogue « Nouvelle préparation »', () => {
     await ouvrirListe('Module (facultatif)');
     option('Module 1').click();
     await stabiliser();
-    await ouvrirListe('Thème par défaut (facultatif)');
-    option('cuisine').click();
-    await stabiliser();
+    await choisirThemeAuClavier('cuis');
+    expect(etiquettesThemes()).toEqual(['cuisine']);
 
     expect(bouton('Créer').disabled).toBe(false);
     bouton('Créer').click();
@@ -984,6 +1012,97 @@ describe('Dialogue « Nouvelle préparation »', () => {
         { ...CREEE, albumId: LA_MOUFLE.id, moduleId: undefined, nomModule: undefined },
         { status: 201, statusText: 'Created' },
       );
+      await ouverture;
+    });
+  });
+
+  describe('Thèmes (story 2.2, partie 3)', () => {
+    const SAISONS: ThemeDto = { id: '0190f0a0-0000-7000-8000-00000000c009', nom: 'Les saisons' };
+    const erreurChampThemes = () => dialogue()!.querySelector('app-champ-themes [role="alert"]');
+
+    it('« Créer le thème « … » » : le Thème est créé, choisi, puis envoyé avec la Préparation', async () => {
+      await ouvrir('ms');
+      await choisirRouleGalette();
+
+      await taperTheme('cuis');
+      expect(options()).toEqual(['cuisine', 'Créer le thème « cuis »']);
+      await taperTheme('Les saisons');
+      expect(options()).toEqual(['Créer le thème « Les saisons »']);
+      toucheClavier(saisieThemes(), 'Enter', 13);
+      await stabiliser();
+
+      const creation = serveur.expectOne({ method: 'POST', url: '/api/themes' });
+      expect(creation.request.body).toEqual({ nom: 'Les saisons' });
+      // Pendant la création, ni « Créer » ni « Annuler ».
+      expect(bouton('Créer').disabled).toBe(true);
+      expect(bouton('Annuler').disabled).toBe(true);
+      creation.flush(SAISONS, { status: 201, statusText: 'Created' });
+      await stabiliser();
+
+      expect(etiquettesThemes()).toEqual(['Les saisons']);
+      expect(saisieThemes().value).toBe('');
+      bouton('Créer').click();
+      await stabiliser();
+      const preparation = serveur.expectOne({ method: 'POST', url: '/api/preparations' });
+      expect(preparation.request.body).toEqual({
+        albumId: ROULE_GALETTE.id,
+        section: 'ms',
+        themeDefautId: SAISONS.id,
+      });
+      preparation.flush(CREEE, { status: 201, statusText: 'Created' });
+      await ouverture;
+    });
+
+    it('échec de la création : message traduit sous le champ, la saisie reste, rien n’est choisi', async () => {
+      await ouvrir('ms');
+      await choisirRouleGalette();
+
+      await choisirThemeAuClavier('Les saisons');
+      serveur
+        .expectOne({ method: 'POST', url: '/api/themes' })
+        .flush(
+          { status: 409, code: 'theme.deja_existant' },
+          { status: 409, statusText: 'Conflict' },
+        );
+      await stabiliser();
+
+      expect(erreurChampThemes()?.textContent?.trim()).toBe('Un thème de ce nom existe déjà.');
+      expect(saisieThemes().value).toBe('Les saisons');
+      expect(etiquettesThemes()).toEqual([]);
+      expect(bouton('Créer').disabled).toBe(false);
+      bouton('Annuler').click();
+      await ouverture;
+    });
+
+    it('au clavier : Entrée choisit, Retour arrière retire, la Préparation part sans Thème', async () => {
+      await ouvrir('gs');
+      await choisirRouleGalette();
+
+      await choisirThemeAuClavier('cuis');
+      expect(etiquettesThemes()).toEqual(['cuisine']);
+      saisieThemes().focus();
+      toucheClavier(saisieThemes(), 'Backspace', 8);
+      await stabiliser();
+      expect(etiquettesThemes()).toEqual([]);
+
+      bouton('Créer').click();
+      await stabiliser();
+      const preparation = serveur.expectOne({ method: 'POST', url: '/api/preparations' });
+      expect(preparation.request.body).toEqual({ albumId: ROULE_GALETTE.id, section: 'gs' });
+      preparation.flush(CREEE, { status: 201, statusText: 'Created' });
+      await ouverture;
+    });
+
+    it('ni renommage ni suppression dans le dialogue : aucun menu d’étiquette', async () => {
+      await ouvrir();
+
+      await choisirThemeAuClavier('cuis');
+      const puce = dialogue()!.querySelector<HTMLElement>('app-champ-themes mat-chip-row')!;
+      expect(puce.getAttribute('aria-haspopup')).toBeNull();
+      puce.click();
+      await stabiliser();
+      expect(document.querySelector('.cdk-overlay-pane [mat-menu-item]')).toBeNull();
+      bouton('Annuler').click();
       await ouverture;
     });
   });

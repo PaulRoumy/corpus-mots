@@ -37,6 +37,11 @@ public class PreparationRepository implements PanacheRepositoryBase<Preparation,
         update("moduleId = null where moduleId = ?1", moduleId);
     }
 
+    /** Retire le Thème par défaut {@code themeId} de toutes les Préparations qui l'avaient, de tous les enseignants. */
+    public void retirerThemeDefaut(UUID themeId) {
+        update("themeDefautId = null where themeDefautId = ?1", themeId);
+    }
+
     /** Préparation la plus récente de l'enseignant. */
     public Optional<Preparation> plusRecente(UUID proprietaireId) {
         return find(DU_PROPRIETAIRE + PLUS_RECENTES_D_ABORD, proprietaireId).firstResultOptional();

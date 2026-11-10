@@ -49,9 +49,10 @@ const MODULES: ModuleDto[] = [
   { id: MODULE_1, albumId: ALBUM, nom: 'Module 1', ordre: 1, createurId: MOI },
   { id: MODULE_2, albumId: ALBUM, nom: 'Module 2', ordre: 2, createurId: COLLEGUE },
 ];
+/** cuisine est de l'enseignant connecté, animaux d'un collègue. */
 const THEMES: ThemeDto[] = [
-  { id: ANIMAUX, nom: 'animaux' },
-  { id: CUISINE, nom: 'cuisine' },
+  { id: ANIMAUX, nom: 'animaux', createurId: COLLEGUE },
+  { id: CUISINE, nom: 'cuisine', createurId: MOI },
 ];
 
 const AUTRE_ID = '0190f0a0-0000-7000-8000-00000000d002';
@@ -127,6 +128,35 @@ describe('Preparation (En-tête)', () => {
     champ(etiquette)?.querySelector('.mat-mdc-select-value')?.textContent?.trim();
   const champTemps = () =>
     champ('Temps passé (facultatif)')!.querySelector<HTMLInputElement>('input')!;
+  const etiquettesThemes = () =>
+    [...racine.querySelectorAll('app-champ-themes mat-chip-row')].map((puce) =>
+      puce.querySelector('.mdc-evolution-chip__text-label')?.textContent?.trim(),
+    );
+  const saisieThemes = () => racine.querySelector<HTMLInputElement>('app-champ-themes input')!;
+
+  /** Touche au clavier, avec le `keyCode` que lisent les composants Material. */
+  function toucheClavier(cible: HTMLElement, key: string, keyCode: number) {
+    const evenement = new KeyboardEvent('keydown', { key, bubbles: true, cancelable: true });
+    Object.defineProperty(evenement, 'keyCode', { get: () => keyCode });
+    cible.dispatchEvent(evenement);
+  }
+
+  async function taperTheme(texte: string) {
+    saisieThemes().focus();
+    saisieThemes().value = texte;
+    saisieThemes().dispatchEvent(new Event('input'));
+    await stabiliser();
+    // L'autocomplete remet en avant la première proposition au tour suivant un changement de propositions.
+    await tour();
+  }
+
+  /** Tape `texte` dans le Champ à étiquettes et choisit au clavier la proposition mise en avant. */
+  async function choisirThemeAuClavier(texte: string) {
+    await taperTheme(texte);
+    toucheClavier(saisieThemes(), 'Enter', 13);
+    await stabiliser();
+  }
+
   const bandeau = (classe: string) =>
     racine.querySelector(`app-bandeau-erreur.${classe} [role="alert"]`)?.textContent?.trim();
 
@@ -168,7 +198,7 @@ describe('Preparation (En-tête)', () => {
     expect(texte('h1')).toBe('La Roule Galette');
     expect(texte('app-repere-section')).toBe('Section MS');
     expect(valeurListe('Module')).toBe('Module 1');
-    expect(valeurListe('Thème par défaut')).toBe('cuisine');
+    expect(etiquettesThemes()).toEqual(['cuisine']);
     expect(texte('.entete__compteur')).toBe('0 mots, 0 déjà illustrés');
     expect(champTemps().value).toBe('1,5');
     expect(
@@ -194,12 +224,14 @@ describe('Preparation (En-tête)', () => {
   it('chaque champ a une étiquette et se rejoint au clavier', async () => {
     await ouvrir();
 
-    for (const etiquette of ['Module', 'Thème par défaut']) {
-      const liste = champ(etiquette)!.querySelector<HTMLElement>('mat-select')!;
-      expect(liste.getAttribute('tabindex')).toBe('0');
-      const libelle = liste.getAttribute('aria-labelledby')!.split(' ')[0];
-      expect(racine.querySelector(`#${libelle}`)?.textContent?.trim()).toBe(etiquette);
-    }
+    const liste = champ('Module')!.querySelector<HTMLElement>('mat-select')!;
+    expect(liste.getAttribute('tabindex')).toBe('0');
+    const libelle = liste.getAttribute('aria-labelledby')!.split(' ')[0];
+    expect(racine.querySelector(`#${libelle}`)?.textContent?.trim()).toBe('Module');
+    expect(saisieThemes().labels?.[0]?.textContent?.trim()).toBe('Thème par défaut');
+    expect(
+      racine.querySelector('app-champ-themes [matchipremove]')?.getAttribute('aria-label'),
+    ).toBe('Retirer cuisine');
     const temps = champTemps();
     expect(temps.labels?.[0]?.textContent?.trim()).toBe('Temps passé (facultatif)');
     expect(temps.getAttribute('inputmode')).toBe('decimal');
@@ -227,10 +259,11 @@ describe('Preparation (En-tête)', () => {
     expect(racine.querySelector('app-bandeau-erreur')).toBeNull();
   });
 
-  it('« Aucun thème » : le Thème par défaut est retiré (null)', async () => {
+  it('« Retirer cuisine » : le Thème par défaut est retiré (null)', async () => {
     await ouvrir();
 
-    await choisir('Thème par défaut', 'Aucun thème');
+    racine.querySelector<HTMLButtonElement>('app-champ-themes [matchipremove]')!.click();
+    await stabiliser();
     const requete = reglage();
     expect(requete.request.body).toEqual({
       moduleId: MODULE_1,
@@ -360,11 +393,11 @@ describe('Preparation (En-tête)', () => {
   it('échec du Thème par défaut : le choix reste affiché, « Réessayer » le renvoie', async () => {
     await ouvrir();
 
-    await choisir('Thème par défaut', 'animaux');
+    await choisirThemeAuClavier('anim');
     reglage().error(new ProgressEvent('error'));
     await stabiliser();
 
-    expect(valeurListe('Thème par défaut')).toBe('animaux');
+    expect(etiquettesThemes()).toEqual(['animaux']);
     expect(bandeau('erreur-enregistrement')).toBe(MESSAGE_RESEAU);
 
     await reessayer('erreur-enregistrement');
@@ -399,7 +432,7 @@ describe('Preparation (En-tête)', () => {
     await stabiliser();
   });
 
-  it('listes vides : Module avec « Nouveau module » seulement, pas de Thème par défaut, le Temps passé reste', async () => {
+  it('listes vides : Module avec « Nouveau module » seulement, Thème par défaut sans étiquette, le Temps passé reste', async () => {
     await ouvrir(
       {
         ...PREPARATION,
@@ -422,7 +455,8 @@ describe('Preparation (En-tête)', () => {
       ),
     ).toEqual(['Aucun module', 'Nouveau module']);
     expect(racine.querySelector('.entete__actions-module')).toBeNull();
-    expect(champ('Thème par défaut')).toBeUndefined();
+    expect(champ('Thème par défaut')).toBeDefined();
+    expect(etiquettesThemes()).toEqual([]);
     expect(racine.querySelector('.entete__nom-module')).toBeNull();
     expect(racine.querySelector('.entete__nom-theme')).toBeNull();
     expect(champ('Temps passé (facultatif)')).toBeDefined();
@@ -457,8 +491,7 @@ describe('Preparation (En-tête)', () => {
     await ouvrir(LOUP, [], THEMES);
 
     expect(texte('h1')).toBe(LOUP.titreAlbum);
-    // `null` (« Aucun thème ») : mat-select n'affiche aucune valeur, seulement l'étiquette.
-    expect(valeurListe('Thème par défaut')).toBe('');
+    expect(etiquettesThemes()).toEqual([]);
     // Album sans Module : la liste reste, avec « Nouveau module ».
     expect(valeurListe('Module')).toBe('');
     expect(TestBed.inject(Title).getTitle()).toBe(`${LOUP.titreAlbum} · corpus-mots`);
@@ -1008,6 +1041,394 @@ describe('Preparation (En-tête)', () => {
       const requete = reglage();
       expect(requete.request.body.moduleId).toBeNull();
       requete.flush({ ...PREPARATION, moduleId: undefined, nomModule: undefined });
+      await stabiliser();
+      expect(racine.querySelector('app-bandeau-erreur')).toBeNull();
+    });
+  });
+
+  describe('Thèmes (story 2.2, partie 3)', () => {
+    const URL_THEMES = '/api/themes';
+    const SAISONS: ThemeDto = {
+      id: '0190f0a0-0000-7000-8000-00000000c009',
+      nom: 'Les saisons',
+      createurId: MOI,
+    };
+    const SANS_THEME: PreparationDto = {
+      ...PREPARATION,
+      themeDefautId: undefined,
+      nomThemeDefaut: undefined,
+    };
+
+    afterEach(() =>
+      document
+        .querySelectorAll('.cdk-overlay-container')
+        .forEach((surcouche) => surcouche.remove()),
+    );
+
+    /** L'enseignant connecté est `MOI`, administrateur ou non. */
+    function connecter(administrateur = false) {
+      TestBed.inject(CompteCourant).mettreAJour({
+        id: MOI,
+        administrateur,
+        email: 'moi@ecole.fr',
+        nomAffiche: 'Moi',
+      });
+    }
+
+    const champNom = () => racine.querySelector<HTMLInputElement>('app-champ-nom-module input');
+    const etiquetteChampNom = () =>
+      racine.querySelector('app-champ-nom-module mat-label')?.textContent?.trim();
+    const erreurChampNom = () => racine.querySelector('app-champ-nom-module [role="alert"]');
+    const erreurChampThemes = () => racine.querySelector('app-champ-themes [role="alert"]');
+    const puce = () => racine.querySelector<HTMLElement>('app-champ-themes mat-chip-row');
+    const propositions = () =>
+      [...document.querySelectorAll('.cdk-overlay-pane mat-option')].map((option) =>
+        option.textContent?.replace(/\s+/g, ' ').trim(),
+      );
+
+    async function taperNom(nom: string) {
+      champNom()!.value = nom;
+      champNom()!.dispatchEvent(new Event('input'));
+      await stabiliser();
+      champNom()!.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+      await stabiliser();
+    }
+
+    async function actionDeLEtiquette(libelle: 'Renommer' | 'Supprimer') {
+      puce()!.click();
+      await stabiliser();
+      [...document.querySelectorAll<HTMLElement>('.cdk-overlay-pane [mat-menu-item]')]
+        .find((item) => item.textContent?.trim() === libelle)!
+        .click();
+      await stabiliser();
+    }
+
+    async function repondreConfirmation(bouton: 'confirmer' | 'annuler') {
+      document.querySelector<HTMLButtonElement>(`.dialogue-confirmation__${bouton}`)!.click();
+      await stabiliser();
+    }
+
+    /** Répond à la relecture qui suit une suppression : Préparation sans Thème par défaut, puis listes. */
+    async function relire(themes: ThemeDto[], relue: PreparationDto = SANS_THEME) {
+      serveur.expectOne(`/api/preparations/${ID}`).flush(relue);
+      await stabiliser();
+      serveur.expectOne(`/api/albums/${ALBUM}/modules`).flush(MODULES);
+      serveur.expectOne(URL_THEMES).flush(themes);
+      await stabiliser();
+    }
+
+    it('frappe : Thèmes proposés, puis « Créer le thème « … » » ; Entrée crée, choisit et enregistre', async () => {
+      await ouvrir({ ...SANS_THEME, tempsPasseMinutes: 60 });
+
+      await taperTheme('cuis');
+      expect(propositions()).toEqual(['cuisine', 'Créer le thème « cuis »']);
+      await taperTheme('Les saisons');
+      expect(propositions()).toEqual(['Créer le thème « Les saisons »']);
+
+      toucheClavier(saisieThemes(), 'Enter', 13);
+      await stabiliser();
+      const creation = serveur.expectOne(URL_THEMES);
+      expect(creation.request.method).toBe('POST');
+      expect(creation.request.body).toEqual({ nom: 'Les saisons' });
+      creation.flush(SAISONS);
+      await stabiliser();
+
+      const requete = reglage();
+      expect(requete.request.body).toEqual({
+        moduleId: MODULE_1,
+        themeDefautId: SAISONS.id,
+        tempsPasseMinutes: 60,
+      });
+      requete.flush({
+        ...PREPARATION,
+        themeDefautId: SAISONS.id,
+        nomThemeDefaut: 'Les saisons',
+        tempsPasseMinutes: 60,
+      });
+      await stabiliser();
+
+      expect(etiquettesThemes()).toEqual(['Les saisons']);
+      expect(saisieThemes().value).toBe('');
+    });
+
+    it('au clavier : un autre Thème remplace l’étiquette, Retour arrière la retire, chaque fois enregistré', async () => {
+      await ouvrir();
+
+      await choisirThemeAuClavier('anim');
+      const choix = reglage();
+      expect(choix.request.body.themeDefautId).toBe(ANIMAUX);
+      choix.flush({ ...PREPARATION, themeDefautId: ANIMAUX, nomThemeDefaut: 'animaux' });
+      await stabiliser();
+      expect(etiquettesThemes()).toEqual(['animaux']);
+
+      saisieThemes().focus();
+      toucheClavier(saisieThemes(), 'Backspace', 8);
+      await stabiliser();
+      const retrait = reglage();
+      expect(retrait.request.body.themeDefautId).toBeNull();
+      retrait.flush(SANS_THEME);
+      await stabiliser();
+      expect(etiquettesThemes()).toEqual([]);
+    });
+
+    it('échec de la création : message traduit sous le champ, la saisie reste, rien n’est enregistré', async () => {
+      await ouvrir();
+
+      await choisirThemeAuClavier('Les saisons');
+      serveur
+        .expectOne(URL_THEMES)
+        .flush(
+          { status: 409, code: 'theme.deja_existant' },
+          { status: 409, statusText: 'Conflict' },
+        );
+      await stabiliser();
+
+      expect(erreurChampThemes()?.textContent?.trim()).toBe('Un thème de ce nom existe déjà.');
+      expect(saisieThemes().getAttribute('aria-describedby')).toContain(erreurChampThemes()!.id);
+      expect(saisieThemes().value).toBe('Les saisons');
+      expect(etiquettesThemes()).toEqual(['cuisine']);
+      serveur.expectNone(URL_REGLAGES);
+    });
+
+    it('menu de l’étiquette : proposé au créateur, étiqueté pour le lecteur d’écran', async () => {
+      connecter();
+      await ouvrir();
+
+      expect(puce()!.getAttribute('aria-haspopup')).toBe('menu');
+      expect(puce()!.querySelector('[matchipaction]')!.getAttribute('aria-description')).toBe(
+        'Entrée : renommer ou supprimer le thème',
+      );
+    });
+
+    it('menu de l’étiquette : absent pour le Thème d’un collègue', async () => {
+      connecter();
+      await ouvrir({ ...PREPARATION, themeDefautId: ANIMAUX, nomThemeDefaut: 'animaux' });
+
+      expect(etiquettesThemes()).toEqual(['animaux']);
+      expect(puce()!.getAttribute('aria-haspopup')).toBeNull();
+    });
+
+    it('menu de l’étiquette : proposé à l’administrateur sur le Thème d’un collègue', async () => {
+      connecter(true);
+      await ouvrir({ ...PREPARATION, themeDefautId: ANIMAUX, nomThemeDefaut: 'animaux' });
+
+      expect(puce()!.getAttribute('aria-haspopup')).toBe('menu');
+    });
+
+    it('« Renommer » : champ en ligne prérempli, Entrée renomme, l’étiquette montre le nouveau nom', async () => {
+      connecter();
+      await ouvrir();
+
+      await actionDeLEtiquette('Renommer');
+      expect(etiquetteChampNom()).toBe('Nouveau nom du thème');
+      expect(champNom()!.value).toBe('cuisine');
+      expect(document.activeElement).toBe(champNom());
+
+      await taperNom('repas');
+      const renommage = serveur.expectOne(`${URL_THEMES}/${CUISINE}/nom`);
+      expect(renommage.request.method).toBe('PUT');
+      expect(renommage.request.body).toEqual({ nom: 'repas' });
+      renommage.flush({ ...THEMES[1], nom: 'repas' });
+      await stabiliser();
+
+      serveur.expectNone(URL_REGLAGES);
+      expect(champNom()).toBeNull();
+      expect(etiquettesThemes()).toEqual(['repas']);
+      expect(document.activeElement).toBe(saisieThemes());
+    });
+
+    it('échec du renommage : message traduit sous le champ, qui reste ouvert', async () => {
+      connecter();
+      await ouvrir();
+
+      await actionDeLEtiquette('Renommer');
+      await taperNom('animaux');
+      serveur
+        .expectOne(`${URL_THEMES}/${CUISINE}/nom`)
+        .flush(
+          { status: 409, code: 'theme.deja_existant' },
+          { status: 409, statusText: 'Conflict' },
+        );
+      await stabiliser();
+
+      expect(erreurChampNom()?.textContent?.trim()).toBe('Un thème de ce nom existe déjà.');
+      expect(champNom()!.value).toBe('animaux');
+    });
+
+    it('« Supprimer » confirmé : suppression, puis la Préparation et les Thèmes sont relus', async () => {
+      connecter();
+      await ouvrir();
+
+      await actionDeLEtiquette('Supprimer');
+      expect(document.querySelector('app-dialogue-confirmation h2')?.textContent?.trim()).toBe(
+        'Supprimer le thème ?',
+      );
+      expect(document.querySelector('.dialogue-confirmation__phrase')?.textContent).toContain(
+        '« cuisine »',
+      );
+      await repondreConfirmation('confirmer');
+
+      const suppression = serveur.expectOne(`${URL_THEMES}/${CUISINE}`);
+      expect(suppression.request.method).toBe('DELETE');
+      suppression.flush('');
+      await stabiliser();
+      // La Préparation relue porte un autre Module : seul le Thème reprend la valeur relue.
+      await relire([THEMES[0]], { ...SANS_THEME, moduleId: MODULE_2, nomModule: 'Module 2' });
+
+      expect(etiquettesThemes()).toEqual([]);
+      expect(valeurListe('Module')).toBe('Module 1');
+      expect(racine.querySelector('app-bandeau-erreur')).toBeNull();
+      expect(document.activeElement).toBe(saisieThemes());
+      serveur.expectNone(URL_REGLAGES);
+    });
+
+    it('suppression répondue 404 (déjà supprimé) : la Préparation et les Thèmes sont relus, sans Bandeau', async () => {
+      connecter();
+      await ouvrir();
+
+      await actionDeLEtiquette('Supprimer');
+      await repondreConfirmation('confirmer');
+      // Opération sans corps de réponse : le client généré lit l'erreur RFC 9457 en texte.
+      serveur
+        .expectOne(`${URL_THEMES}/${CUISINE}`)
+        .flush(JSON.stringify({ status: 404, code: 'ressource.introuvable' }), {
+          status: 404,
+          statusText: 'Not Found',
+        });
+      await stabiliser();
+      await relire([THEMES[0]]);
+
+      expect(racine.querySelector('app-bandeau-erreur')).toBeNull();
+      expect(etiquettesThemes()).toEqual([]);
+    });
+
+    it('suppression refusée 403 : Bandeau d’erreur, « Réessayer » ne renvoie pas la suppression', async () => {
+      connecter();
+      await ouvrir();
+
+      await actionDeLEtiquette('Supprimer');
+      await repondreConfirmation('confirmer');
+      serveur
+        .expectOne(`${URL_THEMES}/${CUISINE}`)
+        .flush(JSON.stringify({ status: 403, code: 'theme.reserve_au_createur' }), {
+          status: 403,
+          statusText: 'Forbidden',
+        });
+      await stabiliser();
+
+      expect(bandeau('erreur-theme')).toBe(
+        "Seuls le créateur du thème et l'administrateur peuvent le modifier.",
+      );
+      await reessayer('erreur-theme');
+
+      serveur.expectNone(`${URL_THEMES}/${CUISINE}`);
+      expect(racine.querySelector('app-bandeau-erreur.erreur-theme')).toBeNull();
+      expect(etiquettesThemes()).toEqual(['cuisine']);
+    });
+
+    it('échec de la relecture après suppression : Bandeau du Thème, « Réessayer » relit et reprend le Thème', async () => {
+      connecter();
+      await ouvrir();
+
+      await actionDeLEtiquette('Supprimer');
+      await repondreConfirmation('confirmer');
+      serveur.expectOne(`${URL_THEMES}/${CUISINE}`).flush('');
+      await stabiliser();
+      serveur.expectOne(`/api/preparations/${ID}`).error(new ProgressEvent('error'));
+      await stabiliser();
+
+      expect(bandeau('erreur-theme')).toBe(MESSAGE_RESEAU);
+      expect(racine.querySelector('app-bandeau-erreur.erreur-module')).toBeNull();
+
+      await reessayer('erreur-theme');
+      serveur.expectNone(`${URL_THEMES}/${CUISINE}`);
+      await relire([THEMES[0]], {
+        ...PREPARATION,
+        themeDefautId: ANIMAUX,
+        nomThemeDefaut: 'animaux',
+      });
+
+      expect(racine.querySelector('app-bandeau-erreur')).toBeNull();
+      expect(etiquettesThemes()).toEqual(['animaux']);
+    });
+
+    it('« Supprimer » annulé : rien n’est envoyé', async () => {
+      connecter();
+      await ouvrir();
+
+      await actionDeLEtiquette('Supprimer');
+      await repondreConfirmation('annuler');
+
+      serveur.expectNone(`${URL_THEMES}/${CUISINE}`);
+      expect(etiquettesThemes()).toEqual(['cuisine']);
+    });
+
+    it('Thème utilisé : Bandeau d’erreur explicite, « Réessayer » ne renvoie pas la suppression', async () => {
+      connecter();
+      await ouvrir();
+
+      await actionDeLEtiquette('Supprimer');
+      await repondreConfirmation('confirmer');
+      // Opération sans corps de réponse : le client généré lit l'erreur RFC 9457 en texte.
+      serveur
+        .expectOne(`${URL_THEMES}/${CUISINE}`)
+        .flush(JSON.stringify({ status: 409, code: 'theme.utilise' }), {
+          status: 409,
+          statusText: 'Conflict',
+        });
+      await stabiliser();
+
+      expect(bandeau('erreur-theme')).toBe(
+        'Ce thème est utilisé par des images : réaffectez-les avant de le supprimer.',
+      );
+      await reessayer('erreur-theme');
+
+      serveur.expectNone(`${URL_THEMES}/${CUISINE}`);
+      expect(racine.querySelector('app-bandeau-erreur.erreur-theme')).toBeNull();
+      expect(etiquettesThemes()).toEqual(['cuisine']);
+    });
+
+    it('échec réseau de la suppression : « Réessayer » la renvoie', async () => {
+      connecter();
+      await ouvrir();
+
+      await actionDeLEtiquette('Supprimer');
+      await repondreConfirmation('confirmer');
+      serveur.expectOne(`${URL_THEMES}/${CUISINE}`).error(new ProgressEvent('error'));
+      await stabiliser();
+      expect(bandeau('erreur-theme')).toBe(MESSAGE_RESEAU);
+
+      await reessayer('erreur-theme');
+      serveur.expectOne(`${URL_THEMES}/${CUISINE}`).flush('');
+      await stabiliser();
+      await relire([THEMES[0]]);
+
+      expect(racine.querySelector('app-bandeau-erreur')).toBeNull();
+      expect(etiquettesThemes()).toEqual([]);
+    });
+
+    it('après `preparation.theme_introuvable`, les Thèmes sont relus et le Thème disparu n’est plus choisi', async () => {
+      await ouvrir();
+
+      await choisirThemeAuClavier('anim');
+      reglage().flush(
+        { status: 400, code: 'preparation.theme_introuvable' },
+        { status: 400, statusText: 'Bad Request' },
+      );
+      await stabiliser();
+      serveur.expectOne(`/api/albums/${ALBUM}/modules`).flush(MODULES);
+      serveur.expectOne(URL_THEMES).flush([THEMES[1]]);
+      await stabiliser();
+
+      expect(bandeau('erreur-enregistrement')).toBe(
+        "Ce thème n'existe plus. Choisissez-en un autre.",
+      );
+      expect(etiquettesThemes()).toEqual([]);
+
+      await reessayer('erreur-enregistrement');
+      const requete = reglage();
+      expect(requete.request.body.themeDefautId).toBeNull();
+      requete.flush(SANS_THEME);
       await stabiliser();
       expect(racine.querySelector('app-bandeau-erreur')).toBeNull();
     });

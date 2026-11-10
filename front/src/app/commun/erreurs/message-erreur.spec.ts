@@ -61,6 +61,18 @@ describe('messageErreur', () => {
       "Seuls le créateur du module et l'administrateur peuvent le modifier.",
     ],
     [409, 'module.deja_existant', 'Un module de ce nom existe déjà pour cet album.'],
+    [400, 'theme.nom_invalide', 'Le nom du thème doit compter de 1 à 200 caractères.'],
+    [409, 'theme.deja_existant', 'Un thème de ce nom existe déjà.'],
+    [
+      403,
+      'theme.reserve_au_createur',
+      "Seuls le créateur du thème et l'administrateur peuvent le modifier.",
+    ],
+    [
+      409,
+      'theme.utilise',
+      'Ce thème est utilisé par des images : réaffectez-les avant de le supprimer.',
+    ],
     [404, 'ressource.introuvable', "Cet élément n'existe plus. Rechargez la page."],
     [400, 'requete.invalide', 'La demande est incomplète. Vérifiez la saisie, puis réessayez.'],
     [
