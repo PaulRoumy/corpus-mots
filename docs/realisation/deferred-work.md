@@ -100,6 +100,7 @@
 - source_spec: `docs/realisation/spec-2-2-en-tete-de-preparation-modifiable.md`
   summary: Story 2.2, partie 4 : « Corriger l'album » dans le menu de l'En-tête, réservé au créateur de l'Album et à l'administrateur, pour modifier le titre, l'auteur et l'éditeur ; la correction se voit partout.
   evidence: Découpage de la story 2.2 choisi par Paul.
+  status: fait (`docs/realisation/spec-2-2-4-corriger-l-album.md`).
 - source_spec: `docs/realisation/spec-2-2-en-tete-de-preparation-modifiable.md`
   summary: Story 2.3 : brancher `Usages.changerContextePreparation` sur le changement de Module dans `PreparationsService.regler`.
   evidence: Revue de la story 2.2, partie 1, ligne 12 du journal de tri. `Usages` n'existait pas avant la story 2.3, et l'appel prévu par AD-14 et par le critère de la story 2.2 n'est pas fait.

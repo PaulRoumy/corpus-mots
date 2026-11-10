@@ -47,6 +47,7 @@ public class ReferentielsService {
     static final String CODE_AUTEUR_INVALIDE = "album.auteur_invalide";
     static final String CODE_EDITEUR_INVALIDE = "album.editeur_invalide";
     static final String CODE_DEJA_EXISTANT = "album.deja_existant";
+    static final String CODE_ALBUM_RESERVE_AU_CREATEUR = "album.reserve_au_createur";
     static final String CODE_NOM_MODULE_INVALIDE = "module.nom_invalide";
     static final String CODE_MODULE_DEJA_EXISTANT = "module.deja_existant";
     static final String CODE_MODULE_RESERVE_AU_CREATEUR = "module.reserve_au_createur";
@@ -118,30 +119,85 @@ public class ReferentielsService {
      */
     @Transactional
     public AlbumVue creerAlbum(NouvelAlbumCommande commande) {
-        String titre = TitresAlbums.nettoyer(commande.titre());
+        ChampsAlbum champs = champsAlbum(commande.titre(), commande.auteur(), commande.editeur());
+        verifierAlbumUnique(champs, null);
+        Album album = Album.nouveau(albums.nouvelIdentifiant(), champs.titre(), champs.titreRecherche(),
+                champs.auteur(), champs.editeur(), enseignantCourant.id());
+        albums.persistAndFlush(album);
+        return new AlbumVue(album.id(), album.titre(), album.auteur(), album.editeur(), album.createurId(), 0);
+    }
+
+    /**
+     * L'Album {@code id}, avec son créateur.
+     *
+     * @throws ErreurMetier {@code 404 ressource.introuvable} si l'Album n'existe pas
+     */
+    @Transactional
+    public AlbumVue lireAlbum(UUID id) {
+        return album(id).orElseThrow(ReferentielsService::albumIntrouvable);
+    }
+
+    /**
+     * Corrige le titre, l'auteur et l'éditeur de l'Album {@code id}, avec les règles de {@link #creerAlbum} ; la
+     * correction se voit aussitôt partout, les autres modules lisant l'Album par ce service. Garder son titre et son
+     * auteur est accepté. Rien n'est modifié en cas de refus.
+     *
+     * @throws ErreurMetier {@code 404 ressource.introuvable} si l'Album n'existe pas ;
+     *         {@code 403 album.reserve_au_createur} si l'enseignant courant n'est ni son créateur ni administrateur ;
+     *         {@code 400} et {@code 409 album.deja_existant} (un autre Album) comme {@link #creerAlbum}
+     */
+    @Transactional
+    public AlbumVue corrigerAlbum(UUID id, CorrectionAlbumCommande commande) {
+        Album album = (id == null ? Optional.<Album>empty() : albums.findByIdOptional(id))
+                .orElseThrow(ReferentielsService::albumIntrouvable);
+        if (!album.createurId().equals(enseignantCourant.id()) && !enseignantCourant.administrateur()) {
+            throw new ErreurMetier(403, CODE_ALBUM_RESERVE_AU_CREATEUR,
+                    "Seuls le créateur de l'album et l'administrateur peuvent le corriger");
+        }
+        ChampsAlbum champs = champsAlbum(commande.titre(), commande.auteur(), commande.editeur());
+        verifierAlbumUnique(champs, album.id());
+        album.corriger(champs.titre(), champs.titreRecherche(), champs.auteur(), champs.editeur());
+        albums.flush();
+        return lireAlbum(album.id());
+    }
+
+    /** Titre, auteur et éditeur d'un Album nettoyés et validés ; éditeur vide rendu {@code null}. */
+    private static ChampsAlbum champsAlbum(String titreSaisi, String auteurSaisi, String editeurSaisi) {
+        String titre = TitresAlbums.nettoyer(titreSaisi);
         if (titre.isEmpty() || titre.length() > LONGUEUR_MAX_CHAMP) {
             throw new ErreurMetier(400, CODE_TITRE_INVALIDE, "Le titre doit compter de 1 à 200 caractères");
         }
-        String auteur = TitresAlbums.nettoyer(commande.auteur());
+        String auteur = TitresAlbums.nettoyer(auteurSaisi);
         if (auteur.isEmpty() || auteur.length() > LONGUEUR_MAX_CHAMP) {
             throw new ErreurMetier(400, CODE_AUTEUR_INVALIDE, "L'auteur doit compter de 1 à 200 caractères");
         }
-        String editeur = TitresAlbums.nettoyer(commande.editeur());
+        String editeur = TitresAlbums.nettoyer(editeurSaisi);
         if (editeur.length() > LONGUEUR_MAX_CHAMP) {
             throw new ErreurMetier(400, CODE_EDITEUR_INVALIDE, "L'éditeur doit compter 200 caractères au plus");
         }
-        String titreRecherche = TitresAlbums.normaliser(titre);
-        String auteurRecherche = TitresAlbums.normaliser(auteur);
-        // Sans contrainte d'unicité : deux créations simultanées peuvent passer, la fusion (Epic 6) corrigera.
-        boolean existe = albums.memeTitre(titreRecherche).stream()
-                .anyMatch(album -> TitresAlbums.normaliser(album.auteur()).equals(auteurRecherche));
+        return new ChampsAlbum(titre, TitresAlbums.normaliser(titre), auteur, editeur.isEmpty() ? null : editeur);
+    }
+
+    /**
+     * Aucun autre Album que {@code albumId} n'a même titre et même auteur, une fois normalisés. Sans contrainte
+     * d'unicité : deux écritures simultanées peuvent passer, la fusion (Epic 6) corrigera.
+     */
+    private void verifierAlbumUnique(ChampsAlbum champs, UUID albumId) {
+        String auteurRecherche = TitresAlbums.normaliser(champs.auteur());
+        boolean existe = albums.memeTitre(champs.titreRecherche()).stream()
+                .anyMatch(album -> !album.id().equals(albumId)
+                        && TitresAlbums.normaliser(album.auteur()).equals(auteurRecherche));
         if (existe) {
             throw new ErreurMetier(409, CODE_DEJA_EXISTANT, "Un album de même titre et de même auteur existe déjà");
         }
-        Album album = Album.nouveau(albums.nouvelIdentifiant(), titre, titreRecherche, auteur,
-                editeur.isEmpty() ? null : editeur, enseignantCourant.id());
-        albums.persistAndFlush(album);
-        return new AlbumVue(album.id(), album.titre(), album.auteur(), album.editeur(), 0);
+    }
+
+    private static ErreurMetier albumIntrouvable() {
+        return new ErreurMetier(404, CODE_INTROUVABLE, "Aucun album ne porte cet identifiant");
+    }
+
+    /** Champs d'un Album nettoyés ; {@code titreRecherche} vaut {@code TitresAlbums.normaliser(titre)}. */
+    private record ChampsAlbum(String titre, String titreRecherche, String auteur, String editeur) {
     }
 
     /**
@@ -391,7 +447,8 @@ public class ReferentielsService {
     }
 
     private static AlbumVue vue(AlbumTrouve album) {
-        return new AlbumVue(album.id(), album.titre(), album.auteur(), album.editeur(), album.nombreModules());
+        return new AlbumVue(album.id(), album.titre(), album.auteur(), album.editeur(), album.createurId(),
+                album.nombreModules());
     }
 
     private static ModuleVue vue(Module module) {

@@ -19,6 +19,7 @@ const ROULE_GALETTE: AlbumDto = {
   id: '0190f0a0-0000-7000-8000-00000000a001',
   titre: 'La Roule Galette',
   auteur: 'Natha Caputo',
+  createurId: '0190f0a0-0000-7000-8000-00000000e009',
   nombreModules: 2,
 };
 const MODULES = [
@@ -375,6 +376,7 @@ describe('Dialogue « Nouvelle préparation »', () => {
     titre: 'La Moufle',
     auteur: 'Jan Brett',
     editeur: "L'école des loisirs",
+    createurId: '0190f0a0-0000-7000-8000-00000000e009',
     nombreModules: 0,
   };
 

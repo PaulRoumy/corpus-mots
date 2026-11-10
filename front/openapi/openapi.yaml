@@ -8,6 +8,7 @@ components:
       - id
       - titre
       - auteur
+      - createurId
       - nombreModules
       properties:
         id:
@@ -19,6 +20,11 @@ components:
         editeur:
           type: string
           description: Absent si l'éditeur n'a pas été saisi
+        createurId:
+          description: "Enseignant qui a créé l'Album, seul avec l'administrateur\
+            \ à pouvoir le corriger"
+          type: string
+          $ref: "#/components/schemas/UUID"
         nombreModules:
           type: integer
           format: int64
@@ -87,6 +93,22 @@ components:
           - suppression_en_cours
         administrateur:
           type: boolean
+    CorrectionAlbumDto:
+      type: object
+      required:
+      - titre
+      - auteur
+      properties:
+        titre:
+          type: string
+          maxLength: 200
+        auteur:
+          type: string
+          maxLength: 200
+        editeur:
+          type: string
+          maxLength: 200
+          description: "Facultatif ; vide ou absent, l'Album n'a plus d'éditeur"
     DerniereSectionDto:
       type: object
       required:
@@ -441,6 +463,52 @@ paths:
                 type: array
                 items:
                   $ref: "#/components/schemas/AlbumDto"
+      tags:
+      - Albums Resource
+  /api/albums/{id}:
+    get:
+      summary: "Un Album, avec son créateur"
+      operationId: lireAlbum
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          $ref: "#/components/schemas/UUID"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AlbumDto"
+      tags:
+      - Albums Resource
+    put:
+      summary: "Corriger le titre, l'auteur et l'éditeur d'un Album (son créateur\
+        \ ou l'administrateur), visible aussitôt de toute l'école"
+      operationId: corrigerAlbum
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          $ref: "#/components/schemas/UUID"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CorrectionAlbumDto"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AlbumDto"
+        "400":
+          description: Bad Request
       tags:
       - Albums Resource
   /api/albums/{id}/modules:

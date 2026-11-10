@@ -8,6 +8,7 @@ import jakarta.inject.Inject;
 import jakarta.ws.rs.Consumes;
 import jakarta.ws.rs.GET;
 import jakarta.ws.rs.POST;
+import jakarta.ws.rs.PUT;
 import jakarta.ws.rs.Path;
 import jakarta.ws.rs.PathParam;
 import jakarta.ws.rs.Produces;
@@ -23,7 +24,10 @@ import org.eclipse.microprofile.openapi.annotations.parameters.RequestBody;
 import org.eclipse.microprofile.openapi.annotations.responses.APIResponse;
 import org.jboss.resteasy.reactive.ResponseStatus;
 
-/** Albums de l'école et leurs Modules (FR-4, FR-5), ouverts à tout enseignant actif. */
+/**
+ * Albums de l'école et leurs Modules (FR-4, FR-5), ouverts à tout enseignant actif ; corriger un Album est réservé à
+ * son créateur et à l'administrateur ({@code 403 album.reserve_au_createur} pour les autres).
+ */
 @Path("/albums")
 @Produces(MediaType.APPLICATION_JSON)
 public class AlbumsResource {
@@ -65,6 +69,26 @@ public class AlbumsResource {
             @Parameter(description = "Titre de l'Album à créer, sans tenir compte de la casse, des accents ni de"
                     + " l'article ; moins de 2 caractères : aucun résultat") @QueryParam("titre") String titre) {
         return referentiels.titresProches(titre).stream().map(AlbumDto::de).toList();
+    }
+
+    @GET
+    @Path("/{id}")
+    @Operation(operationId = "lireAlbum", summary = "Un Album, avec son créateur")
+    public AlbumDto lire(@PathParam("id") UUID id) {
+        return AlbumDto.de(referentiels.lireAlbum(id));
+    }
+
+    @PUT
+    @Path("/{id}")
+    @Consumes(MediaType.APPLICATION_JSON)
+    @Operation(operationId = "corrigerAlbum",
+            summary = "Corriger le titre, l'auteur et l'éditeur d'un Album (son créateur ou l'administrateur), visible"
+                    + " aussitôt de toute l'école")
+    public AlbumDto corriger(@PathParam("id") UUID id, @RequestBody(required = true) CorrectionAlbumDto correction) {
+        if (correction == null) {
+            throw new ErreurMetier(400, "requete.invalide", "Le corps de la requête est obligatoire");
+        }
+        return AlbumDto.de(referentiels.corrigerAlbum(id, correction.enCommande()));
     }
 
     @POST

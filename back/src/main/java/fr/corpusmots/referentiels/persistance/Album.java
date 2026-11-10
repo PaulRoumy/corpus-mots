@@ -57,6 +57,17 @@ public class Album {
         return album;
     }
 
+    /**
+     * Corrige le titre, l'auteur et l'éditeur ; {@code titreRecherche} vaut {@code TitresAlbums.normaliser(titre)},
+     * {@code editeur} peut être {@code null}. Le créateur ne change pas.
+     */
+    public void corriger(String titre, String titreRecherche, String auteur, String editeur) {
+        this.titre = titre;
+        this.titreRecherche = titreRecherche;
+        this.auteur = auteur;
+        this.editeur = editeur;
+    }
+
     public UUID id() {
         return id;
     }

@@ -20,7 +20,7 @@ public class AlbumRepository implements PanacheRepositoryBase<Album, UUID> {
     private static final String CORRESPONDANCE = " from album a"
             + " where a.titre_recherche like :motif escape '!' or similarity(a.titre_recherche, :texte) >= :seuil";
 
-    private static final String COLONNES = "select a.id, a.titre, a.auteur, a.editeur,"
+    private static final String COLONNES = "select a.id, a.titre, a.auteur, a.editeur, a.createur_id,"
             + " (select count(*) from module m where m.album_id = a.id) as nombre_modules";
 
     /**
@@ -87,7 +87,7 @@ public class AlbumRepository implements PanacheRepositoryBase<Album, UUID> {
                 .getSingleResult()).longValue();
     }
 
-    /** Albums de ces identifiants, avec leur nombre de Modules ; les identifiants inconnus sont ignorés. */
+    /** Albums de ces identifiants, avec leur créateur et leur nombre de Modules ; les identifiants inconnus sont ignorés. */
     public List<AlbumTrouve> lire(Collection<UUID> ids) {
         if (ids.isEmpty()) {
             return List.of();
@@ -102,7 +102,7 @@ public class AlbumRepository implements PanacheRepositoryBase<Album, UUID> {
 
     private static AlbumTrouve album(Object[] ligne) {
         return new AlbumTrouve((UUID) ligne[0], (String) ligne[1], (String) ligne[2], (String) ligne[3],
-                ((Number) ligne[4]).longValue());
+                (UUID) ligne[4], ((Number) ligne[5]).longValue());
     }
 
     /** {@code %texte%}, les caractères spéciaux de LIKE ({@code % _}) et l'échappement {@code !} pris littéralement. */

@@ -1,0 +1,21 @@
+:host {
+  display: block;
+  width: var(--cm-largeur-dialogue);
+  max-width: 100%;
+}
+
+.corriger-album {
+  display: flex;
+  flex-direction: column;
+  gap: var(--cm-espace-4);
+}
+
+.corriger-album__phrase {
+  margin: 0;
+  font: var(--cm-typo-body-sm);
+  color: var(--mat-sys-on-surface-variant);
+}
+
+.corriger-album__champ {
+  width: 100%;
+}

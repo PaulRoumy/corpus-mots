@@ -13,12 +13,14 @@ import static org.junit.jupiter.api.Assertions.assertNull;
 
 import fr.corpusmots.commun.api.EnseignantsDeTest;
 import fr.corpusmots.commun.api.ProblemeDto;
+import io.quarkus.narayana.jta.QuarkusTransaction;
 import io.quarkus.test.junit.QuarkusTest;
 import io.quarkus.test.security.TestSecurity;
 import io.quarkus.test.security.oidc.Claim;
 import io.quarkus.test.security.oidc.OidcSecurity;
 import io.restassured.http.ContentType;
 import jakarta.inject.Inject;
+import jakarta.persistence.EntityManager;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.UUID;
@@ -30,19 +32,24 @@ import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
 import org.junit.jupiter.params.provider.ValueSource;
 
-/** Albums, Modules et Thèmes (matrices de la story 2.1, parties 1 et 2). */
+/** Albums, Modules et Thèmes (matrices de la story 2.1, parties 1 et 2, et de la story 2.2, partie 4). */
 @QuarkusTest
 @TestSecurity(user = AlbumsResourceTest.ENSEIGNANTE)
 @OidcSecurity(claims = @Claim(key = "sub", value = AlbumsResourceTest.ENSEIGNANTE))
 class AlbumsResourceTest {
 
     static final String ENSEIGNANTE = "0190f0a0-0000-7000-8000-000000000401";
+    static final String COLLEGUE = "0190f0a0-0000-7000-8000-000000000402";
+    static final String ADMIN = "0190f0a0-0000-7000-8000-000000000403";
 
     @Inject
     EnseignantsDeTest enseignants;
 
     @Inject
     ReferentielsDeTest referentiels;
+
+    @Inject
+    EntityManager entityManager;
 
     UUID rouleGalette;
     UUID galette;
@@ -51,7 +58,7 @@ class AlbumsResourceTest {
 
     @BeforeEach
     void donnees() {
-        enseignants.seulsActifs(ENSEIGNANTE);
+        enseignants.seulsActifs(ENSEIGNANTE, COLLEGUE, ADMIN);
         referentiels.effacer();
         rouleGalette = referentiels.album("La Roule Galette", "Natha Caputo");
         galette = referentiels.album("La galette et l’ogre", "Anonyme");
@@ -362,5 +369,210 @@ class AlbumsResourceTest {
                 .then()
                 .statusCode(201)
                 .body("auteur", equalTo("Florence Desnouveaux"));
+    }
+
+    // Story 2.2, partie 4 : lire et corriger un Album.
+
+    @Test
+    void lireUnAlbumDonneSonCreateur() {
+        given().when().get("/api/albums/" + rouleGalette)
+                .then()
+                .statusCode(200)
+                .body("id", equalTo(rouleGalette.toString()))
+                .body("titre", equalTo("La Roule Galette"))
+                .body("auteur", equalTo("Natha Caputo"))
+                .body("editeur", nullValue())
+                .body("createurId", equalTo(ReferentielsDeTest.CREATEUR.toString()))
+                .body("nombreModules", equalTo(2));
+    }
+
+    @Test
+    void lireUnAlbumInconnuEstIntrouvable() {
+        given().when().get("/api/albums/" + UUID.randomUUID())
+                .then()
+                .statusCode(404)
+                .contentType(ProblemeDto.MEDIA_TYPE)
+                .body("code", equalTo("ressource.introuvable"));
+    }
+
+    @Test
+    void leCreateurCorrigeSonAlbumEtLaRechercheMontreLeNouveauTitre() {
+        UUID moufle = referentiels.album("La Mouffle", "Jan Bret", UUID.fromString(ENSEIGNANTE));
+
+        given().contentType(ContentType.JSON)
+                .body(Map.of("titre", " La  Moufle ", "auteur", "Jan Brett", "editeur", " L'école  des loisirs "))
+                .when().put("/api/albums/" + moufle)
+                .then()
+                .statusCode(200)
+                .body("id", equalTo(moufle.toString()))
+                .body("titre", equalTo("La Moufle"))
+                .body("auteur", equalTo("Jan Brett"))
+                .body("editeur", equalTo("L'école des loisirs"))
+                .body("createurId", equalTo(ENSEIGNANTE))
+                .body("nombreModules", equalTo(0));
+
+        assertEquals("La Moufle|moufle|Jan Brett|L'école des loisirs|" + ENSEIGNANTE, referentiels.ligneAlbum(moufle));
+        given().queryParam("recherche", "moufle")
+                .when().get("/api/albums")
+                .then()
+                .statusCode(200)
+                .body("elements.id", contains(moufle.toString()))
+                .body("elements[0].titre", equalTo("La Moufle"));
+    }
+
+    @Test
+    void corrigerAvecUnEditeurVideLeRetire() {
+        UUID moufle = referentiels.album("La Moufle", "Jan Brett", UUID.fromString(ENSEIGNANTE));
+        given().contentType(ContentType.JSON)
+                .body(Map.of("titre", "La Moufle", "auteur", "Jan Brett", "editeur", "Milan"))
+                .when().put("/api/albums/" + moufle)
+                .then()
+                .statusCode(200)
+                .body("editeur", equalTo("Milan"));
+
+        given().contentType(ContentType.JSON)
+                .body(Map.of("titre", "La Moufle", "auteur", "Jan Brett", "editeur", "  "))
+                .when().put("/api/albums/" + moufle)
+                .then()
+                .statusCode(200)
+                .body("editeur", nullValue());
+        assertNull(referentiels.editeur(moufle));
+    }
+
+    @Test
+    void garderSonTitreEtSonAuteurEstAccepte() {
+        UUID moufle = referentiels.album("La Moufle", "Jan Brett", UUID.fromString(ENSEIGNANTE));
+
+        given().contentType(ContentType.JSON)
+                .body(Map.of("titre", "la moufle", "auteur", "JAN BRETT"))
+                .when().put("/api/albums/" + moufle)
+                .then()
+                .statusCode(200)
+                .body("titre", equalTo("la moufle"))
+                .body("auteur", equalTo("JAN BRETT"));
+    }
+
+    /**
+     * La Préparation ne garde aucune copie du titre : celle d'un enseignant qui n'est pas le créateur de l'Album, créée
+     * avant la correction, montre le nouveau titre. {@code @TestSecurity} ne donne qu'une identité par test : c'est
+     * l'administrateur qui corrige l'Album d'une collègue, puis relit sa propre Préparation.
+     */
+    @Test
+    @TestSecurity(user = ADMIN, roles = "admin")
+    @OidcSecurity(claims = @Claim(key = "sub", value = ADMIN))
+    void lAdministrateurCorrigeLAlbumDUneCollegueEtLesPreparationsMontrentLeNouveauTitre() {
+        UUID moufle = referentiels.album("La Mouffle", "Jan Brett", UUID.fromString(COLLEGUE));
+        UUID preparation = QuarkusTransaction.requiringNew().call(() -> (UUID) entityManager.createNativeQuery(
+                "insert into preparation (proprietaire_id, album_id, section) values (:proprietaire, :album, 'ms')"
+                        + " returning id")
+                .setParameter("proprietaire", UUID.fromString(ADMIN))
+                .setParameter("album", moufle)
+                .getSingleResult());
+        try {
+            given().contentType(ContentType.JSON)
+                    .body(Map.of("titre", "La Moufle", "auteur", "Jan Brett"))
+                    .when().put("/api/albums/" + moufle)
+                    .then()
+                    .statusCode(200)
+                    .body("titre", equalTo("La Moufle"))
+                    .body("createurId", equalTo(COLLEGUE));
+
+            given().when().get("/api/preparations/" + preparation)
+                    .then()
+                    .statusCode(200)
+                    .body("albumId", equalTo(moufle.toString()))
+                    .body("titreAlbum", equalTo("La Moufle"));
+        } finally {
+            QuarkusTransaction.requiringNew().run(() -> entityManager
+                    .createNativeQuery("delete from preparation where id = :id")
+                    .setParameter("id", preparation)
+                    .executeUpdate());
+        }
+    }
+
+    @ParameterizedTest
+    @MethodSource("champsInvalides")
+    void corrigerAvecUnChampInvalideEstRefuseSansRienModifier(String titre, String auteur, String editeur,
+            String code) {
+        UUID moufle = referentiels.album("La Moufle", "Jan Brett", UUID.fromString(ENSEIGNANTE));
+        String avant = referentiels.ligneAlbum(moufle);
+        Map<String, String> corps = new HashMap<>();
+        corps.put("titre", titre);
+        corps.put("auteur", auteur);
+        corps.put("editeur", editeur);
+
+        given().contentType(ContentType.JSON).body(corps)
+                .when().put("/api/albums/" + moufle)
+                .then()
+                .statusCode(400)
+                .contentType(ProblemeDto.MEDIA_TYPE)
+                .body("code", equalTo(code));
+
+        assertEquals(avant, referentiels.ligneAlbum(moufle));
+    }
+
+    @Test
+    void corrigerSansCorpsEstRefuse() {
+        UUID moufle = referentiels.album("La Moufle", "Jan Brett", UUID.fromString(ENSEIGNANTE));
+
+        given().contentType(ContentType.JSON)
+                .when().put("/api/albums/" + moufle)
+                .then()
+                .statusCode(400)
+                .contentType(ProblemeDto.MEDIA_TYPE)
+                .body("code", equalTo("requete.invalide"));
+    }
+
+    @Test
+    void corrigerEnLeTitreEtLAuteurDUnAutreAlbumEstRefuseSansRienModifier() {
+        referentiels.album("La Moufle", "Jan Brett");
+        UUID mouffle = referentiels.album("La Mouffle", "Jan Brett", UUID.fromString(ENSEIGNANTE));
+        String avant = referentiels.ligneAlbum(mouffle);
+
+        given().contentType(ContentType.JSON)
+                .body(Map.of("titre", "MOUFLE", "auteur", "jan  brett"))
+                .when().put("/api/albums/" + mouffle)
+                .then()
+                .statusCode(409)
+                .contentType(ProblemeDto.MEDIA_TYPE)
+                .body("code", equalTo("album.deja_existant"));
+
+        assertEquals(avant, referentiels.ligneAlbum(mouffle));
+    }
+
+    @Test
+    @TestSecurity(user = COLLEGUE)
+    @OidcSecurity(claims = @Claim(key = "sub", value = COLLEGUE))
+    void unAutreEnseignantNePeutPasCorrigerLAlbum() {
+        UUID moufle = referentiels.album("La Mouffle", "Jan Brett", UUID.fromString(ENSEIGNANTE));
+        String avant = referentiels.ligneAlbum(moufle);
+
+        // 403 avant toute validation : même un titre vide est refusé pour ce motif.
+        for (String titre : new String[] { "La Moufle", "" }) {
+            given().contentType(ContentType.JSON)
+                    .body(Map.of("titre", titre, "auteur", "Jan Brett"))
+                    .when().put("/api/albums/" + moufle)
+                    .then()
+                    .statusCode(403)
+                    .contentType(ProblemeDto.MEDIA_TYPE)
+                    .body("code", equalTo("album.reserve_au_createur"));
+        }
+
+        assertEquals(avant, referentiels.ligneAlbum(moufle));
+    }
+
+    @Test
+    void corrigerUnAlbumInconnuEstIntrouvable() {
+        long avant = referentiels.nombreAlbums();
+
+        given().contentType(ContentType.JSON)
+                .body(Map.of("titre", "La Moufle", "auteur", "Jan Brett"))
+                .when().put("/api/albums/" + UUID.randomUUID())
+                .then()
+                .statusCode(404)
+                .contentType(ProblemeDto.MEDIA_TYPE)
+                .body("code", equalTo("ressource.introuvable"));
+
+        assertEquals(avant, referentiels.nombreAlbums());
     }
 }

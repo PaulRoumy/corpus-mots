@@ -32,13 +32,18 @@ public class ReferentielsDeTest {
 
     /** Insère un Album ; {@code titre_recherche} est calculé par {@link TitresAlbums#normaliser}, comme en production. */
     public UUID album(String titre, String auteur) {
+        return album(titre, auteur, CREATEUR);
+    }
+
+    /** Insère un Album créé par {@code createur}. */
+    public UUID album(String titre, String auteur, UUID createur) {
         return QuarkusTransaction.requiringNew().call(() -> (UUID) entityManager.createNativeQuery(
                 "insert into album (titre, titre_recherche, auteur, createur_id) values (:titre, :recherche, :auteur,"
                         + " :createur) returning id")
                 .setParameter("titre", titre)
                 .setParameter("recherche", TitresAlbums.normaliser(titre))
                 .setParameter("auteur", auteur)
-                .setParameter("createur", CREATEUR)
+                .setParameter("createur", createur)
                 .getSingleResult());
     }
 
@@ -67,6 +72,18 @@ public class ReferentielsDeTest {
                 .createNativeQuery("select createur_id from album where id = :id")
                 .setParameter("id", albumId)
                 .getSingleResult());
+    }
+
+    /** Album en base, en « titre|titre_recherche|auteur|editeur|createur_id ». */
+    public String ligneAlbum(UUID albumId) {
+        return QuarkusTransaction.requiringNew().call(() -> {
+            Object[] ligne = (Object[]) entityManager
+                    .createNativeQuery("select titre, titre_recherche, auteur, editeur, createur_id from album"
+                            + " where id = :id")
+                    .setParameter("id", albumId)
+                    .getSingleResult();
+            return ligne[0] + "|" + ligne[1] + "|" + ligne[2] + "|" + ligne[3] + "|" + ligne[4];
+        });
     }
 
     /** {@code editeur} de l'Album, {@code null} s'il est absent. */

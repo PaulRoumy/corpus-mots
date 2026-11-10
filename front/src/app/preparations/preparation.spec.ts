@@ -7,6 +7,7 @@ import {
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { MATERIAL_ANIMATIONS } from '@angular/material/core';
 import { Title } from '@angular/platform-browser';
+import { AlbumDto } from '../api/models/album-dto';
 import { ModuleDto } from '../api/models/module-dto';
 import { PreparationDto } from '../api/models/preparation-dto';
 import { ThemeDto } from '../api/models/theme-dto';
@@ -54,6 +55,17 @@ const THEMES: ThemeDto[] = [
   { id: ANIMAUX, nom: 'animaux', createurId: COLLEGUE },
   { id: CUISINE, nom: 'cuisine', createurId: MOI },
 ];
+
+/** Album d'une Préparation, créé par `createurId` (un collègue par défaut : pas de menu « Actions de l'album »). */
+function albumDe(preparation: PreparationDto, createurId: string = COLLEGUE): AlbumDto {
+  return {
+    id: preparation.albumId,
+    titre: preparation.titreAlbum,
+    auteur: 'Natha Caputo',
+    createurId,
+    nombreModules: 2,
+  };
+}
 
 const AUTRE_ID = '0190f0a0-0000-7000-8000-00000000d002';
 const LOUP: PreparationDto = {
@@ -107,14 +119,16 @@ describe('Preparation (En-tête)', () => {
   const texte = (selecteur: string) =>
     racine.querySelector(selecteur)?.textContent?.replace(/\s+/g, ' ').trim();
 
-  /** Répond à la lecture de la Préparation, puis aux listes de Modules de son Album et de Thèmes. */
+  /** Répond à la lecture de la Préparation, puis à celle de son Album et aux listes de Modules et de Thèmes. */
   async function ouvrir(
     preparation: PreparationDto = PREPARATION,
     modules: ModuleDto[] = MODULES,
     themes: ThemeDto[] = THEMES,
+    album: AlbumDto = albumDe(preparation),
   ) {
     serveur.expectOne(`/api/preparations/${preparation.id}`).flush(preparation);
     await stabiliser();
+    serveur.expectOne(`/api/albums/${preparation.albumId}`).flush(album);
     serveur.expectOne(`/api/albums/${preparation.albumId}/modules`).flush(modules);
     serveur.expectOne('/api/themes').flush(themes);
     await stabiliser();
@@ -465,6 +479,7 @@ describe('Preparation (En-tête)', () => {
   it('échec des listes : leur propre Bandeau, l’En-tête reste avec ses valeurs, « Réessayer » recharge', async () => {
     serveur.expectOne(`/api/preparations/${ID}`).flush(PREPARATION);
     await stabiliser();
+    serveur.expectOne(`/api/albums/${ALBUM}`).flush(albumDe(PREPARATION));
     serveur.expectOne(`/api/albums/${ALBUM}/modules`).error(new ProgressEvent('error'));
     serveur.expectOne('/api/themes').flush(THEMES);
     await stabiliser();
@@ -475,6 +490,7 @@ describe('Preparation (En-tête)', () => {
     expect(texte('.entete__nom-theme')).toBe('Thème par défaut : cuisine');
 
     await reessayer('erreur-listes');
+    serveur.expectOne(`/api/albums/${ALBUM}`).flush(albumDe(PREPARATION));
     serveur.expectOne(`/api/albums/${ALBUM}/modules`).flush(MODULES);
     serveur.expectOne('/api/themes').flush(THEMES);
     await stabiliser();
@@ -527,12 +543,14 @@ describe('Preparation (En-tête)', () => {
   it('les listes de la Préparation quittée, répondues après celles de la nouvelle, n’écrivent rien', async () => {
     serveur.expectOne(`/api/preparations/${ID}`).flush(PREPARATION);
     await stabiliser();
+    const albumA = serveur.expectOne(`/api/albums/${ALBUM}`);
     const modulesA = serveur.expectOne(`/api/albums/${ALBUM}/modules`);
     const [themesA] = serveur.match('/api/themes');
 
     fixture.componentRef.setInput('id', AUTRE_ID);
     await stabiliser();
     await ouvrir(LOUP, MODULES_LOUP, THEMES);
+    albumA.flush(albumDe(PREPARATION, MOI));
     modulesA.flush(MODULES);
     themesA.flush(THEMES);
     await stabiliser();
@@ -680,6 +698,7 @@ describe('Preparation (En-tête)', () => {
         .expectOne(`/api/preparations/${ID}`)
         .flush({ ...PREPARATION, moduleId: undefined, nomModule: undefined });
       await stabiliser();
+      serveur.expectOne(`/api/albums/${ALBUM}`).flush(albumDe(PREPARATION));
       serveur.expectOne(URL_MODULES).flush(modules);
       serveur.expectOne('/api/themes').flush(THEMES);
       await stabiliser();
@@ -1028,6 +1047,7 @@ describe('Preparation (En-tête)', () => {
         { status: 400, statusText: 'Bad Request' },
       );
       await stabiliser();
+      serveur.expectOne(`/api/albums/${ALBUM}`).flush(albumDe(PREPARATION));
       serveur.expectOne(URL_MODULES).flush([MODULES[0]]);
       serveur.expectOne('/api/themes').flush(THEMES);
       await stabiliser();
@@ -1112,6 +1132,7 @@ describe('Preparation (En-tête)', () => {
     async function relire(themes: ThemeDto[], relue: PreparationDto = SANS_THEME) {
       serveur.expectOne(`/api/preparations/${ID}`).flush(relue);
       await stabiliser();
+      serveur.expectOne(`/api/albums/${ALBUM}`).flush(albumDe(PREPARATION));
       serveur.expectOne(`/api/albums/${ALBUM}/modules`).flush(MODULES);
       serveur.expectOne(URL_THEMES).flush(themes);
       await stabiliser();
@@ -1416,6 +1437,7 @@ describe('Preparation (En-tête)', () => {
         { status: 400, statusText: 'Bad Request' },
       );
       await stabiliser();
+      serveur.expectOne(`/api/albums/${ALBUM}`).flush(albumDe(PREPARATION));
       serveur.expectOne(`/api/albums/${ALBUM}/modules`).flush(MODULES);
       serveur.expectOne(URL_THEMES).flush([THEMES[1]]);
       await stabiliser();
@@ -1431,6 +1453,151 @@ describe('Preparation (En-tête)', () => {
       requete.flush(SANS_THEME);
       await stabiliser();
       expect(racine.querySelector('app-bandeau-erreur')).toBeNull();
+    });
+  });
+
+  describe('Corriger l’album (story 2.2, partie 4)', () => {
+    const URL_ALBUM = `/api/albums/${ALBUM}`;
+
+    afterEach(() =>
+      document
+        .querySelectorAll('.cdk-overlay-container')
+        .forEach((surcouche) => surcouche.remove()),
+    );
+
+    /** L'enseignant connecté est `MOI`, administrateur ou non. */
+    function connecter(administrateur = false) {
+      TestBed.inject(CompteCourant).mettreAJour({
+        id: MOI,
+        administrateur,
+        email: 'moi@ecole.fr',
+        nomAffiche: 'Moi',
+      });
+    }
+
+    const boutonActions = () =>
+      racine.querySelector<HTMLButtonElement>('button[aria-label="Actions de l\'album"]');
+    const champDuDialogue = (etiquette: string) =>
+      [...document.querySelectorAll<HTMLElement>('app-corriger-album mat-form-field')]
+        .find((element) => element.querySelector('mat-label')?.textContent?.trim() === etiquette)!
+        .querySelector<HTMLInputElement>('input')!;
+    const boutonDuDialogue = (libelle: string) =>
+      [...document.querySelectorAll<HTMLButtonElement>('app-corriger-album button')].find(
+        (bouton) => bouton.textContent?.trim() === libelle,
+      )!;
+
+    async function ouvrirCorrection() {
+      boutonActions()!.click();
+      await stabiliser();
+      [...document.querySelectorAll<HTMLElement>('.cdk-overlay-pane [mat-menu-item]')]
+        .find((item) => item.textContent?.trim() === "Corriger l'album")!
+        .click();
+      await stabiliser();
+    }
+
+    it('menu « Actions de l’album » : affiché pour le créateur de l’Album, étiqueté, au clavier', async () => {
+      connecter();
+      await ouvrir(PREPARATION, MODULES, THEMES, albumDe(PREPARATION, MOI));
+
+      expect(boutonActions()).not.toBeNull();
+      expect(boutonActions()!.tabIndex).toBe(0);
+      expect(boutonActions()!.closest('.entete__ligne-titre')?.querySelector('h1')).not.toBeNull();
+    });
+
+    it('menu « Actions de l’album » : absent pour l’Album d’un collègue', async () => {
+      connecter();
+      await ouvrir();
+
+      expect(boutonActions()).toBeNull();
+    });
+
+    it('menu « Actions de l’album » : affiché pour l’administrateur sur l’Album d’un collègue', async () => {
+      connecter(true);
+      await ouvrir();
+
+      expect(boutonActions()).not.toBeNull();
+    });
+
+    it('« Corriger l’album » : dialogue prérempli ; « Enregistrer » corrige, l’En-tête et l’onglet suivent', async () => {
+      connecter();
+      await ouvrir(PREPARATION, MODULES, THEMES, {
+        ...albumDe(PREPARATION, MOI),
+        titre: 'La Roule Galete',
+        editeur: 'Milan',
+      });
+
+      await ouvrirCorrection();
+      expect(document.querySelector('app-corriger-album h2')?.textContent?.trim()).toBe(
+        "Corriger l'album",
+      );
+      expect(champDuDialogue('Titre').value).toBe('La Roule Galete');
+      expect(champDuDialogue('Auteur').value).toBe('Natha Caputo');
+      expect(champDuDialogue('Éditeur (facultatif)').value).toBe('Milan');
+
+      champDuDialogue('Titre').value = 'La Roule Galette ';
+      champDuDialogue('Titre').dispatchEvent(new Event('input'));
+      await stabiliser();
+      boutonDuDialogue('Enregistrer').click();
+      await stabiliser();
+
+      const correction = serveur.expectOne(URL_ALBUM);
+      expect(correction.request.method).toBe('PUT');
+      expect(correction.request.body).toEqual({
+        titre: 'La Roule Galette',
+        auteur: 'Natha Caputo',
+        editeur: 'Milan',
+      });
+      correction.flush({
+        ...albumDe(PREPARATION, MOI),
+        titre: 'La Roule Galette corrigée',
+        editeur: 'Milan',
+      });
+      await stabiliser();
+
+      expect(document.querySelector('app-corriger-album')).toBeNull();
+      expect(texte('h1')).toBe('La Roule Galette corrigée');
+      expect(TestBed.inject(Title).getTitle()).toBe('La Roule Galette corrigée · corpus-mots');
+      expect(document.activeElement).toBe(boutonActions());
+      // Ni la Préparation ni les listes ne sont relues.
+      serveur.expectNone(`/api/preparations/${ID}`);
+      serveur.expectNone(`/api/albums/${ALBUM}/modules`);
+    });
+
+    it('l’Album de la Préparation quittée, répondu après la nouvelle, n’écrit rien', async () => {
+      connecter();
+      serveur.expectOne(`/api/preparations/${ID}`).flush(PREPARATION);
+      await stabiliser();
+      const albumA = serveur.expectOne(URL_ALBUM);
+      serveur.expectOne(`/api/albums/${ALBUM}/modules`).flush(MODULES);
+      serveur.expectOne('/api/themes').flush(THEMES);
+
+      fixture.componentRef.setInput('id', AUTRE_ID);
+      await stabiliser();
+      await ouvrir(LOUP, MODULES_LOUP, THEMES, albumDe(LOUP, COLLEGUE));
+      expect(boutonActions()).toBeNull();
+
+      albumA.flush(albumDe(PREPARATION, MOI));
+      await stabiliser();
+
+      expect(texte('h1')).toBe(LOUP.titreAlbum);
+      expect(boutonActions()).toBeNull();
+    });
+
+    it('« Annuler » ferme le dialogue sans rien envoyer, le focus revient au bouton du menu', async () => {
+      connecter();
+      await ouvrir(PREPARATION, MODULES, THEMES, albumDe(PREPARATION, MOI));
+
+      await ouvrirCorrection();
+      champDuDialogue('Titre').value = 'Autre titre';
+      champDuDialogue('Titre').dispatchEvent(new Event('input'));
+      await stabiliser();
+      boutonDuDialogue('Annuler').click();
+      await stabiliser();
+
+      expect(document.querySelector('app-corriger-album')).toBeNull();
+      serveur.expectNone(URL_ALBUM);
+      expect(texte('h1')).toBe('La Roule Galette');
+      expect(document.activeElement).toBe(boutonActions());
     });
   });
 });

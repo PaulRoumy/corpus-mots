@@ -4,6 +4,7 @@ import {
   Component,
   computed,
   effect,
+  ElementRef,
   inject,
   Injector,
   input,
@@ -26,6 +27,7 @@ import { MatSelect, MatSelectModule } from '@angular/material/select';
 import { Title } from '@angular/platform-browser';
 import { Api } from '../api/api';
 import { creerModule } from '../api/fn/albums-resource/creer-module';
+import { lireAlbum } from '../api/fn/albums-resource/lire-album';
 import { listerModulesDeLAlbum } from '../api/fn/albums-resource/lister-modules-de-l-album';
 import { renommerModule } from '../api/fn/modules-resource/renommer-module';
 import { supprimerModule } from '../api/fn/modules-resource/supprimer-module';
@@ -35,6 +37,7 @@ import { creerTheme } from '../api/fn/themes-resource/creer-theme';
 import { listerThemes } from '../api/fn/themes-resource/lister-themes';
 import { renommerTheme } from '../api/fn/themes-resource/renommer-theme';
 import { supprimerTheme } from '../api/fn/themes-resource/supprimer-theme';
+import { AlbumDto } from '../api/models/album-dto';
 import { ModuleDto } from '../api/models/module-dto';
 import { PreparationDto } from '../api/models/preparation-dto';
 import { ThemeDto } from '../api/models/theme-dto';
@@ -46,6 +49,7 @@ import { codeErreur, MESSAGES_PAR_CODE, messageErreur } from '../commun/erreurs/
 import { RepereSection } from '../commun/repere-section/repere-section';
 import { Squelette } from '../commun/squelette/squelette';
 import { ChampNomModule } from './champ-nom-module';
+import { ouvrirDialogueCorrigerAlbum } from './corriger-album-dialogue';
 import { libelleMots } from './preparations';
 
 /** « 0 déjà illustrés », « 1 déjà illustré ». */
@@ -135,6 +139,11 @@ function parNom(themes: ThemeDto[]): ThemeDto[] {
  * par des Images est refusé (`theme.utilise`). Après `preparation.theme_introuvable`, les Thèmes sont relus et le
  * Thème disparu retiré du choix.
  *
+ * Corriger l'album (story 2.2, partie 4) : l'Album est lu avec les listes. À côté du titre, le menu « Actions de
+ * l'album », réservé à son créateur et à l'administrateur (le back revérifie), propose « Corriger l'album », qui ouvre
+ * le dialogue de correction ; l'Album corrigé met à jour le titre de l'En-tête et de l'onglet, sans recharger la page.
+ * Le focus revient au bouton du menu à la fermeture du dialogue.
+ *
  * Le Temps passé est un champ texte en mode de saisie décimal plutôt qu'un `type="number"` : celui-ci, selon la langue
  * du navigateur, refuse la virgule sans le dire (sa valeur devient vide, comme un champ effacé).
  */
@@ -206,7 +215,26 @@ function parNom(themes: ThemeDto[]): ThemeDto[] {
           </span>
           <div class="entete__corps">
             <p class="entete__rubrique">Préparation</p>
-            <h1 id="entete-titre" class="entete__titre">{{ courante.titreAlbum }}</h1>
+            <div class="entete__ligne-titre">
+              <h1 id="entete-titre" class="entete__titre">{{ courante.titreAlbum }}</h1>
+              @if (albumCorrigeable(); as corrigeable) {
+                <button
+                  #declencheurAlbum
+                  matIconButton
+                  class="entete__actions-album"
+                  type="button"
+                  aria-label="Actions de l'album"
+                  [matMenuTriggerFor]="menuAlbum"
+                >
+                  <mat-icon svgIcon="actions" aria-hidden="true" />
+                </button>
+                <mat-menu #menuAlbum="matMenu">
+                  <button mat-menu-item type="button" (click)="corrigerAlbum(corrigeable)">
+                    Corriger l'album
+                  </button>
+                </mat-menu>
+              }
+            </div>
             <div class="entete__meta">
               <app-repere-section [section]="courante.section" />
               @if (saisieModule(); as saisie) {
@@ -353,6 +381,8 @@ export class Preparation {
     validators: heuresValides,
   });
 
+  /** Album de la Préparation, lu avec les listes : son créateur décide du menu « Actions de l'album ». */
+  protected readonly album = signal<AlbumDto | null>(null);
   protected readonly modules = signal<ModuleDto[]>([]);
   protected readonly themes = signal<ThemeDto[]>([]);
   protected readonly erreurListes = signal<string | null>(null);
@@ -368,6 +398,9 @@ export class Preparation {
   /** Échec d'une suppression de Module, ou de la relecture qui la suit. */
   protected readonly erreurModule = signal<ErreurAffichee | null>(null);
   private readonly listeModule = viewChild<MatSelect>('listeModule');
+  private readonly declencheurAlbum = viewChild('declencheurAlbum', {
+    read: ElementRef<HTMLButtonElement>,
+  });
   private readonly champThemes = viewChild(ChampThemes);
 
   /** Thème par défaut choisi, en liste pour le Champ à étiquettes (une étiquette au plus). */
@@ -402,6 +435,16 @@ export class Preparation {
     return compte.administrateur || choisi.createurId === compte.id ? choisi : null;
   });
 
+  /** Album de la Préparation, si l'enseignant peut le corriger : son créateur, ou l'administrateur. */
+  protected readonly albumCorrigeable = computed(() => {
+    const album = this.album();
+    const compte = this.compteCourant.compte();
+    if (album === null || compte === null) {
+      return null;
+    }
+    return compte.administrateur || album.createurId === compte.id ? album : null;
+  });
+
   /** Numéro du dernier chargement : la réponse d'une Préparation quittée depuis n'écrit rien. */
   private dernierChargement = 0;
   /** Vrai pendant un enregistrement : un changement survenu entre-temps est envoyé après lui. */
@@ -419,6 +462,7 @@ export class Preparation {
     const numero = ++this.dernierChargement;
     this.chargementEnCours.set(true);
     this.preparation.set(null);
+    this.album.set(null);
     this.modules.set([]);
     this.themes.set([]);
     this.erreurListes.set(null);
@@ -454,15 +498,17 @@ export class Preparation {
     }
   }
 
-  /** Modules de l'Album et Thèmes ; en échec, leur propre Bandeau d'erreur, l'En-tête reste affiché. */
+  /** Album, Modules de l'Album et Thèmes ; en échec, leur propre Bandeau d'erreur, l'En-tête reste affiché. */
   async chargerListes(albumId: string): Promise<void> {
     const numero = this.dernierChargement;
     try {
-      const [modules, themes] = await Promise.all([
+      const [album, modules, themes] = await Promise.all([
+        this.api.invoke(lireAlbum, { id: albumId }),
         this.api.invoke(listerModulesDeLAlbum, { id: albumId }),
         this.api.invoke(listerThemes),
       ]);
       if (numero === this.dernierChargement) {
+        this.album.set(album);
         this.modules.set(modules);
         this.themes.set(themes);
         this.listesChargees.set(true);
@@ -473,6 +519,27 @@ export class Preparation {
         this.erreurListes.set(messageErreur(erreur));
       }
     }
+  }
+
+  /**
+   * « Corriger l'album » : ouvre le dialogue de correction ; l'Album corrigé met à jour le titre de l'En-tête et de
+   * l'onglet. Le focus revient au bouton du menu.
+   */
+  protected async corrigerAlbum(album: AlbumDto): Promise<void> {
+    const numero = this.dernierChargement;
+    const corrige = await ouvrirDialogueCorrigerAlbum(
+      this.injecteur,
+      album,
+      this.declencheurAlbum()?.nativeElement,
+    );
+    if (corrige === undefined || numero !== this.dernierChargement) {
+      return;
+    }
+    this.album.set(corrige);
+    this.preparation.update((courante) =>
+      courante?.albumId === corrige.id ? { ...courante, titreAlbum: corrige.titre } : courante,
+    );
+    this.titre.setTitle(`${corrige.titre} · corpus-mots`);
   }
 
   protected choisirModule(valeur: ValeurModule): void {

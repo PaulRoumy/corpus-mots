@@ -126,3 +126,11 @@
 .entete__saisie-module {
   flex-basis: 100%;
 }
+
+// Titre de l'Album et menu « Actions de l'album » (story 2.2, partie 4).
+.entete__ligne-titre {
+  display: flex;
+  align-items: center;
+  gap: var(--cm-espace-2);
+  min-width: 0;
+}

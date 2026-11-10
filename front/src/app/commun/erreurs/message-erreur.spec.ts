@@ -54,6 +54,11 @@ describe('messageErreur', () => {
       'album.deja_existant',
       'Cet album existe déjà. Choisissez-le dans la liste des albums au titre proche.',
     ],
+    [
+      403,
+      'album.reserve_au_createur',
+      "Seuls le créateur de l'album et l'administrateur peuvent le corriger.",
+    ],
     [400, 'module.nom_invalide', 'Le nom du module doit compter de 1 à 200 caractères.'],
     [
       403,
