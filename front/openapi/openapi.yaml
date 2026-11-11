@@ -218,6 +218,14 @@ components:
         illustre:
           type: boolean
           description: Vrai si une Image est liée au Mot dans cette Préparation
+        themeId:
+          description: "Thème du Mot dans cette Préparation, null pour aucun"
+          type:
+          - string
+          - "null"
+          anyOf:
+          - $ref: "#/components/schemas/UUID"
+          - type: "null"
     NomAfficheDto:
       type: object
       required:
@@ -421,6 +429,15 @@ components:
           minimum: 1
           description: Place d'origine ; le Mot est placé en fin si elle est prise
             ou absente
+        themeId:
+          description: "Thème que le Mot avait, null pour aucun ; un Thème supprimé\
+            \ entre-temps est ignoré"
+          type:
+          - string
+          - "null"
+          anyOf:
+          - $ref: "#/components/schemas/UUID"
+          - type: "null"
     RoleAdministrateurDto:
       type: object
       required:
@@ -458,6 +475,17 @@ components:
             \ géré par l'administrateur seul"
           type: string
           $ref: "#/components/schemas/UUID"
+    ThemeMotPreparationDto:
+      type: object
+      properties:
+        themeId:
+          description: "Thème du Mot, null pour aucun"
+          type:
+          - string
+          - "null"
+          anyOf:
+          - $ref: "#/components/schemas/UUID"
+          - type: "null"
     UUID:
       type: string
       format: uuid
@@ -1011,6 +1039,39 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/MotPreparationDto"
+      tags:
+      - Preparations Resource
+  /api/preparations/{id}/mots/{motPreparationId}/theme:
+    put:
+      summary: Remplacer le Thème d'un Mot d'une Préparation de l'enseignant connecté
+        ; null le retire
+      operationId: changerThemeMotPreparation
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          $ref: "#/components/schemas/UUID"
+      - name: motPreparationId
+        in: path
+        required: true
+        schema:
+          $ref: "#/components/schemas/UUID"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ThemeMotPreparationDto"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MotPreparationDto"
+        "400":
+          description: Bad Request
       tags:
       - Preparations Resource
   /api/preparations/{id}/reglages:

@@ -1,0 +1,51 @@
+@use '@angular/material' as mat;
+
+:host {
+  display: block;
+  width: var(--cm-largeur-dialogue);
+  max-width: 100%;
+}
+
+.theme-mot {
+  display: flex;
+  flex-direction: column;
+  gap: var(--cm-espace-4);
+}
+
+.theme-mot__champ {
+  display: block;
+  width: 100%;
+}
+
+.theme-mot__suppression {
+  display: flex;
+  flex-direction: column;
+  gap: var(--cm-espace-2);
+}
+
+.theme-mot__suppression-titre {
+  margin: 0;
+  font: var(--cm-typo-label);
+}
+
+.theme-mot__suppression-phrase {
+  margin: 0;
+  font: var(--cm-typo-body);
+}
+
+.theme-mot__suppression-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--cm-espace-2);
+}
+
+// Bouton grave : error / on-error, comme le Dialogue de confirmation (DESIGN.md › dialogue-confirmation).
+.theme-mot__supprimer {
+  @include mat.button-overrides(
+    (
+      filled-container-color: var(--mat-sys-error),
+      filled-label-text-color: var(--mat-sys-on-error),
+      filled-state-layer-color: var(--mat-sys-on-error),
+    )
+  );
+}

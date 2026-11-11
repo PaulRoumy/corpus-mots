@@ -12,10 +12,12 @@ public record MotPreparationDto(
         @Schema(required = true, description = "Place dans l'ordre de saisie, à partir de 1") int ordre,
         @Schema(required = true) SensPreparationDto sens,
         @Schema(required = true, description = "Vrai si une Image est liée au Mot dans cette Préparation")
-        boolean illustre) {
+        boolean illustre,
+        @Schema(nullable = true, description = "Thème du Mot dans cette Préparation, null pour aucun") UUID themeId) {
 
     static MotPreparationDto de(MotPreparationVue vue) {
         return new MotPreparationDto(vue.id(), vue.motId(), vue.forme(), vue.ordre(),
-                new SensPreparationDto(vue.sensId(), vue.libelleSens(), vue.categorieSens()), vue.illustre());
+                new SensPreparationDto(vue.sensId(), vue.libelleSens(), vue.categorieSens()), vue.illustre(),
+                vue.themeId());
     }
 }

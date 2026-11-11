@@ -1936,6 +1936,7 @@ describe('Preparation (En-tête)', () => {
         motId: animal.motId,
         sensId: animal.sens.id,
         ordre: 2,
+        themeId: null,
       });
       const retabli = { ...animal, id: '0190f0a0-0000-7000-8000-0000000f9002' };
       requete.flush(retabli, { status: 201, statusText: 'Created' });
@@ -2164,6 +2165,275 @@ describe('Preparation (En-tête)', () => {
       await stabiliser();
 
       expect(document.activeElement).toBe(champSaisie());
+    });
+
+    it('« Annuler » d’un Mot qui avait un Thème : le rétablissement renvoie ce Thème', async () => {
+      const avecTheme = { ...CITROUILLE, themeId: ANIMAUX };
+      await ouvrirAvec([GALETTE, avecTheme]);
+      await retirer('citrouille');
+      retrait(avecTheme).flush(avecTheme);
+      await stabiliser();
+
+      await annuler();
+      const requete = retablissement();
+      expect(requete.request.body).toEqual({
+        motId: avecTheme.motId,
+        sensId: avecTheme.sens.id,
+        ordre: 2,
+        themeId: ANIMAUX,
+      });
+      requete.flush(avecTheme, { status: 201, statusText: 'Created' });
+      await stabiliser();
+
+      expect(
+        [...racine.querySelectorAll('.carte-mot__theme')].map((bouton) =>
+          bouton.textContent?.trim(),
+        ),
+      ).toEqual(['Sans thème', 'animaux']);
+    });
+  });
+
+  describe('Thème de chaque Mot (story 2.3, partie 3)', () => {
+    const CITROUILLE = { ...motPreparation('citrouille', 1), themeId: CUISINE };
+    const LOUP_MOT = motPreparation('loup', 2);
+    const URL_THEME_CITROUILLE = `${URL_MOTS}/${CITROUILLE.id}/theme`;
+
+    afterEach(() =>
+      document
+        .querySelectorAll('.cdk-overlay-container')
+        .forEach((surcouche) => surcouche.remove()),
+    );
+
+    function connecter() {
+      TestBed.inject(CompteCourant).mettreAJour({
+        id: MOI,
+        administrateur: false,
+        email: 'moi@ecole.fr',
+        nomAffiche: 'Moi',
+      });
+    }
+
+    async function ouvrirAvec(mots: MotPreparationDto[] = [CITROUILLE, LOUP_MOT]) {
+      await ouvrir(
+        { ...PREPARATION, nombreMots: mots.length },
+        MODULES,
+        THEMES,
+        albumDe(PREPARATION),
+        mots,
+      );
+    }
+
+    const boutonsTheme = () => [...racine.querySelectorAll<HTMLButtonElement>('.carte-mot__theme')];
+    const themesDesCartes = () => boutonsTheme().map((bouton) => bouton.textContent?.trim());
+    const saisieDialogue = () =>
+      document.querySelector<HTMLInputElement>('app-theme-mot app-champ-themes input')!;
+    const boutonDialogue = (libelle: string) =>
+      [...document.querySelectorAll<HTMLButtonElement>('app-theme-mot button')].find(
+        (bouton) => bouton.textContent?.trim() === libelle,
+      )!;
+
+    async function ouvrirDialogue(index = 0) {
+      boutonsTheme()[index].focus();
+      boutonsTheme()[index].click();
+      await stabiliser();
+      await stabiliser();
+    }
+
+    it('Cartes : Thème du Mot en bouton texte, « Sans thème » sinon, nom accessible complet', async () => {
+      await ouvrirAvec();
+
+      expect(themesDesCartes()).toEqual(['cuisine', 'Sans thème']);
+      expect(boutonsTheme()[0].getAttribute('aria-label')).toBe(
+        'Thème de « citrouille » : cuisine',
+      );
+    });
+
+    it('Thèmes non chargés : pas de bouton du Thème sur les Cartes', async () => {
+      serveur.expectOne(`/api/preparations/${ID}`).flush(PREPARATION);
+      await stabiliser();
+      serveur.expectOne(`/api/albums/${ALBUM}`).flush(albumDe(PREPARATION));
+      serveur.expectOne(`/api/albums/${ALBUM}/modules`).flush(MODULES);
+      serveur.expectOne('/api/themes').error(new ProgressEvent('error'));
+      serveur.expectOne(URL_MOTS).flush([CITROUILLE]);
+      await stabiliser();
+
+      expect(cartes()).toEqual(['citrouille']);
+      expect(boutonsTheme()).toEqual([]);
+    });
+
+    it('au clavier : le Dialogue change le Thème, la Carte suit et le focus revient à son bouton', async () => {
+      await ouvrirAvec();
+
+      await ouvrirDialogue();
+      expect(document.querySelector('app-theme-mot h2')?.textContent?.trim()).toBe(
+        'Thème de « citrouille »',
+      );
+      expect(document.activeElement).toBe(saisieDialogue());
+      saisieDialogue().value = 'anim';
+      saisieDialogue().dispatchEvent(new Event('input'));
+      await stabiliser();
+      await tour();
+      toucheClavier(saisieDialogue(), 'Enter', 13);
+      await stabiliser();
+      boutonDialogue('Enregistrer').click();
+      await stabiliser();
+
+      const requete = serveur.expectOne(URL_THEME_CITROUILLE);
+      expect(requete.request.method).toBe('PUT');
+      expect(requete.request.body).toEqual({ themeId: ANIMAUX });
+      requete.flush({ ...CITROUILLE, themeId: ANIMAUX });
+      await stabiliser();
+      await stabiliser();
+
+      expect(document.querySelector('mat-dialog-container')).toBeNull();
+      expect(themesDesCartes()).toEqual(['animaux', 'Sans thème']);
+      expect(document.activeElement).toBe(boutonsTheme()[0]);
+      serveur.expectNone(URL_REGLAGES);
+    });
+
+    it('« Annuler » : rien n’est envoyé, la Carte est inchangée, le focus revient à son bouton', async () => {
+      await ouvrirAvec();
+      await ouvrirDialogue(1);
+
+      boutonDialogue('Annuler').click();
+      await stabiliser();
+      await stabiliser();
+
+      serveur.expectNone((requete) => requete.url.endsWith('/theme'));
+      expect(themesDesCartes()).toEqual(['cuisine', 'Sans thème']);
+      expect(document.activeElement).toBe(boutonsTheme()[1]);
+    });
+
+    it('Thème supprimé depuis le Dialogue : retiré des Cartes et du Thème par défaut de l’En-tête', async () => {
+      connecter();
+      await ouvrirAvec([CITROUILLE, { ...LOUP_MOT, themeId: CUISINE }]);
+      await ouvrirDialogue();
+
+      document.querySelector<HTMLElement>('app-theme-mot mat-chip-row')!.click();
+      await stabiliser();
+      [...document.querySelectorAll<HTMLElement>('.cdk-overlay-pane [mat-menu-item]')]
+        .find((item) => item.textContent?.trim() === 'Supprimer')!
+        .click();
+      await stabiliser();
+      boutonDialogue('Supprimer le thème').click();
+      await stabiliser();
+      serveur.expectOne(`/api/themes/${CUISINE}`).flush('');
+      await stabiliser();
+
+      expect(themesDesCartes()).toEqual(['Sans thème', 'Sans thème']);
+      expect(etiquettesThemes()).toEqual([]);
+      expect(document.querySelectorAll('mat-dialog-container').length).toBe(1);
+      serveur.expectNone(URL_REGLAGES);
+    });
+
+    async function choisirDansLeDialogue(texte: string) {
+      saisieDialogue().value = texte;
+      saisieDialogue().dispatchEvent(new Event('input'));
+      await stabiliser();
+      await tour();
+      toucheClavier(saisieDialogue(), 'Enter', 13);
+      await stabiliser();
+    }
+
+    it('Thème créé depuis le Dialogue : la Carte affiche son nom', async () => {
+      await ouvrirAvec();
+      await ouvrirDialogue(1);
+
+      await choisirDansLeDialogue('Les saisons');
+      const saisons: ThemeDto = {
+        id: '0190f0a0-0000-7000-8000-00000000c009',
+        nom: 'Les saisons',
+        createurId: MOI,
+      };
+      serveur.expectOne('/api/themes').flush(saisons, { status: 201, statusText: 'Created' });
+      await stabiliser();
+      boutonDialogue('Enregistrer').click();
+      await stabiliser();
+      serveur
+        .expectOne(`${URL_MOTS}/${LOUP_MOT.id}/theme`)
+        .flush({ ...LOUP_MOT, themeId: saisons.id });
+      await stabiliser();
+      await stabiliser();
+
+      expect(themesDesCartes()).toEqual(['cuisine', 'Les saisons']);
+    });
+
+    it('Thème par défaut renommé depuis le Dialogue : Cartes et En-tête suivent', async () => {
+      connecter();
+      await ouvrirAvec();
+      await ouvrirDialogue();
+
+      document.querySelector<HTMLElement>('app-theme-mot mat-chip-row')!.click();
+      await stabiliser();
+      [...document.querySelectorAll<HTMLElement>('.cdk-overlay-pane [mat-menu-item]')]
+        .find((item) => item.textContent?.trim() === 'Renommer')!
+        .click();
+      await stabiliser();
+      const champ = document.querySelector<HTMLInputElement>(
+        'app-theme-mot app-champ-nom-module input',
+      )!;
+      champ.value = 'la cuisine';
+      champ.dispatchEvent(new Event('input'));
+      await stabiliser();
+      champ.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+      await stabiliser();
+      serveur.expectOne(`/api/themes/${CUISINE}/nom`).flush({ ...THEMES[1], nom: 'la cuisine' });
+      await stabiliser();
+
+      expect(themesDesCartes()).toEqual(['la cuisine', 'Sans thème']);
+      expect(etiquettesThemes()).toEqual(['la cuisine']);
+      serveur.expectNone(URL_REGLAGES);
+    });
+
+    it('Thème supprimé depuis l’En-tête : retiré aussi des Cartes', async () => {
+      connecter();
+      await ouvrirAvec();
+
+      racine.querySelector<HTMLElement>('app-champ-themes mat-chip-row')!.click();
+      await stabiliser();
+      [...document.querySelectorAll<HTMLElement>('.cdk-overlay-pane [mat-menu-item]')]
+        .find((item) => item.textContent?.trim() === 'Supprimer')!
+        .click();
+      await stabiliser();
+      expect(document.querySelector('.dialogue-confirmation__phrase')?.textContent).toContain(
+        'des mots qui le portent',
+      );
+      document.querySelector<HTMLButtonElement>('.dialogue-confirmation__confirmer')!.click();
+      await stabiliser();
+      serveur.expectOne(`/api/themes/${CUISINE}`).flush('');
+      await stabiliser();
+      serveur
+        .expectOne(`/api/preparations/${ID}`)
+        .flush({ ...PREPARATION, themeDefautId: undefined, nomThemeDefaut: undefined });
+      await stabiliser();
+      serveur.expectOne(`/api/albums/${ALBUM}`).flush(albumDe(PREPARATION));
+      serveur.expectOne(`/api/albums/${ALBUM}/modules`).flush(MODULES);
+      serveur.expectOne('/api/themes').flush([THEMES[0]]);
+      await stabiliser();
+
+      expect(themesDesCartes()).toEqual(['Sans thème', 'Sans thème']);
+    });
+
+    it('Thème renommé dans l’En-tête : les Cartes montrent le nouveau nom', async () => {
+      connecter();
+      await ouvrirAvec();
+
+      racine.querySelector<HTMLElement>('app-champ-themes mat-chip-row')!.click();
+      await stabiliser();
+      [...document.querySelectorAll<HTMLElement>('.cdk-overlay-pane [mat-menu-item]')]
+        .find((item) => item.textContent?.trim() === 'Renommer')!
+        .click();
+      await stabiliser();
+      const champ = racine.querySelector<HTMLInputElement>('app-champ-nom-module input')!;
+      champ.value = 'la cuisine';
+      champ.dispatchEvent(new Event('input'));
+      await stabiliser();
+      champ.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+      await stabiliser();
+      serveur.expectOne(`/api/themes/${CUISINE}/nom`).flush({ ...THEMES[1], nom: 'la cuisine' });
+      await stabiliser();
+
+      expect(themesDesCartes()).toEqual(['la cuisine', 'Sans thème']);
     });
   });
 });

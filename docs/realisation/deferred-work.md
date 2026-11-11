@@ -131,3 +131,6 @@
 - source_spec: `docs/realisation/spec-2-3-2-retirer-un-mot.md`
   summary: Story 2.4 : `Usages.libererPreparationMot` supprime aussi le `lien_image` du Mot de Préparation, et le rétablissement par « Annuler » rétablit son Image.
   evidence: Revue de la story 2.3, partie 2, ligne 16 du journal de tri : seul un commentaire Javadoc le prévoit aujourd'hui.
+- source_spec: `docs/realisation/spec-2-3-3-theme-de-chaque-mot.md`
+  summary: Thème supprimé en même temps qu'il est écrit sur un Mot de Préparation (ajout, changement, rétablissement) ou comme Thème par défaut : verrou partagé côté `referentiels` (`SELECT … FOR SHARE` sur `theme`) pris par `preparations` avant d'écrire, à traiter avec l'entrée de la story 2.6 sur `UtilisationThemes`.
+  evidence: Revue de la story 2.3, partie 3, ligne 9 du journal de tri : sans clé étrangère (AD-1), un `theme_id` orphelin reste en base, affiché « Sans thème ».

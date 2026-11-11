@@ -355,7 +355,8 @@ public class ReferentielsService {
     /**
      * Supprime le Thème {@code id}, s'il n'est utilisé par aucun module aval ({@link UtilisationThemes}).
      * {@link ThemeSupprime} est d'abord émis, de façon synchrone, pour que les modules aval le retirent dans cette même
-     * transaction (AD-15) : les Préparations qui l'avaient pour Thème par défaut n'en ont plus.
+     * transaction (AD-15) : les Préparations qui l'avaient pour Thème par défaut n'en ont plus, ni les Mots de
+     * Préparation qui le portaient.
      *
      * @throws ErreurMetier {@code 404 ressource.introuvable} si le Thème n'existe pas ;
      *         {@code 403 theme.reserve_au_createur} si l'enseignant courant n'est ni son créateur ni administrateur ;

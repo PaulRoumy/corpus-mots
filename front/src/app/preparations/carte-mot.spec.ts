@@ -50,4 +50,33 @@ describe('CarteMot', () => {
     expect(retraits).toBe(1);
     expect(document.activeElement).toBe(boutonRetirer());
   });
+
+  const boutonTheme = () => racine.querySelector<HTMLButtonElement>('.carte-mot__theme');
+
+  it('Thèmes pas encore chargés (`theme` indéfini) : pas de bouton du Thème', () => {
+    expect(boutonTheme()).toBeNull();
+  });
+
+  it('bouton texte du Thème : « cuisine », nom accessible complet ; il émet `changerTheme`', async () => {
+    fixture.componentRef.setInput('theme', 'cuisine');
+    await fixture.whenStable();
+    let ouvertures = 0;
+    fixture.componentInstance.changerTheme.subscribe(() => ouvertures++);
+
+    expect(boutonTheme()?.textContent?.trim()).toBe('cuisine');
+    expect(boutonTheme()?.getAttribute('type')).toBe('button');
+    expect(boutonTheme()?.getAttribute('aria-label')).toBe('Thème de « citrouille » : cuisine');
+    boutonTheme()!.click();
+
+    expect(ouvertures).toBe(1);
+    expect(fixture.componentInstance.elementTheme()).toBe(boutonTheme());
+  });
+
+  it('Mot sans thème : « Sans thème »', async () => {
+    fixture.componentRef.setInput('theme', null);
+    await fixture.whenStable();
+
+    expect(boutonTheme()?.textContent?.trim()).toBe('Sans thème');
+    expect(boutonTheme()?.getAttribute('aria-label')).toBe('Thème de « citrouille » : sans thème');
+  });
 });

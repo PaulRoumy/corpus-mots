@@ -34,8 +34,8 @@ import org.junit.jupiter.api.Test;
 
 /**
  * Mots d'une Préparation (story 2.3) : ajout par le Champ de saisie rapide, normalisé par le Lexique, avec le Sens
- * retenu par {@code Usages}, liste dans l'ordre de saisie (partie 1), retrait et rétablissement (partie 2). Une ligne
- * de test par ligne de la matrice de chaque spec.
+ * retenu par {@code Usages}, liste dans l'ordre de saisie (partie 1), retrait et rétablissement (partie 2), Thème de
+ * chaque Mot (partie 3). Une ligne de test par ligne de la matrice de chaque spec.
  */
 @QuarkusTest
 @TestSecurity(user = MotsPreparationResourceTest.CLAIRE)
@@ -59,6 +59,9 @@ class MotsPreparationResourceTest {
 
     UUID rouleGalette;
     UUID preparation;
+    /** cuisine et automne, créés par Claire (elle peut les supprimer). */
+    UUID cuisine;
+    UUID automne;
 
     @BeforeEach
     void donnees() {
@@ -72,6 +75,8 @@ class MotsPreparationResourceTest {
         referentiels.effacer();
         rouleGalette = referentiels.album("La Roule Galette", "Natha Caputo");
         preparation = preparation(CLAIRE, "ms", "2026-11-09T09:00:00Z");
+        cuisine = referentiels.theme("cuisine", CLAIRE);
+        automne = referentiels.theme("automne", CLAIRE);
     }
 
     @Test
@@ -455,12 +460,246 @@ class MotsPreparationResourceTest {
                 .body("code", equalTo("requete.invalide"));
     }
 
+    // --- Thème de chaque Mot (partie 3) ---
+
+    @Test
+    void unMotAjouteRecoitLeThemeParDefaut() {
+        reglerThemeDefaut(preparation, cuisine);
+
+        String id = ajouter(preparation, "citrouille").statusCode(201)
+                .body("themeId", equalTo(cuisine.toString()))
+                .extract().path("id");
+
+        given().when().get("/api/preparations/" + preparation + "/mots")
+                .then()
+                .statusCode(200)
+                .body("[0].themeId", equalTo(cuisine.toString()));
+        assertEquals(cuisine, themeEnBase(UUID.fromString(id)));
+    }
+
+    @Test
+    void unMotAjouteSansThemeParDefautEstSansTheme() {
+        String id = ajouter(preparation, "citrouille").statusCode(201)
+                .body("themeId", nullValue())
+                .extract().path("id");
+
+        given().when().get("/api/preparations/" + preparation + "/mots")
+                .then()
+                .statusCode(200)
+                .body("[0].themeId", nullValue());
+        assertEquals(null, themeEnBase(UUID.fromString(id)));
+    }
+
+    @Test
+    void changerLeThemeDUnMot() {
+        reglerThemeDefaut(preparation, cuisine);
+        String citrouille = ajouter(preparation, "citrouille").statusCode(201).extract().path("id");
+        String loup = ajouter(preparation, "loup").statusCode(201).extract().path("id");
+
+        changerTheme(preparation, UUID.fromString(citrouille), automne)
+                .statusCode(200)
+                .body("id", equalTo(citrouille))
+                .body("forme", equalTo("citrouille"))
+                .body("ordre", equalTo(1))
+                .body("sens.libelle", equalTo("à compléter"))
+                .body("themeId", equalTo(automne.toString()));
+
+        assertEquals(automne, themeEnBase(UUID.fromString(citrouille)));
+        assertEquals(cuisine, themeEnBase(UUID.fromString(loup)));
+        given().when().get("/api/preparations/" + preparation + "/mots")
+                .then()
+                .statusCode(200)
+                .body("themeId", contains(automne.toString(), cuisine.toString()));
+        given().when().get("/api/preparations/" + preparation)
+                .then()
+                .statusCode(200)
+                .body("themeDefautId", equalTo(cuisine.toString()));
+    }
+
+    @Test
+    void retirerLeThemeDUnMot() {
+        reglerThemeDefaut(preparation, cuisine);
+        String citrouille = ajouter(preparation, "citrouille").statusCode(201).extract().path("id");
+
+        changerTheme(preparation, UUID.fromString(citrouille), null)
+                .statusCode(200)
+                .body("themeId", nullValue());
+
+        assertEquals(null, themeEnBase(UUID.fromString(citrouille)));
+        // Un corps sans themeId retire aussi le Thème.
+        changerTheme(preparation, UUID.fromString(citrouille), automne).statusCode(200);
+        given().contentType(ContentType.JSON).body(new HashMap<>(Map.of()))
+                .when().put("/api/preparations/" + preparation + "/mots/" + citrouille + "/theme")
+                .then()
+                .statusCode(200)
+                .body("themeId", nullValue());
+        assertEquals(null, themeEnBase(UUID.fromString(citrouille)));
+    }
+
+    @Test
+    void changerLeThemeParDefautNeReecritPasLesMotsDejaSaisis() {
+        reglerThemeDefaut(preparation, cuisine);
+        String citrouille = ajouter(preparation, "citrouille").statusCode(201).extract().path("id");
+        String sansTheme = ajouter(preparation, "loup").statusCode(201).extract().path("id");
+        changerTheme(preparation, UUID.fromString(sansTheme), null).statusCode(200);
+
+        reglerThemeDefaut(preparation, automne);
+        String renard = ajouter(preparation, "renard").statusCode(201)
+                .body("themeId", equalTo(automne.toString()))
+                .extract().path("id");
+
+        assertEquals(cuisine, themeEnBase(UUID.fromString(citrouille)));
+        assertEquals(null, themeEnBase(UUID.fromString(sansTheme)));
+        assertEquals(automne, themeEnBase(UUID.fromString(renard)));
+    }
+
+    @Test
+    void unMotRetabliReprendSonTheme() {
+        String citrouille = ajouter(preparation, "citrouille").statusCode(201).extract().path("id");
+        changerTheme(preparation, UUID.fromString(citrouille), automne).statusCode(200);
+        reglerThemeDefaut(preparation, cuisine);
+
+        Map<String, Object> retire = retirer(preparation, UUID.fromString(citrouille)).statusCode(200)
+                .body("themeId", equalTo(automne.toString()))
+                .extract().jsonPath().getMap("$");
+        @SuppressWarnings("unchecked")
+        Map<String, Object> sens = (Map<String, Object>) retire.get("sens");
+        String retabli = retablir(preparation, retire.get("motId"), sens.get("id"), retire.get("ordre"),
+                retire.get("themeId"))
+                .statusCode(201)
+                .body("themeId", equalTo(automne.toString()))
+                .extract().path("id");
+
+        assertEquals(automne, themeEnBase(UUID.fromString(retabli)));
+    }
+
+    @Test
+    void unMotRetabliApresLaSuppressionDeSonThemeEstSansTheme() {
+        String citrouille = ajouter(preparation, "citrouille").statusCode(201).extract().path("id");
+        changerTheme(preparation, UUID.fromString(citrouille), automne).statusCode(200);
+        Map<String, Object> retire = retirer(preparation, UUID.fromString(citrouille)).statusCode(200)
+                .extract().jsonPath().getMap("$");
+        given().when().delete("/api/themes/" + automne).then().statusCode(204);
+        @SuppressWarnings("unchecked")
+        Map<String, Object> sens = (Map<String, Object>) retire.get("sens");
+
+        String retabli = retablir(preparation, retire.get("motId"), sens.get("id"), retire.get("ordre"), automne)
+                .statusCode(201)
+                .body("themeId", nullValue())
+                .extract().path("id");
+
+        assertEquals(null, themeEnBase(UUID.fromString(retabli)));
+    }
+
+    @Test
+    void supprimerUnThemeLeRetireDesMotsDeTousLesEnseignants() {
+        reglerThemeDefaut(preparation, cuisine);
+        String citrouille = ajouter(preparation, "citrouille").statusCode(201).extract().path("id");
+        String loup = ajouter(preparation, "loup").statusCode(201).extract().path("id");
+        changerTheme(preparation, UUID.fromString(loup), automne).statusCode(200);
+        UUID deZoe = preparation(ZOE, "gs", "2026-11-09T08:00:00Z");
+        MotVue renard = QuarkusTransaction.requiringNew().call(() -> lexique.obtenirOuCreerMot("renard"));
+        UUID renardDeZoe = motDePreparation(deZoe, renard.id(), 1);
+        QuarkusTransaction.requiringNew().run(() -> entityManager
+                .createNativeQuery("update preparation_mot set theme_id = :theme where id = :id")
+                .setParameter("theme", cuisine)
+                .setParameter("id", renardDeZoe)
+                .executeUpdate());
+
+        given().when().delete("/api/themes/" + cuisine).then().statusCode(204);
+
+        assertEquals(null, themeEnBase(UUID.fromString(citrouille)));
+        assertEquals(null, themeEnBase(renardDeZoe));
+        assertEquals(automne, themeEnBase(UUID.fromString(loup)));
+        given().when().get("/api/preparations/" + preparation + "/mots")
+                .then()
+                .statusCode(200)
+                .body("themeId", contains(null, automne.toString()));
+    }
+
+    @Test
+    void changerLeThemeAvecUnThemeInconnuEstRefuse() {
+        reglerThemeDefaut(preparation, cuisine);
+        String citrouille = ajouter(preparation, "citrouille").statusCode(201).extract().path("id");
+
+        changerTheme(preparation, UUID.fromString(citrouille), UUID.randomUUID())
+                .statusCode(400)
+                .contentType(ProblemeDto.MEDIA_TYPE)
+                .body("code", equalTo("preparation.theme_introuvable"));
+        assertEquals(cuisine, themeEnBase(UUID.fromString(citrouille)));
+    }
+
+    @Test
+    void changerLeThemeChezUnCollegueOuUnInconnuEstIntrouvable() {
+        UUID deZoe = preparation(ZOE, "gs", "2026-11-09T08:00:00Z");
+        MotVue loup = QuarkusTransaction.requiringNew().call(() -> lexique.obtenirOuCreerMot("loup"));
+        UUID motDeZoe = motDePreparation(deZoe, loup.id(), 1);
+        UUID autre = preparation(CLAIRE, "gs", "2026-11-08T09:00:00Z");
+        UUID motDeLAutre = UUID.fromString(ajouter(autre, "renard").statusCode(201).extract().path("id"));
+        UUID galette = UUID.fromString(ajouter(preparation, "galette").statusCode(201).extract().path("id"));
+
+        // Préparation d'un collègue, Préparation inconnue, Mot de Préparation inconnu ou d'une autre Préparation.
+        introuvable(changerTheme(deZoe, motDeZoe, automne));
+        introuvable(changerTheme(UUID.randomUUID(), galette, automne));
+        introuvable(changerTheme(preparation, UUID.randomUUID(), automne));
+        introuvable(changerTheme(preparation, motDeZoe, automne));
+        introuvable(changerTheme(preparation, motDeLAutre, automne));
+        // Le 404 passe avant la vérification du Thème.
+        introuvable(changerTheme(deZoe, motDeZoe, UUID.randomUUID()));
+
+        assertEquals(null, themeEnBase(motDeZoe));
+        assertEquals(null, themeEnBase(motDeLAutre));
+        assertEquals(null, themeEnBase(galette));
+    }
+
+    @Test
+    void changerLeThemeSansCorpsEstRefuse() {
+        String citrouille = ajouter(preparation, "citrouille").statusCode(201).extract().path("id");
+
+        given().contentType(ContentType.JSON)
+                .when().put("/api/preparations/" + preparation + "/mots/" + citrouille + "/theme")
+                .then()
+                .statusCode(400)
+                .contentType(ProblemeDto.MEDIA_TYPE)
+                .body("code", equalTo("requete.invalide"));
+    }
+
+    private ValidatableResponse changerTheme(UUID preparationId, UUID motPreparationId, UUID themeId) {
+        Map<String, Object> corps = new HashMap<>();
+        corps.put("themeId", themeId == null ? null : themeId.toString());
+        return given().contentType(ContentType.JSON).body(corps)
+                .when().put("/api/preparations/" + preparationId + "/mots/" + motPreparationId + "/theme")
+                .then();
+    }
+
+    /** Règle le Thème par défaut de la Préparation par l'En-tête, sans Module ni Temps passé. */
+    private void reglerThemeDefaut(UUID preparationId, UUID themeId) {
+        given().contentType(ContentType.JSON).body(Map.of("themeDefautId", themeId.toString()))
+                .when().put("/api/preparations/" + preparationId + "/reglages")
+                .then()
+                .statusCode(200);
+    }
+
+    /** Thème en base de ce Mot de Préparation, {@code null} s'il n'en a pas. */
+    private UUID themeEnBase(UUID preparationMotId) {
+        return QuarkusTransaction.requiringNew().call(() -> (UUID) entityManager
+                .createNativeQuery("select theme_id from preparation_mot where id = :id")
+                .setParameter("id", preparationMotId)
+                .getSingleResult());
+    }
+
     private ValidatableResponse retirer(UUID preparationId, UUID motPreparationId) {
         return given().when().delete("/api/preparations/" + preparationId + "/mots/" + motPreparationId).then();
     }
 
     private ValidatableResponse retablir(UUID preparationId, Object motId, Object sensId, Object ordre) {
+        return retablir(preparationId, motId, sensId, ordre, null);
+    }
+
+    private ValidatableResponse retablir(UUID preparationId, Object motId, Object sensId, Object ordre,
+            Object themeId) {
         Map<String, Object> corps = new HashMap<>();
+        corps.put("themeId", themeId == null ? null : themeId.toString());
         corps.put("motId", motId == null ? null : motId.toString());
         corps.put("sensId", sensId == null ? null : sensId.toString());
         corps.put("ordre", ordre);

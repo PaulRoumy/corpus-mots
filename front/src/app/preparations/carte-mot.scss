@@ -82,3 +82,26 @@
     height: var(--cm-taille-icone);
   }
 }
+
+// Thème du Mot : bouton texte d'une ligne, souligné pour se signaler comme bouton, y compris au toucher, et tronqué
+// par une ellipse (le nom accessible porte le nom complet).
+.carte-mot__theme {
+  box-sizing: border-box;
+  max-width: 100%;
+  min-height: var(--cm-hauteur-bouton-theme-mot);
+  padding: 0 var(--cm-espace-2);
+  overflow: hidden;
+  border: none;
+  border-radius: var(--cm-arrondi-sm);
+  background: none;
+  color: var(--mat-sys-primary);
+  font: var(--cm-typo-label-sm);
+  text-decoration: underline;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.carte-mot__theme--vide {
+  color: var(--mat-sys-on-surface-variant);
+}

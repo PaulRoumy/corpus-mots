@@ -133,6 +133,20 @@ public class PreparationsResource {
         return MotPreparationDto.de(preparations.retablirMot(id, retablissement.enCommande()));
     }
 
+    @PUT
+    @Path("/{id}/mots/{motPreparationId}/theme")
+    @Consumes(MediaType.APPLICATION_JSON)
+    @Operation(operationId = "changerThemeMotPreparation",
+            summary = "Remplacer le Thème d'un Mot d'une Préparation de l'enseignant connecté ; null le retire")
+    public MotPreparationDto changerThemeMot(@PathParam("id") UUID id,
+            @PathParam("motPreparationId") UUID motPreparationId,
+            @RequestBody(required = true) ThemeMotPreparationDto theme) {
+        if (theme == null) {
+            throw new ErreurMetier(400, "requete.invalide", "Le corps de la requête est obligatoire");
+        }
+        return MotPreparationDto.de(preparations.changerThemeMot(id, motPreparationId, theme.themeId()));
+    }
+
     @GET
     @Path("/{id}/mots")
     @Operation(operationId = "listerMotsPreparation",

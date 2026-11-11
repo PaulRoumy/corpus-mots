@@ -194,6 +194,8 @@ $typographie-material: (
   --cm-taille-vignette-vide: 56px;
   --cm-hauteur-badge: 22px;
   --cm-taille-icone-badge: 14px;
+  // Bouton texte du Thème d'une Carte de Mot (story 2.3, partie 3) : cible de 24 px au moins (WCAG 2.5.8).
+  --cm-hauteur-bouton-theme-mot: 24px;
 
   // Graisse forte (entrée active de la navigation) et plan du lien d'évitement, au-dessus de la coquille
   --cm-graisse-forte: 900;

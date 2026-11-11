@@ -222,6 +222,15 @@
           "illustre" : {
             "type" : "boolean",
             "description" : "Vrai si une Image est liée au Mot dans cette Préparation"
+          },
+          "themeId" : {
+            "description" : "Thème du Mot dans cette Préparation, null pour aucun",
+            "type" : [ "string", "null" ],
+            "anyOf" : [ {
+              "$ref" : "#/components/schemas/UUID"
+            }, {
+              "type" : "null"
+            } ]
           }
         }
       },
@@ -448,6 +457,15 @@
             "format" : "int32",
             "minimum" : 1,
             "description" : "Place d'origine ; le Mot est placé en fin si elle est prise ou absente"
+          },
+          "themeId" : {
+            "description" : "Thème que le Mot avait, null pour aucun ; un Thème supprimé entre-temps est ignoré",
+            "type" : [ "string", "null" ],
+            "anyOf" : [ {
+              "$ref" : "#/components/schemas/UUID"
+            }, {
+              "type" : "null"
+            } ]
           }
         }
       },
@@ -491,6 +509,20 @@
             "description" : "Enseignant qui a créé le Thème, seul avec l'administrateur à pouvoir le renommer ou le supprimer ; absent pour un Thème antérieur, géré par l'administrateur seul",
             "type" : "string",
             "$ref" : "#/components/schemas/UUID"
+          }
+        }
+      },
+      "ThemeMotPreparationDto" : {
+        "type" : "object",
+        "properties" : {
+          "themeId" : {
+            "description" : "Thème du Mot, null pour aucun",
+            "type" : [ "string", "null" ],
+            "anyOf" : [ {
+              "$ref" : "#/components/schemas/UUID"
+            }, {
+              "type" : "null"
+            } ]
           }
         }
       },
@@ -1265,6 +1297,53 @@
                 }
               }
             }
+          }
+        },
+        "tags" : [ "Preparations Resource" ]
+      }
+    },
+    "/api/preparations/{id}/mots/{motPreparationId}/theme" : {
+      "put" : {
+        "summary" : "Remplacer le Thème d'un Mot d'une Préparation de l'enseignant connecté ; null le retire",
+        "operationId" : "changerThemeMotPreparation",
+        "parameters" : [ {
+          "name" : "id",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "$ref" : "#/components/schemas/UUID"
+          }
+        }, {
+          "name" : "motPreparationId",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "$ref" : "#/components/schemas/UUID"
+          }
+        } ],
+        "requestBody" : {
+          "required" : true,
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/ThemeMotPreparationDto"
+              }
+            }
+          }
+        },
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/MotPreparationDto"
+                }
+              }
+            }
+          },
+          "400" : {
+            "description" : "Bad Request"
           }
         },
         "tags" : [ "Preparations Resource" ]

@@ -48,6 +48,11 @@ public class PreparationMotRepository implements PanacheRepositoryBase<Preparati
                 .getSingleResult()).intValue();
     }
 
+    /** Retire le Thème {@code themeId} de tous les Mots de Préparation qui le portaient, de tous les enseignants. */
+    public void retirerTheme(UUID themeId) {
+        update("themeId = null where themeId = ?1", themeId);
+    }
+
     public long compter(UUID preparationId) {
         return count("preparationId", preparationId);
     }

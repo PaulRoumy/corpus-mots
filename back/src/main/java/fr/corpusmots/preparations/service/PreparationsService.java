@@ -159,8 +159,9 @@ public class PreparationsService {
 
     /**
      * Ajoute en fin de Préparation {@code id} de l'enseignant courant le Mot saisi, normalisé par
-     * {@link Lexique#normaliser}, avec le Sens que {@link Usages#retenirSens} retient pour lui. Rien n'est ajouté en cas
-     * de refus. Les ajouts à une même Préparation passent un à un (Préparation verrouillée).
+     * {@link Lexique#normaliser}, avec le Sens que {@link Usages#retenirSens} retient pour lui et le Thème par défaut
+     * de la Préparation à cet instant. Rien n'est ajouté en cas de refus. Les ajouts à une même Préparation passent
+     * un à un (Préparation verrouillée).
      *
      * @throws ErreurMetier {@code 404 ressource.introuvable} si la Préparation n'existe pas ou appartient à un
      *         collègue ; {@code 400 preparation.mot_invalide} si la saisie normalisée est vide ou dépasse
@@ -180,7 +181,7 @@ public class PreparationsService {
             throw new ErreurMetier(409, CODE_MOT_DEJA_PRESENT, "Ce mot figure déjà dans la préparation");
         }
         PreparationMot ligne = PreparationMot.nouveau(preparationMots.nouvelIdentifiant(), preparation.id(), mot.id(),
-                preparationMots.dernierOrdre(preparation.id()) + 1);
+                preparationMots.dernierOrdre(preparation.id()) + 1, preparation.themeDefautId());
         preparationMots.persistAndFlush(ligne);
         SensVue sens = usages.retenirSens(new RetenirSensCommande(preparation.id(), ligne.id(), mot.id(),
                 preparation.albumId(), preparation.section()));
@@ -192,22 +193,15 @@ public class PreparationsService {
      * registre des usages le libère ({@link Usages#libererPreparationMot}), puis sa ligne est supprimée, dans une même
      * transaction. Le Mot et ses Sens restent dans le Lexique ; les places des autres Mots ne changent pas.
      *
-     * @return le Mot retiré, avec le Sens et la place qu'il avait, pour le rétablir
+     * @return le Mot retiré, avec le Sens, la place et le Thème qu'il avait, pour le rétablir
      * @throws ErreurMetier {@code 404 ressource.introuvable} si la Préparation n'existe pas ou appartient à un
      *         collègue, ou si le Mot de Préparation n'existe pas ou appartient à une autre Préparation
      */
     @Transactional
     public MotPreparationVue retirerMot(UUID id, UUID motPreparationId) {
         Preparation preparation = verrouillee(id);
-        PreparationMot ligne = (motPreparationId == null ? Optional.<PreparationMot>empty()
-                : preparationMots.deLaPreparation(preparation.id(), motPreparationId))
-                .orElseThrow(() -> new ErreurMetier(404, CODE_INTROUVABLE,
-                        "Aucun mot de cette préparation ne porte cet identifiant"));
-        MotVue mot = lexique.mots(List.of(ligne.motId())).get(ligne.motId());
-        if (mot == null) {
-            throw new IllegalStateException("Mot " + ligne.motId() + " du mot de préparation " + ligne.id()
-                    + " introuvable");
-        }
+        PreparationMot ligne = deLaPreparation(preparation, motPreparationId);
+        MotVue mot = motDe(ligne, lexique.mots(List.of(ligne.motId())));
         MotPreparationVue retire = vue(ligne, mot, lexique.sensRetenus(List.of(ligne.id())).get(ligne.id()));
         usages.libererPreparationMot(ligne.id());
         preparationMots.delete(ligne);
@@ -216,8 +210,9 @@ public class PreparationsService {
     }
 
     /**
-     * Rétablit dans la Préparation {@code id} de l'enseignant courant un Mot retiré, avec le Sens qu'il avait, à sa
-     * place d'origine si elle est libre, sinon en fin. Rien n'est ajouté en cas de refus.
+     * Rétablit dans la Préparation {@code id} de l'enseignant courant un Mot retiré, avec le Sens et le Thème qu'il
+     * avait, à sa place d'origine si elle est libre, sinon en fin ; un Thème supprimé entre-temps n'est pas repris. Rien
+     * n'est ajouté en cas de refus.
      *
      * @throws ErreurMetier {@code 404 ressource.introuvable} si la Préparation n'existe pas ou appartient à un
      *         collègue, ou si le Mot n'existe pas ; {@code 400 preparation.sens_invalide} si le Sens n'est pas un Sens
@@ -239,12 +234,36 @@ public class PreparationsService {
         Integer ordre = commande.ordre();
         int place = ordre != null && ordre > 0 && !preparationMots.ordreOccupe(preparation.id(), ordre) ? ordre
                 : preparationMots.dernierOrdre(preparation.id()) + 1;
+        UUID themeId = commande.themeId() == null ? null
+                : referentiels.theme(commande.themeId()).map(ThemeVue::id).orElse(null);
         PreparationMot ligne = PreparationMot.nouveau(preparationMots.nouvelIdentifiant(), preparation.id(), mot.id(),
-                place);
+                place, themeId);
         preparationMots.persistAndFlush(ligne);
         SensVue sens = usages.retenirSens(new RetenirSensCommande(preparation.id(), ligne.id(), mot.id(),
                 preparation.albumId(), preparation.section(), commande.sensId()));
         return vue(ligne, mot, sens);
+    }
+
+    /**
+     * Remplace le Thème du Mot de Préparation {@code motPreparationId} de la Préparation {@code id} de l'enseignant
+     * courant ; {@code null} le retire. Le Thème par défaut et les autres Mots ne changent pas. Rien n'est modifié en
+     * cas de refus.
+     *
+     * @throws ErreurMetier {@code 404 ressource.introuvable} si la Préparation n'existe pas ou appartient à un
+     *         collègue, ou si le Mot de Préparation n'existe pas ou appartient à une autre Préparation ;
+     *         {@code 400 preparation.theme_introuvable} si le Thème n'existe pas
+     */
+    @Transactional
+    public MotPreparationVue changerThemeMot(UUID id, UUID motPreparationId, UUID themeId) {
+        Preparation preparation = verrouillee(id);
+        PreparationMot ligne = deLaPreparation(preparation, motPreparationId);
+        ThemeVue theme = themeId == null ? null
+                : referentiels.theme(themeId).orElseThrow(() -> new ErreurMetier(400, CODE_THEME_INTROUVABLE,
+                        "Aucun thème ne porte cet identifiant"));
+        ligne.changerTheme(theme == null ? null : theme.id());
+        preparationMots.flush();
+        MotVue mot = motDe(ligne, lexique.mots(List.of(ligne.motId())));
+        return vue(ligne, mot, lexique.sensRetenus(List.of(ligne.id())).get(ligne.id()));
     }
 
     /**
@@ -258,14 +277,7 @@ public class PreparationsService {
         List<PreparationMot> lignes = preparationMots.deLaPreparation(preparation.id());
         Map<UUID, MotVue> mots = lexique.mots(lignes.stream().map(PreparationMot::motId).toList());
         Map<UUID, SensVue> sens = lexique.sensRetenus(lignes.stream().map(PreparationMot::id).toList());
-        return lignes.stream().map(ligne -> {
-            MotVue mot = mots.get(ligne.motId());
-            if (mot == null) {
-                throw new IllegalStateException("Mot " + ligne.motId() + " du mot de préparation " + ligne.id()
-                        + " introuvable");
-            }
-            return vue(ligne, mot, sens.get(ligne.id()));
-        }).toList();
+        return lignes.stream().map(ligne -> vue(ligne, motDe(ligne, mots), sens.get(ligne.id()))).toList();
     }
 
     /** Section de la Préparation la plus récente de l'enseignant courant, vide s'il n'en a aucune. */
@@ -287,6 +299,24 @@ public class PreparationsService {
     private Preparation verrouillee(UUID id) {
         return (id == null ? Optional.<Preparation>empty() : preparations.verrouillee(id, enseignantCourant.id()))
                 .orElseThrow(PreparationsService::introuvable);
+    }
+
+    /** Mot de Préparation {@code motPreparationId} de cette Préparation ; sinon {@code 404 ressource.introuvable}. */
+    private PreparationMot deLaPreparation(Preparation preparation, UUID motPreparationId) {
+        return (motPreparationId == null ? Optional.<PreparationMot>empty()
+                : preparationMots.deLaPreparation(preparation.id(), motPreparationId))
+                .orElseThrow(() -> new ErreurMetier(404, CODE_INTROUVABLE,
+                        "Aucun mot de cette préparation ne porte cet identifiant"));
+    }
+
+    /** Mot du Lexique de ce Mot de Préparation ; son absence est une anomalie (un Mot n'est jamais supprimé). */
+    private static MotVue motDe(PreparationMot ligne, Map<UUID, MotVue> mots) {
+        MotVue mot = mots.get(ligne.motId());
+        if (mot == null) {
+            throw new IllegalStateException("Mot " + ligne.motId() + " du mot de préparation " + ligne.id()
+                    + " introuvable");
+        }
+        return mot;
     }
 
     private static ErreurMetier introuvable() {
@@ -332,7 +362,7 @@ public class PreparationsService {
             throw new IllegalStateException("Sens retenu du mot de préparation " + ligne.id() + " introuvable");
         }
         return new MotPreparationVue(ligne.id(), mot.id(), mot.forme(), ligne.ordre(), sens.id(), sens.libelle(),
-                sens.categorie(), false);
+                sens.categorie(), false, ligne.themeId());
     }
 
     /** Un Album n'est jamais supprimé (sa fusion, Epic 6, réécrira les Préparations) : son absence est une anomalie. */

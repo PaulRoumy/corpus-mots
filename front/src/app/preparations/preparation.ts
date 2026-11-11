@@ -49,7 +49,7 @@ import { PreparationDto } from '../api/models/preparation-dto';
 import { ThemeDto } from '../api/models/theme-dto';
 import { BandeauAnnuler } from '../commun/bandeau-annuler/bandeau-annuler';
 import { BandeauErreur } from '../commun/bandeau-erreur/bandeau-erreur';
-import { ChampThemes } from '../commun/champ-themes/champ-themes';
+import { ChampThemes, themesParNom } from '../commun/champ-themes/champ-themes';
 import { CompteCourant } from '../commun/compte-courant';
 import { DialogueConfirmation } from '../commun/dialogue-confirmation/dialogue-confirmation';
 import { codeErreur, MESSAGES_PAR_CODE, messageErreur } from '../commun/erreurs/message-erreur';
@@ -60,6 +60,11 @@ import { ChampNomModule } from './champ-nom-module';
 import { ouvrirDialogueCorrigerAlbum } from './corriger-album-dialogue';
 import { libelleMots } from './preparations';
 import { SaisieRapide } from './saisie-rapide';
+import {
+  ChangementTheme,
+  ouvrirDialogueThemeMot,
+  phraseSuppressionTheme,
+} from './theme-mot-dialogue';
 
 /**
  * « 1 déjà illustré », « 3 déjà illustrés » ; à zéro, l'accord suit le nombre de Mots : « 1 mot, 0 déjà illustré »,
@@ -175,11 +180,6 @@ function inserer(mots: readonly MotPreparationDto[], mot: MotPreparationDto): Mo
 /** Champ de l'En-tête relu après une suppression : le Module ou le Thème par défaut. */
 type Source = 'module' | 'theme';
 
-/** Thèmes de l'école par nom, comme le back les renvoie. */
-function parNom(themes: ThemeDto[]): ThemeDto[] {
-  return [...themes].sort((a, b) => a.nom.localeCompare(b.nom, 'fr'));
-}
-
 /**
  * Page d'une Préparation (`/preparations/:id`), réduite pour l'instant à son En-tête (key-preparation.html › `.hero`) :
  * titre de l'Album, Repère de Section, Module, Thème par défaut, « N mots, M déjà illustrés » et Temps passé.
@@ -223,6 +223,12 @@ function parNom(themes: ThemeDto[]): ThemeDto[] {
  * le Sens et la place que le back a renvoyés ; le Mot rétabli reprend sa place dans la Grille et son bouton « Retirer »
  * prend le focus. Échec du retrait : la Carte revient à sa place et un Bandeau d'erreur propose « Réessayer ». Échec du
  * rétablissement : Bandeau d'erreur avec « Réessayer », sauf si le Mot est revenu entre-temps (message seul).
+ *
+ * Thème de chaque Mot (story 2.3, partie 3) : un Mot ajouté prend le Thème par défaut (le back l'applique), et un Mot
+ * rétabli le Thème qu'il avait. Le bouton du Thème d'une Carte, affiché une fois les Thèmes chargés, ouvre le Dialogue
+ * « Thème de « … » » ; le Mot renvoyé met à jour la Carte et le focus revient au bouton à la fermeture. Un Thème créé,
+ * renommé ou supprimé depuis le Dialogue met aussitôt à jour les Thèmes, l'En-tête et les Cartes ; supprimer un Thème
+ * depuis l'En-tête le retire aussi des Cartes.
  *
  * Le Temps passé est un champ texte en mode de saisie décimal plutôt qu'un `type="number"` : celui-ci, selon la langue
  * du navigateur, refuse la virgule sans le dire (sa valeur devient vide, comme un champ effacé).
@@ -473,7 +479,12 @@ function parNom(themes: ThemeDto[]): ThemeDto[] {
               <ul class="mots__grille">
                 @for (mot of motsCharges; track mot.id) {
                   <li class="mots__element">
-                    <app-carte-mot [mot]="mot" (retirer)="retirerMot(mot)" />
+                    <app-carte-mot
+                      [mot]="mot"
+                      [theme]="nomTheme(mot)"
+                      (retirer)="retirerMot(mot)"
+                      (changerTheme)="ouvrirThemeMot(mot)"
+                    />
                   </li>
                 }
               </ul>
@@ -584,6 +595,11 @@ export class Preparation {
     }
     return compte.administrateur || album.createurId === compte.id ? album : null;
   });
+
+  /** Nom de chaque Thème par identifiant, `null` tant que les Thèmes ne sont pas chargés. */
+  private readonly nomsThemes = computed(() =>
+    this.listesChargees() ? new Map(this.themes().map((theme) => [theme.id, theme.nom])) : null,
+  );
 
   /** Mots de la Préparation dans l'ordre de saisie ; `null` tant qu'ils ne sont pas chargés. */
   protected readonly mots = signal<MotPreparationDto[] | null>(null);
@@ -839,7 +855,12 @@ export class Preparation {
     try {
       const retabli = await this.api.invoke(retablirMotPreparation, {
         id: preparationId,
-        body: { motId: retire.motId, sensId: retire.sens.id, ordre: retire.ordre },
+        body: {
+          motId: retire.motId,
+          sensId: retire.sens.id,
+          ordre: retire.ordre,
+          themeId: retire.themeId ?? null,
+        },
       });
       if (numero === this.dernierChargement) {
         this.mots.update((mots) => (mots === null ? mots : inserer(mots, retabli)));
@@ -861,6 +882,94 @@ export class Preparation {
         this.focaliserApresRendu(undefined);
       }
     }
+  }
+
+  /**
+   * Nom du Thème de `mot` pour sa Carte : `null` sans thème (ou pour un Thème disparu), `undefined` tant que les Thèmes
+   * ne sont pas chargés.
+   */
+  protected nomTheme(mot: MotPreparationDto): string | null | undefined {
+    const noms = this.nomsThemes();
+    if (noms === null) {
+      return undefined;
+    }
+    return mot.themeId ? (noms.get(mot.themeId) ?? null) : null;
+  }
+
+  /**
+   * Bouton du Thème d'une Carte : ouvre le Dialogue du Thème ; le Mot renvoyé remplace celui de la Carte. Le focus
+   * revient au bouton du Thème à la fermeture.
+   */
+  protected async ouvrirThemeMot(mot: MotPreparationDto): Promise<void> {
+    const preparation = this.preparation();
+    if (preparation === null || !this.listesChargees()) {
+      return;
+    }
+    const numero = this.dernierChargement;
+    const declencheur = this.cartesMots()
+      .find((carte) => carte.mot().id === mot.id)
+      ?.elementTheme();
+    const change = await ouvrirDialogueThemeMot(
+      this.injecteur,
+      {
+        preparationId: preparation.id,
+        mot,
+        themes: this.themes(),
+        gerable: this.themeGerable(),
+        themesModifies: (changement) => {
+          if (numero === this.dernierChargement) {
+            this.appliquerChangementTheme(changement);
+          }
+        },
+      },
+      declencheur,
+    );
+    if (change === undefined || numero !== this.dernierChargement) {
+      return;
+    }
+    this.mots.update((mots) =>
+      mots === null ? mots : mots.map((autre) => (autre.id === change.id ? change : autre)),
+    );
+  }
+
+  /** Thème créé, renommé ou supprimé depuis le Dialogue du Thème d'un Mot. */
+  private appliquerChangementTheme({ type, theme }: ChangementTheme): void {
+    if (type === 'cree') {
+      this.themes.update((themes) =>
+        themes.some((existant) => existant.id === theme.id)
+          ? themes
+          : themesParNom([...themes, theme]),
+      );
+    } else if (type === 'renomme') {
+      this.themes.update((themes) =>
+        themesParNom(themes.map((existant) => (existant.id === theme.id ? theme : existant))),
+      );
+      this.preparation.update((courante) =>
+        courante?.themeDefautId === theme.id
+          ? { ...courante, nomThemeDefaut: theme.nom }
+          : courante,
+      );
+    } else {
+      this.themes.update((themes) => themes.filter((existant) => existant.id !== theme.id));
+      this.retirerThemeDesMots(theme.id);
+      if (this.theme() === theme.id) {
+        this.theme.set(null);
+      }
+      this.preparation.update((courante) =>
+        courante?.themeDefautId === theme.id
+          ? { ...courante, themeDefautId: undefined, nomThemeDefaut: undefined }
+          : courante,
+      );
+    }
+  }
+
+  /** Le Thème `themeId` a été supprimé : le back l'a retiré des Mots qui le portaient, les Cartes suivent. */
+  private retirerThemeDesMots(themeId: string): void {
+    this.mots.update((mots) =>
+      mots === null
+        ? mots
+        : mots.map((mot) => (mot.themeId === themeId ? { ...mot, themeId: null } : mot)),
+    );
   }
 
   /** Après le rendu, focus au bouton « Retirer » de la Carte de `mot`, ou au Champ de saisie rapide sans Carte. */
@@ -1079,7 +1188,7 @@ export class Preparation {
     try {
       const cree = await this.api.invoke(creerTheme, { body: { nom } });
       if (numero === this.dernierChargement) {
-        this.themes.update((themes) => parNom([...themes, cree]));
+        this.themes.update((themes) => themesParNom([...themes, cree]));
         this.choisirTheme(cree.id);
       }
     } catch (erreur) {
@@ -1116,7 +1225,7 @@ export class Preparation {
       const renomme = await this.api.invoke(renommerTheme, { id: theme.id, body: { nom } });
       if (numero === this.dernierChargement) {
         this.themes.update((themes) =>
-          parNom(themes.map((existant) => (existant.id === renomme.id ? renomme : existant))),
+          themesParNom(themes.map((existant) => (existant.id === renomme.id ? renomme : existant))),
         );
         this.preparation.update((courante) =>
           courante?.themeDefautId === renomme.id
@@ -1138,9 +1247,7 @@ export class Preparation {
   protected async supprimerTheme(theme: ThemeDto): Promise<void> {
     const confirme = await this.confirmation.confirmer({
       titre: 'Supprimer le thème ?',
-      phrase:
-        `Le thème « ${theme.nom} » sera retiré de la liste de l'école et des préparations qui l'ont pour ` +
-        'thème par défaut, chez tous les enseignants.',
+      phrase: phraseSuppressionTheme(theme),
       libelleConfirmer: 'Supprimer le thème',
     });
     if (confirme) {
@@ -1158,6 +1265,7 @@ export class Preparation {
       await this.api.invoke(supprimerTheme, { id: theme.id });
       if (numero === this.dernierChargement) {
         this.erreurTheme.set(null);
+        this.retirerThemeDesMots(theme.id);
         await this.relire('theme');
       }
     } catch (erreur) {
@@ -1168,6 +1276,7 @@ export class Preparation {
       if (code === 'ressource.introuvable') {
         // Déjà supprimé par un autre : le résultat attendu est là, il suffit de relire.
         this.erreurTheme.set(null);
+        this.retirerThemeDesMots(theme.id);
         await this.relire('theme');
         return;
       }

@@ -10,7 +10,8 @@ import org.hibernate.annotations.Generated;
 
 /**
  * Mot d'une Préparation, à sa place {@code ordre} (ordre de saisie). Le Mot appartient à {@code vocabulaire} et est
- * référencé par UUID (AD-1) ; son Sens retenu et ses Images liées sont dans le registre de {@code vocabulaire} (AD-14).
+ * référencé par UUID (AD-1) ; son Sens retenu et ses Images liées sont dans le registre de {@code vocabulaire}
+ * (AD-14). Son Thème facultatif {@code themeId} appartient à {@code referentiels}, référencé lui aussi par UUID.
  */
 @Entity
 @Table(name = "preparation_mot")
@@ -28,6 +29,10 @@ public class PreparationMot {
     @Column(nullable = false)
     private int ordre;
 
+    /** Thème du Mot dans cette Préparation, référencé par UUID (AD-1) ; {@code null} : sans thème. */
+    @Column(name = "theme_id")
+    private UUID themeId;
+
     @Generated
     @Column(name = "cree_le", insertable = false, updatable = false)
     private OffsetDateTime creeLe;
@@ -36,13 +41,19 @@ public class PreparationMot {
     }
 
     /** Nouveau Mot de Préparation d'identifiant {@code id}, tiré par la base ({@link PreparationMotRepository#nouvelIdentifiant}). */
-    public static PreparationMot nouveau(UUID id, UUID preparationId, UUID motId, int ordre) {
+    public static PreparationMot nouveau(UUID id, UUID preparationId, UUID motId, int ordre, UUID themeId) {
         PreparationMot mot = new PreparationMot();
         mot.id = id;
         mot.preparationId = preparationId;
         mot.motId = motId;
         mot.ordre = ordre;
+        mot.themeId = themeId;
         return mot;
+    }
+
+    /** Remplace le Thème du Mot ; {@code null} le retire. */
+    public void changerTheme(UUID themeId) {
+        this.themeId = themeId;
     }
 
     public UUID id() {
@@ -59,6 +70,10 @@ public class PreparationMot {
 
     public int ordre() {
         return ordre;
+    }
+
+    public UUID themeId() {
+        return themeId;
     }
 
     public OffsetDateTime creeLe() {

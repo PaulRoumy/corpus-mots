@@ -44,6 +44,11 @@ export function normaliserNom(nom: string): string {
   return sansArticle === '' ? texte : sansArticle;
 }
 
+/** Thèmes de l'école par nom, comme le back les renvoie. */
+export function themesParNom(themes: readonly ThemeDto[]): ThemeDto[] {
+  return [...themes].sort((a, b) => a.nom.localeCompare(b.nom, 'fr'));
+}
+
 /** Valeur de l'option « Créer le thème « … » », distincte de tout Thème. */
 const OPTION_CREER_THEME = Symbol('creer-theme');
 type ValeurOption = ThemeDto | typeof OPTION_CREER_THEME;
