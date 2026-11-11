@@ -26,6 +26,8 @@ import fr.corpusmots.architecture.fixtures.referentiels.service.ReferentielsCach
 import fr.corpusmots.architecture.fixtures.referentiels.service.ReferentielsExposeAlbum;
 import fr.corpusmots.architecture.fixtures.referentiels.service.ReferentielsRecoitAlbum;
 import fr.corpusmots.architecture.fixtures.referentiels.service.ReferentielsFixture;
+import fr.corpusmots.architecture.fixtures.vocabulaire.service.AppelArasaacEnTransaction;
+import fr.corpusmots.architecture.fixtures.vocabulaire.service.SourceArasaac;
 import fr.corpusmots.architecture.fixtures.vocabulaire.service.VocabulaireAppelleService;
 import fr.corpusmots.architecture.fixtures.vocabulaire.outils.CoucheInconnueFixture;
 import fr.corpusmots.architecture.fixtures.vocabulaire.service.VocabulaireTouchePersistance;
@@ -40,7 +42,7 @@ class ReglesArchitectureTest {
     private static final ArchRule STRUCTURE = ReglesArchitecture.classesDansUnModuleEtUneCouche(RACINE_FIXTURES);
     private static final ArchRule DTO = ReglesArchitecture.nomsDeDtoUniques(RACINE_FIXTURES);
     private static final ArchRule SIGNATURES = ReglesArchitecture.servicesSansTypeDePersistance(RACINE_FIXTURES);
-    private static final ArchRule TRANSACTIONS = ReglesArchitecture.aucunAppelKeycloakEnTransaction(RACINE_FIXTURES);
+    private static final ArchRule TRANSACTIONS = ReglesArchitecture.aucunAppelHttpSortantEnTransaction(RACINE_FIXTURES);
 
     @Test
     void unModuleQuiAppelleUnModuleHorsDuGrapheEstRefuse() {
@@ -191,6 +193,17 @@ class ReglesArchitectureTest {
         AssertionError erreur = assertThrows(AssertionError.class, () -> TRANSACTIONS.check(classes));
 
         assertTrue(erreur.getMessage().contains(AppelKeycloakEnTransaction.class.getName()), erreur.getMessage());
+        assertTrue(erreur.getMessage().contains("AD-17 : aucun appel HTTP sortant"), erreur.getMessage());
+    }
+
+    @Test
+    void uneMethodeTransactionnelleQuiAppelleArasaacEstRefusee() {
+        JavaClasses classes = new ClassFileImporter()
+                .importClasses(AppelArasaacEnTransaction.class, SourceArasaac.class);
+
+        AssertionError erreur = assertThrows(AssertionError.class, () -> TRANSACTIONS.check(classes));
+
+        assertTrue(erreur.getMessage().contains(AppelArasaacEnTransaction.class.getName()), erreur.getMessage());
         assertTrue(erreur.getMessage().contains("AD-17 : aucun appel HTTP sortant"), erreur.getMessage());
     }
 

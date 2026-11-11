@@ -18,7 +18,7 @@ describe('Squelette', () => {
 
   const blocs = (racine: HTMLElement) => [...racine.querySelectorAll('.squelette__bloc')];
 
-  it.each(['carte', 'ligne', 'texte'] as const)(
+  it.each(['carte', 'ligne', 'texte', 'vignette'] as const)(
     'forme %s : nombre de blocs demandé',
     async (forme) => {
       const racine = await rendre(forme, 4);

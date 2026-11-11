@@ -1,9 +1,28 @@
 @use '@angular/material' as mat;
 
-// Carte de Mot (key-preparation.html › `.wc`, `.todo .l`) ; la Carte « à illustrer » ne porte pas encore les
-// suggestions ARASAAC (story 2.4) : elle occupe une seule colonne de la Grille.
+// Carte de Mot (key-preparation.html › `.wc`, `.todo`). La Carte « à illustrer » s'étend sur trois colonnes de la
+// Grille (`preparation.scss`) : partie gauche de 120 px (`.todo .l`) séparée par des tirets, suggestions ARASAAC à
+// droite (`.todo .r`, story 2.4).
 :host {
   position: relative;
+  display: block;
+  box-sizing: border-box;
+  height: 100%;
+  border-radius: var(--cm-arrondi-lg);
+  background: var(--mat-sys-surface);
+  box-shadow: var(--cm-elevation-1);
+}
+
+:host(.carte-mot--a-illustrer) {
+  display: grid;
+  grid-template-columns: var(--cm-largeur-carte-a-illustrer-gauche) minmax(0, 1fr);
+  border: var(--cm-epaisseur-bordure-a-illustrer) dashed var(--cm-etat-a-illustrer-bordure);
+  background: var(--cm-etat-a-illustrer-fond);
+  box-shadow: none;
+  color: var(--cm-etat-a-illustrer-texte);
+}
+
+.carte-mot__gauche {
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -11,18 +30,19 @@
   gap: var(--cm-espace-2);
   box-sizing: border-box;
   height: 100%;
+  min-width: 0;
   padding: var(--cm-espace-3) var(--cm-espace-2);
-  border-radius: var(--cm-arrondi-lg);
-  background: var(--mat-sys-surface);
-  box-shadow: var(--cm-elevation-1);
   text-align: center;
+
+  :host(.carte-mot--a-illustrer) & {
+    border-right: var(--cm-epaisseur-bordure-a-illustrer) dashed var(--cm-etat-a-illustrer-bordure);
+  }
 }
 
-:host(.carte-mot--a-illustrer) {
-  border: var(--cm-epaisseur-bordure-a-illustrer) dashed var(--cm-etat-a-illustrer-bordure);
-  background: var(--cm-etat-a-illustrer-fond);
-  box-shadow: none;
-  color: var(--cm-etat-a-illustrer-texte);
+// Suggestions à droite, en laissant la place du bouton « Retirer » du coin haut droit.
+.carte-mot__suggestions {
+  padding: var(--cm-espace-3) calc(var(--cm-taille-bouton-icone) + var(--cm-espace-1))
+    var(--cm-espace-3) var(--cm-espace-3);
 }
 
 .carte-mot__vignette {

@@ -1,0 +1,58 @@
+// Suggestions ARASAAC d'une Carte « à illustrer » (key-preparation.html › `.todo .r`, `.q`, `.aras`).
+:host {
+  display: flex;
+  flex-direction: column;
+  gap: var(--cm-espace-2);
+  min-width: 0;
+}
+
+// Repère de qualité (`.todo .q`) : couleur du texte « à illustrer ».
+.suggestions__repere {
+  margin: 0;
+  font: var(--cm-typo-body-sm);
+  color: var(--cm-etat-a-illustrer-texte);
+}
+
+.suggestions__liste {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--cm-espace-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+// Vignette de 60 px (`.aras .ph`), pictogramme de 50 px centré.
+.suggestions__vignette {
+  display: grid;
+  place-items: center;
+  box-sizing: border-box;
+  width: var(--cm-taille-suggestion-arasaac);
+  height: var(--cm-taille-suggestion-arasaac);
+  overflow: hidden;
+  border: var(--cm-epaisseur-separateur) solid var(--mat-sys-outline-variant);
+  border-radius: var(--cm-arrondi-md);
+  background: var(--mat-sys-surface);
+}
+
+.suggestions__pictogramme {
+  width: var(--cm-taille-pictogramme-suggestion);
+  height: var(--cm-taille-pictogramme-suggestion);
+  object-fit: contain;
+}
+
+// Fichier non chargé : le mot-clé à la place du pictogramme.
+.suggestions__repli {
+  padding: 0 var(--cm-espace-1);
+  overflow-wrap: anywhere;
+  font: var(--cm-typo-label-sm);
+  color: var(--mat-sys-on-surface-variant);
+  text-align: center;
+}
+
+.suggestions__message {
+  margin: 0;
+  font: var(--cm-typo-body-sm);
+  color: var(--cm-etat-a-illustrer-texte);
+}

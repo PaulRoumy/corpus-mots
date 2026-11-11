@@ -36,7 +36,8 @@ import java.util.stream.Stream;
  *   <li>AD-16 : aucun membre public d'une classe publique d'un {@code <module>.service} ne mentionne un type d'un
  *       {@code <module>.persistance} (retour, paramètre, champ, argument générique).</li>
  *   <li>AD-17 : aucune méthode {@code @Transactional} (sur la méthode ou sa classe) n'appelle directement
- *       {@code comptes.service.Identites}, dont chaque méthode est un appel HTTP vers Keycloak. Un appel dans un
+ *       {@code comptes.service.Identites} ni {@code vocabulaire.service.SourceArasaac}, dont chaque méthode est un
+ *       appel HTTP sortant (Keycloak, ARASAAC). Un appel dans un
  *       {@code Runnable} passé à une méthode transactionnelle n'est pas un appel direct. Limites : la règle ne voit
  *       que les appels directs ; elle ne détecte ni un lambda exécuté de façon synchrone dans la méthode
  *       transactionnelle (par exemple {@code forEach(id -> identites.desactiver(id))}), ni un appel indirect par une
@@ -55,6 +56,12 @@ public final class ReglesArchitecture {
 
     /** Façade des appels HTTP vers Keycloak, relative à la racine (AD-6, AD-17). */
     static final String IDENTITES = "comptes.service.Identites";
+
+    /** Source des appels HTTP vers ARASAAC, relative à la racine (AD-9, AD-17). */
+    static final String SOURCE_ARASAAC = "vocabulaire.service.SourceArasaac";
+
+    /** Types dont chaque méthode est un appel HTTP sortant, interdit dans une transaction ouverte (AD-17). */
+    static final List<String> APPELS_HTTP_SORTANTS = List.of(IDENTITES, SOURCE_ARASAAC);
 
     /** Graphe AD-1 exact : module → modules dont il peut appeler la couche service ({@code commun} implicite). */
     static final Map<String, Set<String>> GRAPHE = Map.ofEntries(
@@ -187,11 +194,11 @@ public final class ReglesArchitecture {
                 .because("AD-16 : la couche service ne laisse fuir ni entité, ni Repository, ni type de persistance");
     }
 
-    public static ArchRule aucunAppelKeycloakEnTransaction(String racine) {
-        String identites = racine + "." + IDENTITES;
+    public static ArchRule aucunAppelHttpSortantEnTransaction(String racine) {
+        List<String> cibles = APPELS_HTTP_SORTANTS.stream().map(type -> racine + "." + type).toList();
         return classes().that().resideInAPackage(racine + "..")
-                .should(new ArchCondition<JavaClass>(
-                        "n'appeler " + IDENTITES + " directement depuis aucune méthode @Transactional") {
+                .should(new ArchCondition<JavaClass>("n'appeler " + String.join(" ni ", APPELS_HTTP_SORTANTS)
+                        + " directement depuis aucune méthode @Transactional") {
                     @Override
                     public void check(JavaClass classe, ConditionEvents events) {
                         boolean classeTransactionnelle = classe.isAnnotatedWith(TRANSACTIONAL);
@@ -200,7 +207,7 @@ public final class ReglesArchitecture {
                                 continue;
                             }
                             for (JavaMethodCall appel : methode.getMethodCallsFromSelf()) {
-                                if (appel.getTargetOwner().isAssignableTo(identites)) {
+                                if (cibles.stream().anyMatch(cible -> appel.getTargetOwner().isAssignableTo(cible))) {
                                     events.add(SimpleConditionEvent.violated(appel, classe.getName() + " : "
                                             + appel.getDescription() + " dans une transaction ouverte"));
                                 }
@@ -208,7 +215,7 @@ public final class ReglesArchitecture {
                         }
                     }
                 })
-                .because("AD-17 : aucun appel HTTP sortant vers Keycloak pendant une transaction ouverte");
+                .because("AD-17 : aucun appel HTTP sortant (Keycloak, ARASAAC) pendant une transaction ouverte");
     }
 
     private static boolean estPublic(Set<JavaModifier> modificateurs) {

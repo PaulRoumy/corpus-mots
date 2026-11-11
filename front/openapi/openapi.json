@@ -495,6 +495,21 @@
           }
         }
       },
+      "SuggestionArasaacDto" : {
+        "type" : "object",
+        "required" : [ "idArasaac", "motCle" ],
+        "properties" : {
+          "idArasaac" : {
+            "type" : "integer",
+            "format" : "int64",
+            "description" : "Identifiant du pictogramme chez ARASAAC"
+          },
+          "motCle" : {
+            "type" : "string",
+            "description" : "Premier mot-clé français du pictogramme, ou le Mot cherché si ARASAAC n'en donne aucun ; alternative de sa vignette"
+          }
+        }
+      },
       "ThemeDto" : {
         "type" : "object",
         "required" : [ "id", "nom" ],
@@ -768,6 +783,66 @@
           }
         },
         "tags" : [ "Albums Resource" ]
+      }
+    },
+    "/api/arasaac/pictogrammes/{idArasaac}" : {
+      "get" : {
+        "summary" : "Fichier PNG d'un pictogramme ARASAAC, servi par le back",
+        "operationId" : "pictogrammeArasaac",
+        "parameters" : [ {
+          "name" : "idArasaac",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "integer",
+            "format" : "int64"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "description" : "Pictogramme (PNG, 300 px)",
+            "content" : {
+              "image/png" : {
+                "schema" : {
+                  "format" : "binary",
+                  "type" : "string"
+                }
+              }
+            }
+          }
+        },
+        "tags" : [ "Arasaac Resource" ]
+      }
+    },
+    "/api/arasaac/suggestions" : {
+      "get" : {
+        "summary" : "Au plus trois pictogrammes ARASAAC pour un Mot, dans l'ordre d'ARASAAC (liste vide si aucun)",
+        "operationId" : "suggestionsArasaac",
+        "parameters" : [ {
+          "description" : "Forme du Mot, de 1 à 100 caractères (l'article initial est ignoré)",
+          "required" : true,
+          "name" : "mot",
+          "in" : "query",
+          "schema" : {
+            "type" : "string"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "type" : "array",
+                  "items" : {
+                    "$ref" : "#/components/schemas/SuggestionArasaacDto"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "tags" : [ "Arasaac Resource" ]
       }
     },
     "/api/comptes" : {

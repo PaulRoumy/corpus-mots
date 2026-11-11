@@ -41,10 +41,12 @@ class ArchitectureTest {
     }
 
     @Test
-    void aucuneMethodeTransactionnelleNAppelleKeycloak() {
-        String identites = ReglesArchitecture.RACINE + "." + ReglesArchitecture.IDENTITES;
-        assertTrue(classesDuBack.contain(identites),
-                identites + " introuvable : la règle AD-17 ne vérifierait plus rien, mettre à jour IDENTITES");
-        ReglesArchitecture.aucunAppelKeycloakEnTransaction(ReglesArchitecture.RACINE).check(classesDuBack);
+    void aucuneMethodeTransactionnelleNFaitDAppelHttpSortant() {
+        for (String type : ReglesArchitecture.APPELS_HTTP_SORTANTS) {
+            String nom = ReglesArchitecture.RACINE + "." + type;
+            assertTrue(classesDuBack.contain(nom),
+                    nom + " introuvable : la règle AD-17 ne le vérifierait plus, mettre à jour APPELS_HTTP_SORTANTS");
+        }
+        ReglesArchitecture.aucunAppelHttpSortantEnTransaction(ReglesArchitecture.RACINE).check(classesDuBack);
     }
 }

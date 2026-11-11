@@ -194,6 +194,11 @@ $typographie-material: (
   --cm-taille-vignette-vide: 56px;
   --cm-hauteur-badge: 22px;
   --cm-taille-icone-badge: 14px;
+  // Carte « à illustrer » élargie (story 2.4) : partie gauche de 120 px, vignettes des suggestions ARASAAC de 60 px
+  // (key-preparation.html › `.todo .l`, `.aras .ph`), pictogramme de 50 px dans la vignette.
+  --cm-largeur-carte-a-illustrer-gauche: 120px;
+  --cm-taille-suggestion-arasaac: 60px;
+  --cm-taille-pictogramme-suggestion: 50px;
   // Bouton texte du Thème d'une Carte de Mot (story 2.3, partie 3) : cible de 24 px au moins (WCAG 2.5.8).
   --cm-hauteur-bouton-theme-mot: 24px;
 

@@ -17,6 +17,13 @@
   gap: var(--cm-espace-2);
 }
 
+// Rangée de vignettes carrées (suggestions ARASAAC d'une Carte « à illustrer », story 2.4).
+.squelette--vignette {
+  flex-direction: row;
+  flex-wrap: wrap;
+  gap: var(--cm-espace-2);
+}
+
 .squelette__bloc {
   display: block;
   background: var(--mat-sys-surface-container-high);
@@ -29,6 +36,12 @@
 
   .squelette--ligne & {
     height: var(--cm-hauteur-squelette-ligne);
+    border-radius: var(--cm-arrondi-md);
+  }
+
+  .squelette--vignette & {
+    width: var(--cm-taille-suggestion-arasaac);
+    height: var(--cm-taille-suggestion-arasaac);
     border-radius: var(--cm-arrondi-md);
   }
 

@@ -63,6 +63,14 @@ describe('TexteDonneesPersonnelles', () => {
     expect(texte).toContain("aucune donnée d'élève");
   });
 
+  it('dit que les Mots des Préparations sont envoyés à ARASAAC, sans nom ni information du compte', () => {
+    const texte = texteDe(rendre(TexteDonneesPersonnelles));
+
+    expect(texte).toContain(
+      'le serveur envoie les Mots de vos Préparations à ARASAAC, un service extérieur, sans votre nom ni aucune information de votre compte',
+    );
+  });
+
   it('donne les durées, dont les 14 jours des sauvegardes, et la réserve du délégué à la protection des données', () => {
     const texte = texteDe(rendre(TexteDonneesPersonnelles));
 

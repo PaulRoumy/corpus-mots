@@ -143,12 +143,21 @@
   color: var(--mat-sys-on-surface-variant);
 }
 
-// Grille à remplissage automatique, dans l'ordre de saisie.
+// Grille à remplissage automatique, dans l'ordre de saisie, d'au moins trois colonnes : sur une Grille trop étroite pour
+// trois Cartes de largeur minimale, les colonnes rétrécissent, et la Carte « à illustrer » occupe toute la ligne.
 .mots__grille {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(var(--cm-largeur-carte-min), 1fr));
+  grid-template-columns: repeat(
+    auto-fill,
+    minmax(min(var(--cm-largeur-carte-min), calc((100% - 2 * var(--cm-espace-3)) / 3)), 1fr)
+  );
   gap: var(--cm-espace-3);
   margin: 0;
   padding: 0;
   list-style: none;
+}
+
+// Carte « à illustrer » : trois colonnes, pour ses suggestions ARASAAC (key-preparation.html › `.todo`, story 2.4).
+.mots__element--a-illustrer {
+  grid-column: span 3;
 }

@@ -55,6 +55,12 @@ import { ChangeDetectionStrategy, Component } from '@angular/core';
           identifiant interne. Ils ne contiennent pas votre adresse e-mail.
         </p>
 
+        <h3 class="donnees__sous-titre">Pictogrammes ARASAAC</h3>
+        <p class="donnees__paragraphe">
+          Pour chercher des pictogrammes, le serveur envoie les Mots de vos Préparations à ARASAAC,
+          un service extérieur, sans votre nom ni aucune information de votre compte.
+        </p>
+
         <h3 class="donnees__sous-titre">Ce que l'application ne fait pas</h3>
         <ul class="donnees__liste">
           <li>aucune publicité, aucun traceur, aucune mesure d'audience ;</li>

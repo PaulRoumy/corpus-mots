@@ -1,7 +1,7 @@
 import { ChangeDetectionStrategy, Component, computed, input } from '@angular/core';
 
-/** Forme des blocs : carte (grille de cartes), ligne (liste), texte (paragraphe). */
-export type FormeSquelette = 'carte' | 'ligne' | 'texte';
+/** Forme des blocs : carte (grille de cartes), ligne (liste), texte (paragraphe), vignette (rangée de vignettes). */
+export type FormeSquelette = 'carte' | 'ligne' | 'texte' | 'vignette';
 
 /**
  * Squelettes de chargement (UX-DR-22) : blocs `surface-container-high` arrondis, à la forme du contenu attendu,

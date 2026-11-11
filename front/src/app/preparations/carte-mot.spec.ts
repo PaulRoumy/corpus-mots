@@ -1,4 +1,5 @@
 import { provideHttpClient } from '@angular/common/http';
+import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { provideIcones } from '../commun/icones';
 import { CarteMot } from './carte-mot';
@@ -6,9 +7,13 @@ import { CarteMot } from './carte-mot';
 describe('CarteMot', () => {
   let fixture: ComponentFixture<CarteMot>;
   let racine: HTMLElement;
+  let serveur: HttpTestingController;
 
   beforeEach(async () => {
-    TestBed.configureTestingModule({ providers: [provideHttpClient(), provideIcones()] });
+    TestBed.configureTestingModule({
+      providers: [provideHttpClient(), provideHttpClientTesting(), provideIcones()],
+    });
+    serveur = TestBed.inject(HttpTestingController);
     fixture = TestBed.createComponent(CarteMot);
     fixture.componentRef.setInput('mot', {
       id: '0190f0a0-0000-7000-8000-0000000f0001',
@@ -22,6 +27,12 @@ describe('CarteMot', () => {
     racine = fixture.nativeElement as HTMLElement;
   });
 
+  afterEach(() => {
+    // Recherche des suggestions ARASAAC, vérifiée par le test qui lui est consacré.
+    serveur.match('/api/arasaac/suggestions?mot=citrouille');
+    serveur.verify();
+  });
+
   const boutonRetirer = () => racine.querySelector<HTMLButtonElement>('.carte-mot__retirer')!;
 
   it('Carte « à illustrer » : vignette vide, Mot en cursive, badge « à illustrer »', () => {
@@ -29,6 +40,23 @@ describe('CarteMot', () => {
     expect(racine.querySelector('.carte-mot__vignette')?.getAttribute('aria-hidden')).toBe('true');
     expect(racine.querySelector('.carte-mot__mot')?.textContent?.trim()).toBe('citrouille');
     expect(racine.querySelector('.carte-mot__etat')?.textContent?.trim()).toBe('à illustrer');
+  });
+
+  it('Carte « à illustrer » : partie gauche, puis suggestions ARASAAC du Mot à droite', async () => {
+    const recherche = serveur.expectOne('/api/arasaac/suggestions?mot=citrouille');
+    recherche.flush([]);
+    await new Promise((fin) => setTimeout(fin));
+    await fixture.whenStable();
+
+    const enfants = [...racine.children].map((enfant) => enfant.className.split(' ')[0]);
+    expect(enfants.slice(-2)).toEqual(['carte-mot__gauche', 'carte-mot__suggestions']);
+    expect(racine.querySelector('.carte-mot__gauche .carte-mot__mot')).not.toBeNull();
+    expect(racine.querySelector('.carte-mot__suggestions .suggestions__repere')?.textContent).toBe(
+      'Suggestions ARASAAC · simple, claire, peu de détails',
+    );
+    expect(racine.querySelector('.suggestions__message')?.textContent?.trim()).toBe(
+      'Aucun pictogramme ARASAAC pour ce mot.',
+    );
   });
 
   it('bouton icône « Retirer « citrouille » de la préparation » (croix), toujours visible', () => {

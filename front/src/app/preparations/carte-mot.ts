@@ -10,11 +10,13 @@ import {
 import { MatButtonModule } from '@angular/material/button';
 import { MatIconModule } from '@angular/material/icon';
 import { MotPreparationDto } from '../api/models/mot-preparation-dto';
+import { SuggestionsArasaac } from './suggestions-arasaac';
 
 /**
- * Carte de Mot de la Grille d'une Préparation (story 2.3). Tant que le Mot n'a pas d'Image (toujours le cas avant la
- * story 2.4), c'est une Carte « à illustrer » (key-preparation.html › `.todo`) : fond et bordure tirets « à illustrer »,
- * vignette vide avec « + », Mot en cursive, badge crayon « à illustrer ».
+ * Carte de Mot de la Grille d'une Préparation (story 2.3). Tant que le Mot n'a pas d'Image, c'est une Carte « à
+ * illustrer » (key-preparation.html › `.todo`) : fond et bordure tirets « à illustrer » ; à gauche, vignette vide avec
+ * « + », Mot en cursive, badge crayon « à illustrer » ; à droite, les suggestions ARASAAC (story 2.4, partie 1). La page
+ * lui fait occuper trois colonnes de la Grille.
  *
  * Le bouton icône « Retirer « forme » de la préparation » (croix), toujours visible, émet `retirer` : le retrait se
  * fait sans confirmation et s'annule par le Bandeau « Annuler » (story 2.3, partie 2).
@@ -26,7 +28,7 @@ import { MotPreparationDto } from '../api/models/mot-preparation-dto';
  */
 @Component({
   selector: 'app-carte-mot',
-  imports: [MatButtonModule, MatIconModule],
+  imports: [MatButtonModule, MatIconModule, SuggestionsArasaac],
   changeDetection: ChangeDetectionStrategy.OnPush,
   styleUrl: './carte-mot.scss',
   host: { '[class.carte-mot--a-illustrer]': '!mot().illustre' },
@@ -41,25 +43,30 @@ import { MotPreparationDto } from '../api/models/mot-preparation-dto';
     >
       <mat-icon svgIcon="fermer" aria-hidden="true" />
     </button>
-    <span class="carte-mot__vignette" aria-hidden="true"><mat-icon svgIcon="plus" /></span>
-    <span class="carte-mot__mot">{{ mot().forme }}</span>
+    <div class="carte-mot__gauche">
+      <span class="carte-mot__vignette" aria-hidden="true"><mat-icon svgIcon="plus" /></span>
+      <span class="carte-mot__mot">{{ mot().forme }}</span>
+      @if (!mot().illustre) {
+        <span class="carte-mot__etat">
+          <mat-icon svgIcon="crayon" aria-hidden="true" />
+          à illustrer
+        </span>
+      }
+      @if (theme() !== undefined) {
+        <button
+          #boutonTheme
+          class="carte-mot__theme"
+          type="button"
+          [class.carte-mot__theme--vide]="theme() === null"
+          [attr.aria-label]="nomAccessibleTheme()"
+          (click)="changerTheme.emit()"
+        >
+          {{ theme() ?? 'Sans thème' }}
+        </button>
+      }
+    </div>
     @if (!mot().illustre) {
-      <span class="carte-mot__etat">
-        <mat-icon svgIcon="crayon" aria-hidden="true" />
-        à illustrer
-      </span>
-    }
-    @if (theme() !== undefined) {
-      <button
-        #boutonTheme
-        class="carte-mot__theme"
-        type="button"
-        [class.carte-mot__theme--vide]="theme() === null"
-        [attr.aria-label]="nomAccessibleTheme()"
-        (click)="changerTheme.emit()"
-      >
-        {{ theme() ?? 'Sans thème' }}
-      </button>
+      <app-suggestions-arasaac class="carte-mot__suggestions" [mot]="mot().forme" />
     }
   `,
 })

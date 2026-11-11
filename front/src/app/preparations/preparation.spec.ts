@@ -132,7 +132,11 @@ describe('Preparation (En-tête)', () => {
     await stabiliser();
   });
 
-  afterEach(() => serveur.verify());
+  afterEach(() => {
+    // Chaque Carte « à illustrer » cherche ses suggestions ARASAAC (story 2.4) : vérifié par `suggestions-arasaac.spec`.
+    serveur.match((requete) => requete.url.startsWith('/api/arasaac/'));
+    serveur.verify();
+  });
 
   const texte = (selecteur: string) =>
     racine.querySelector(selecteur)?.textContent?.replace(/\s+/g, ' ').trim();
@@ -1683,6 +1687,17 @@ describe('Preparation (En-tête)', () => {
       expect(cartes()).toEqual(['citrouille', 'loup']);
       expect(texte('app-carte-mot .carte-mot__etat')).toBe('à illustrer');
       expect(racine.querySelector('app-carte-mot')!.classList).toContain('carte-mot--a-illustrer');
+      // Carte « à illustrer » sur trois colonnes de la Grille, avec ses suggestions ARASAAC (story 2.4).
+      expect(
+        [...racine.querySelectorAll('.mots__element')].map((element) =>
+          element.classList.contains('mots__element--a-illustrer'),
+        ),
+      ).toEqual([true, true]);
+      expect(
+        serveur
+          .match((requete) => requete.url === '/api/arasaac/suggestions')
+          .map((requete) => requete.request.params.get('mot')),
+      ).toEqual(['citrouille', 'loup']);
       expect(document.activeElement).not.toBe(champSaisie());
       expect(texte('.entete__compteur')).toBe('2 mots, 0 déjà illustrés');
     });
@@ -1924,7 +1939,10 @@ describe('Preparation (En-tête)', () => {
     });
 
     it('« Annuler » : le Mot revient à sa place avec son Sens, son bouton « Retirer » a le focus', async () => {
-      const animal = { ...CITROUILLE, sens: { id: CITROUILLE.sens.id, libelle: 'légume', categorie: 'nom' } };
+      const animal = {
+        ...CITROUILLE,
+        sens: { id: CITROUILLE.sens.id, libelle: 'légume', categorie: 'nom' },
+      };
       await ouvrirAvec([GALETTE, animal, LAPIN]);
       await retirer('citrouille');
       retrait(animal).flush(animal);
@@ -1985,7 +2003,9 @@ describe('Preparation (En-tête)', () => {
       await stabiliser();
 
       expect(cartes()).toEqual(['galette', 'citrouille', 'lapin']);
-      expect(bandeau('erreur-retrait')).toBe(`« citrouille » n'a pas été retiré. ${MESSAGE_RESEAU}`);
+      expect(bandeau('erreur-retrait')).toBe(
+        `« citrouille » n'a pas été retiré. ${MESSAGE_RESEAU}`,
+      );
       expect(afficher).not.toHaveBeenCalled();
 
       await reessayer('erreur-retrait');

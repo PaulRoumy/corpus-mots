@@ -478,7 +478,7 @@ type Source = 'module' | 'theme';
               <h2 id="mots-titre" class="mots__titre">Mots de la préparation</h2>
               <ul class="mots__grille">
                 @for (mot of motsCharges; track mot.id) {
-                  <li class="mots__element">
+                  <li class="mots__element" [class.mots__element--a-illustrer]="!mot.illustre">
                     <app-carte-mot
                       [mot]="mot"
                       [theme]="nomTheme(mot)"

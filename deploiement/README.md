@@ -34,6 +34,7 @@ Un hôte Linux (mini-PC ou VPS dans l'UE) avec :
    `podman-restart.service` relance au démarrage les conteneurs dont la politique est `restart: unless-stopped` ou `always`.
 
 4. Un enregistrement **DNS A** du domaine vers l'IP publique, et seuls les ports 80 et 443 ouverts sur la box ou le pare-feu.
+5. Un accès **HTTPS sortant** vers `api.arasaac.org` et `static.arasaac.org` : le back (et lui seul, jamais le navigateur) y cherche les pictogrammes suggérés sur les Cartes « à illustrer ». Sans cet accès, les Cartes affichent « ARASAAC ne répond pas pour l'instant. » et le reste de l'application fonctionne.
 
 ## Installation
 
