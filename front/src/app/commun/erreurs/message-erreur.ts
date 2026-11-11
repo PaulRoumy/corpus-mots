@@ -35,6 +35,7 @@ export const MESSAGES_PAR_CODE: Readonly<Record<string, string>> = {
     "Saisissez un nombre d'heures entre 0 et 100, par demi-heure.",
   'preparation.mot_invalide': 'Saisissez un mot de 1 à 100 caractères.',
   'preparation.mot_deja_present': 'Ce mot est déjà dans la préparation.',
+  'preparation.sens_invalide': "Ce sens n'appartient pas à ce mot.",
   'album.titre_invalide': 'Saisissez un titre de 1 à 200 caractères.',
   'album.auteur_invalide': 'Saisissez un auteur de 1 à 200 caractères.',
   'album.editeur_invalide': 'Saisissez un éditeur de 200 caractères au plus.',

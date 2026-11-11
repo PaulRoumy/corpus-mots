@@ -6,6 +6,7 @@ import java.util.Collection;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.UUID;
 
 @ApplicationScoped
@@ -19,6 +20,16 @@ public class PreparationMotRepository implements PanacheRepositoryBase<Preparati
     /** Mots de la Préparation, dans l'ordre de saisie. */
     public List<PreparationMot> deLaPreparation(UUID preparationId) {
         return list("preparationId = ?1 order by ordre", preparationId);
+    }
+
+    /** Mot de Préparation {@code id} s'il appartient à la Préparation {@code preparationId}. */
+    public Optional<PreparationMot> deLaPreparation(UUID preparationId, UUID id) {
+        return find("id = ?1 and preparationId = ?2", id, preparationId).firstResultOptional();
+    }
+
+    /** Vrai si un Mot de la Préparation occupe déjà la place {@code ordre}. */
+    public boolean ordreOccupe(UUID preparationId, int ordre) {
+        return count("preparationId = ?1 and ordre = ?2", preparationId, ordre) > 0;
     }
 
     /** Vrai si le Mot figure déjà dans la Préparation. */

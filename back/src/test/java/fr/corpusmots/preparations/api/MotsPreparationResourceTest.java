@@ -33,9 +33,9 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 /**
- * Mots d'une Préparation (story 2.3, partie 1) : ajout par le Champ de saisie rapide, normalisé par le Lexique, avec
- * le Sens retenu par {@code Usages}, et liste dans l'ordre de saisie. Une ligne de test par ligne de la matrice de la
- * spec.
+ * Mots d'une Préparation (story 2.3) : ajout par le Champ de saisie rapide, normalisé par le Lexique, avec le Sens
+ * retenu par {@code Usages}, liste dans l'ordre de saisie (partie 1), retrait et rétablissement (partie 2). Une ligne
+ * de test par ligne de la matrice de chaque spec.
  */
 @QuarkusTest
 @TestSecurity(user = MotsPreparationResourceTest.CLAIRE)
@@ -268,6 +268,220 @@ class MotsPreparationResourceTest {
                 .body("ordre", contains(1, 2, 3))
                 .body("sens.libelle", contains("à compléter", "à compléter", "à compléter"))
                 .body("illustre", contains(false, false, false));
+    }
+
+    @Test
+    void retirerUnMotSupprimeSaLigneEtSonSensRetenu() {
+        ajouter(preparation, "galette").statusCode(201);
+        String renard = ajouter(preparation, "renard").statusCode(201).extract().path("id");
+        String renardMotId = given().when().get("/api/preparations/" + preparation + "/mots").then()
+                .extract().path("[1].motId");
+        String sensId = given().when().get("/api/preparations/" + preparation + "/mots").then()
+                .extract().path("[1].sens.id");
+        ajouter(preparation, "lapin").statusCode(201);
+
+        retirer(preparation, UUID.fromString(renard))
+                .statusCode(200)
+                .body("id", equalTo(renard))
+                .body("motId", equalTo(renardMotId))
+                .body("forme", equalTo("renard"))
+                .body("ordre", equalTo(2))
+                .body("sens.id", equalTo(sensId))
+                .body("sens.libelle", equalTo("à compléter"));
+
+        assertEquals(List.of("galette:1", "lapin:3"), motsEnBase(preparation));
+        assertEquals(0L, nombre("select count(*) from sens_retenu where preparation_mot_id = '" + renard + "'"));
+        assertEquals(2L, nombre("select count(*) from sens_retenu"));
+        assertEquals(1L, nombre("select count(*) from mot where forme_cle = 'renard'"));
+        assertEquals(1L, nombre("select count(*) from sens where id = '" + sensId + "'"));
+        given().when().get("/api/preparations/" + preparation)
+                .then()
+                .statusCode(200)
+                .body("nombreMots", equalTo(2));
+    }
+
+    @Test
+    void retirerPuisRetablirRendLaListeIdentique() {
+        ajouter(preparation, "galette").statusCode(201);
+        String renard = ajouter(preparation, "renard").statusCode(201).extract().path("id");
+        ajouter(preparation, "lapin").statusCode(201);
+        String motId = given().when().get("/api/preparations/" + preparation + "/mots").then()
+                .extract().path("[1].motId");
+        SensVue animal = QuarkusTransaction.requiringNew()
+                .call(() -> lexique.obtenirOuCreerSens(UUID.fromString(motId), "animal", "nom"));
+        retenirEnBase(UUID.fromString(renard), animal.id(), "2026-11-09T10:00:00Z");
+        List<String> avant = motsListes(preparation);
+
+        Map<String, Object> retire = retirer(preparation, UUID.fromString(renard)).statusCode(200)
+                .extract().jsonPath().getMap("$");
+        @SuppressWarnings("unchecked")
+        Map<String, Object> sens = (Map<String, Object>) retire.get("sens");
+        String retabli = retablir(preparation, retire.get("motId"), sens.get("id"), retire.get("ordre"))
+                .statusCode(201)
+                .body("motId", equalTo(motId))
+                .body("forme", equalTo("renard"))
+                .body("ordre", equalTo(2))
+                .body("sens.id", equalTo(animal.id().toString()))
+                .body("sens.libelle", equalTo("animal"))
+                .body("sens.categorie", equalTo("nom"))
+                .extract().path("id");
+
+        List<String> apres = motsListes(preparation);
+        assertEquals(avant, apres);
+        assertEquals(List.of("galette:1", "renard:2", "lapin:3"), motsEnBase(preparation));
+        assertEquals("animal|" + preparation + "|" + CLAIRE + "|" + rouleGalette + "|ms",
+                sensRetenuEnBase(UUID.fromString(retabli)));
+        assertEquals(3L, nombre("select count(*) from sens_retenu"));
+    }
+
+    @Test
+    void unMotRetabliSurUnePlacePriseVaEnFin() {
+        String galette = ajouter(preparation, "galette").statusCode(201).extract().path("id");
+        Map<String, Object> retire = retirer(preparation, UUID.fromString(galette)).statusCode(200)
+                .extract().jsonPath().getMap("$");
+        // Plus aucun Mot : « renard » prend la place 1, celle de « galette ».
+        ajouter(preparation, "renard").statusCode(201).body("ordre", equalTo(1));
+        ajouter(preparation, "loup").statusCode(201);
+        @SuppressWarnings("unchecked")
+        Map<String, Object> sens = (Map<String, Object>) retire.get("sens");
+
+        retablir(preparation, retire.get("motId"), sens.get("id"), retire.get("ordre"))
+                .statusCode(201)
+                .body("forme", equalTo("galette"))
+                .body("ordre", equalTo(3))
+                .body("sens.id", equalTo(sens.get("id")));
+        assertEquals(List.of("renard:1", "loup:2", "galette:3"), motsEnBase(preparation));
+        assertEquals(3L, nombre("select count(*) from sens_retenu"));
+    }
+
+    @Test
+    void unRetablissementSansPlaceValideVaEnFin() {
+        String galette = ajouter(preparation, "galette").statusCode(201).extract().path("id");
+        String renard = ajouter(preparation, "renard").statusCode(201).extract().path("id");
+        ajouter(preparation, "lapin").statusCode(201);
+        Map<String, Object> galetteRetiree = retirer(preparation, UUID.fromString(galette)).statusCode(200)
+                .extract().jsonPath().getMap("$");
+        Map<String, Object> renardRetire = retirer(preparation, UUID.fromString(renard)).statusCode(200)
+                .extract().jsonPath().getMap("$");
+        @SuppressWarnings("unchecked")
+        Map<String, Object> sensGalette = (Map<String, Object>) galetteRetiree.get("sens");
+        @SuppressWarnings("unchecked")
+        Map<String, Object> sensRenard = (Map<String, Object>) renardRetire.get("sens");
+
+        retablir(preparation, galetteRetiree.get("motId"), sensGalette.get("id"), null)
+                .statusCode(201)
+                .body("ordre", equalTo(4));
+        retablir(preparation, renardRetire.get("motId"), sensRenard.get("id"), 0)
+                .statusCode(201)
+                .body("ordre", equalTo(5));
+
+        assertEquals(List.of("lapin:3", "galette:4", "renard:5"), motsEnBase(preparation));
+        assertEquals(3L, nombre("select count(*) from sens_retenu"));
+    }
+
+    @Test
+    void unSensEtrangerAuMotEstRefuse() {
+        String galette = ajouter(preparation, "galette").statusCode(201).extract().path("id");
+        Map<String, Object> retire = retirer(preparation, UUID.fromString(galette)).statusCode(200)
+                .extract().jsonPath().getMap("$");
+        MotVue loup = QuarkusTransaction.requiringNew().call(() -> lexique.obtenirOuCreerMot("loup"));
+        SensVue animal = QuarkusTransaction.requiringNew()
+                .call(() -> lexique.obtenirOuCreerSens(loup.id(), "animal", "nom"));
+
+        for (Object sensId : new Object[] { animal.id(), UUID.randomUUID(), null }) {
+            retablir(preparation, retire.get("motId"), sensId, retire.get("ordre"))
+                    .statusCode(400)
+                    .contentType(ProblemeDto.MEDIA_TYPE)
+                    .body("code", equalTo("preparation.sens_invalide"));
+        }
+        assertEquals(List.of(), motsEnBase(preparation));
+        assertEquals(0L, nombre("select count(*) from sens_retenu"));
+    }
+
+    @Test
+    void unMotRevenuEntreTempsEstRefuse() {
+        String galette = ajouter(preparation, "galette").statusCode(201).extract().path("id");
+        Map<String, Object> retire = retirer(preparation, UUID.fromString(galette)).statusCode(200)
+                .extract().jsonPath().getMap("$");
+        ajouter(preparation, "la galette").statusCode(201);
+        @SuppressWarnings("unchecked")
+        Map<String, Object> sens = (Map<String, Object>) retire.get("sens");
+
+        retablir(preparation, retire.get("motId"), sens.get("id"), retire.get("ordre"))
+                .statusCode(409)
+                .contentType(ProblemeDto.MEDIA_TYPE)
+                .body("code", equalTo("preparation.mot_deja_present"));
+        assertEquals(List.of("galette:1"), motsEnBase(preparation));
+        assertEquals(1L, nombre("select count(*) from sens_retenu"));
+    }
+
+    @Test
+    void retirerOuRetablirChezUnCollegueOuUnInconnuEstIntrouvable() {
+        UUID deZoe = preparation(ZOE, "gs", "2026-11-09T08:00:00Z");
+        MotVue loup = QuarkusTransaction.requiringNew().call(() -> lexique.obtenirOuCreerMot("loup"));
+        SensVue animal = QuarkusTransaction.requiringNew()
+                .call(() -> lexique.obtenirOuCreerSens(loup.id(), "animal", "nom"));
+        UUID motDeZoe = motDePreparation(deZoe, loup.id(), 1);
+        sensRetenu(deZoe, motDeZoe, animal.id(), ZOE, "gs");
+        UUID autre = preparation(CLAIRE, "gs", "2026-11-08T09:00:00Z");
+        UUID motDeLAutre = UUID.fromString(ajouter(autre, "renard").statusCode(201).extract().path("id"));
+        ajouter(preparation, "galette").statusCode(201);
+
+        // Préparation d'un collègue, Préparation inconnue, Mot de Préparation inconnu ou d'une autre Préparation.
+        introuvable(retirer(deZoe, motDeZoe));
+        introuvable(retirer(UUID.randomUUID(), motDeZoe));
+        introuvable(retirer(preparation, UUID.randomUUID()));
+        introuvable(retirer(preparation, motDeZoe));
+        introuvable(retirer(preparation, motDeLAutre));
+        // Rétablir : Préparation d'un collègue ou inconnue, Mot inconnu.
+        introuvable(retablir(deZoe, loup.id(), animal.id(), 2));
+        introuvable(retablir(UUID.randomUUID(), loup.id(), animal.id(), 2));
+        introuvable(retablir(preparation, UUID.randomUUID(), animal.id(), 2));
+        introuvable(retablir(preparation, null, animal.id(), 2));
+
+        assertEquals(List.of("loup:1"), motsEnBase(deZoe));
+        assertEquals(List.of("renard:1"), motsEnBase(autre));
+        assertEquals(List.of("galette:1"), motsEnBase(preparation));
+        assertEquals(3L, nombre("select count(*) from sens_retenu"));
+    }
+
+    @Test
+    void unRetablissementSansCorpsEstRefuse() {
+        given().contentType(ContentType.JSON)
+                .when().post("/api/preparations/" + preparation + "/mots/retablissement")
+                .then()
+                .statusCode(400)
+                .contentType(ProblemeDto.MEDIA_TYPE)
+                .body("code", equalTo("requete.invalide"));
+    }
+
+    private ValidatableResponse retirer(UUID preparationId, UUID motPreparationId) {
+        return given().when().delete("/api/preparations/" + preparationId + "/mots/" + motPreparationId).then();
+    }
+
+    private ValidatableResponse retablir(UUID preparationId, Object motId, Object sensId, Object ordre) {
+        Map<String, Object> corps = new HashMap<>();
+        corps.put("motId", motId == null ? null : motId.toString());
+        corps.put("sensId", sensId == null ? null : sensId.toString());
+        corps.put("ordre", ordre);
+        return given().contentType(ContentType.JSON).body(corps)
+                .when().post("/api/preparations/" + preparationId + "/mots/retablissement")
+                .then();
+    }
+
+    /** Mots listés par l'API, sans l'identifiant de Mot de Préparation, chacun en « motId|forme|ordre|sens ». */
+    private List<String> motsListes(UUID preparationId) {
+        List<Map<String, Object>> mots = given().when().get("/api/preparations/" + preparationId + "/mots").then()
+                .statusCode(200).extract().jsonPath().getList("$");
+        return mots.stream()
+                .map(mot -> mot.get("motId") + "|" + mot.get("forme") + "|" + mot.get("ordre") + "|" + mot.get("sens"))
+                .toList();
+    }
+
+    private static void introuvable(ValidatableResponse reponse) {
+        reponse.statusCode(404)
+                .contentType(ProblemeDto.MEDIA_TYPE)
+                .body("code", equalTo("ressource.introuvable"));
     }
 
     private ValidatableResponse ajouter(UUID preparationId, String saisie) {

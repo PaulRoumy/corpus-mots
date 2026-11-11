@@ -44,6 +44,7 @@ public class PreparationsService {
     static final String CODE_TEMPS_PASSE_INVALIDE = "preparation.temps_passe_invalide";
     static final String CODE_MOT_INVALIDE = "preparation.mot_invalide";
     static final String CODE_MOT_DEJA_PRESENT = "preparation.mot_deja_present";
+    static final String CODE_SENS_INVALIDE = "preparation.sens_invalide";
     static final String CODE_INTROUVABLE = "ressource.introuvable";
 
     /** Borne haute du Temps passé : 100 heures (contrainte {@code preparation_temps_passe_borne}). */
@@ -168,9 +169,7 @@ public class PreparationsService {
      */
     @Transactional
     public MotPreparationVue ajouterMot(UUID id, String saisie) {
-        Preparation preparation = (id == null ? Optional.<Preparation>empty()
-                : preparations.verrouillee(id, enseignantCourant.id()))
-                .orElseThrow(PreparationsService::introuvable);
+        Preparation preparation = verrouillee(id);
         String forme = Lexique.normaliser(saisie);
         if (forme.isEmpty() || forme.length() > Lexique.LONGUEUR_MAX_FORME) {
             throw new ErreurMetier(400, CODE_MOT_INVALIDE,
@@ -185,6 +184,66 @@ public class PreparationsService {
         preparationMots.persistAndFlush(ligne);
         SensVue sens = usages.retenirSens(new RetenirSensCommande(preparation.id(), ligne.id(), mot.id(),
                 preparation.albumId(), preparation.section()));
+        return vue(ligne, mot, sens);
+    }
+
+    /**
+     * Retire le Mot de Préparation {@code motPreparationId} de la Préparation {@code id} de l'enseignant courant : le
+     * registre des usages le libère ({@link Usages#libererPreparationMot}), puis sa ligne est supprimée, dans une même
+     * transaction. Le Mot et ses Sens restent dans le Lexique ; les places des autres Mots ne changent pas.
+     *
+     * @return le Mot retiré, avec le Sens et la place qu'il avait, pour le rétablir
+     * @throws ErreurMetier {@code 404 ressource.introuvable} si la Préparation n'existe pas ou appartient à un
+     *         collègue, ou si le Mot de Préparation n'existe pas ou appartient à une autre Préparation
+     */
+    @Transactional
+    public MotPreparationVue retirerMot(UUID id, UUID motPreparationId) {
+        Preparation preparation = verrouillee(id);
+        PreparationMot ligne = (motPreparationId == null ? Optional.<PreparationMot>empty()
+                : preparationMots.deLaPreparation(preparation.id(), motPreparationId))
+                .orElseThrow(() -> new ErreurMetier(404, CODE_INTROUVABLE,
+                        "Aucun mot de cette préparation ne porte cet identifiant"));
+        MotVue mot = lexique.mots(List.of(ligne.motId())).get(ligne.motId());
+        if (mot == null) {
+            throw new IllegalStateException("Mot " + ligne.motId() + " du mot de préparation " + ligne.id()
+                    + " introuvable");
+        }
+        MotPreparationVue retire = vue(ligne, mot, lexique.sensRetenus(List.of(ligne.id())).get(ligne.id()));
+        usages.libererPreparationMot(ligne.id());
+        preparationMots.delete(ligne);
+        preparationMots.flush();
+        return retire;
+    }
+
+    /**
+     * Rétablit dans la Préparation {@code id} de l'enseignant courant un Mot retiré, avec le Sens qu'il avait, à sa
+     * place d'origine si elle est libre, sinon en fin. Rien n'est ajouté en cas de refus.
+     *
+     * @throws ErreurMetier {@code 404 ressource.introuvable} si la Préparation n'existe pas ou appartient à un
+     *         collègue, ou si le Mot n'existe pas ; {@code 400 preparation.sens_invalide} si le Sens n'est pas un Sens
+     *         de ce Mot ; {@code 409 preparation.mot_deja_present} si le Mot figure de nouveau dans la Préparation
+     */
+    @Transactional
+    public MotPreparationVue retablirMot(UUID id, RetablirMotCommande commande) {
+        Preparation preparation = verrouillee(id);
+        MotVue mot = (commande.motId() == null ? null : lexique.mots(List.of(commande.motId())).get(commande.motId()));
+        if (mot == null) {
+            throw new ErreurMetier(404, CODE_INTROUVABLE, "Aucun mot ne porte cet identifiant");
+        }
+        if (lexique.sensDuMot(mot.id(), commande.sensId()).isEmpty()) {
+            throw new ErreurMetier(400, CODE_SENS_INVALIDE, "Ce sens n'appartient pas à ce mot");
+        }
+        if (preparationMots.contient(preparation.id(), mot.id())) {
+            throw new ErreurMetier(409, CODE_MOT_DEJA_PRESENT, "Ce mot figure déjà dans la préparation");
+        }
+        Integer ordre = commande.ordre();
+        int place = ordre != null && ordre > 0 && !preparationMots.ordreOccupe(preparation.id(), ordre) ? ordre
+                : preparationMots.dernierOrdre(preparation.id()) + 1;
+        PreparationMot ligne = PreparationMot.nouveau(preparationMots.nouvelIdentifiant(), preparation.id(), mot.id(),
+                place);
+        preparationMots.persistAndFlush(ligne);
+        SensVue sens = usages.retenirSens(new RetenirSensCommande(preparation.id(), ligne.id(), mot.id(),
+                preparation.albumId(), preparation.section(), commande.sensId()));
         return vue(ligne, mot, sens);
     }
 
@@ -218,6 +277,15 @@ public class PreparationsService {
     /** Préparation {@code id} de l'enseignant courant ; celle d'un collègue est traitée comme inexistante. */
     private Preparation mienne(UUID id) {
         return (id == null ? Optional.<Preparation>empty() : preparations.duProprietaire(id, enseignantCourant.id()))
+                .orElseThrow(PreparationsService::introuvable);
+    }
+
+    /**
+     * Préparation {@code id} de l'enseignant courant, verrouillée ({@code SELECT … FOR UPDATE}) : les changements de
+     * ses Mots passent un à un (places et doublons sûrs).
+     */
+    private Preparation verrouillee(UUID id) {
+        return (id == null ? Optional.<Preparation>empty() : preparations.verrouillee(id, enseignantCourant.id()))
                 .orElseThrow(PreparationsService::introuvable);
     }
 

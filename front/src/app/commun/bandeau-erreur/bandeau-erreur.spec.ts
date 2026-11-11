@@ -11,6 +11,7 @@ import { BandeauErreur } from './bandeau-erreur';
     @if (affiche()) {
       <app-bandeau-erreur
         [message]="message()"
+        [reessayable]="reessayable()"
         (reessayer)="reessais = reessais + 1"
         (fermer)="affiche.set(false)"
       />
@@ -22,6 +23,7 @@ class Page {
   readonly message = signal(
     'Connexion au serveur impossible. Vérifiez votre réseau, puis réessayez.',
   );
+  readonly reessayable = signal(true);
   reessais = 0;
 }
 
@@ -86,5 +88,27 @@ describe('BandeauErreur', () => {
     await fixture.whenStable();
     expect(bandeau()).toBeNull();
     expect(fixture.componentInstance.reessais).toBe(0);
+  });
+});
+
+describe('BandeauErreur sans « Réessayer »', () => {
+  it('reessayable à faux : message et « Fermer » seuls', async () => {
+    TestBed.configureTestingModule({
+      imports: [Page],
+      providers: [
+        provideIcones(),
+        { provide: MATERIAL_ANIMATIONS, useValue: { animationsDisabled: true } },
+      ],
+    });
+    const fixture = TestBed.createComponent(Page);
+    fixture.componentInstance.reessayable.set(false);
+    await fixture.whenStable();
+    const racine = fixture.nativeElement as HTMLElement;
+    const libelles = [...racine.querySelectorAll('app-bandeau-erreur button')].map(
+      (bouton) => bouton.textContent?.trim() || bouton.getAttribute('aria-label'),
+    );
+
+    expect(racine.querySelector('app-bandeau-erreur [role="alert"]')).not.toBeNull();
+    expect(libelles).toEqual(['Fermer']);
   });
 });

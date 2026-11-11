@@ -1,6 +1,9 @@
+@use '@angular/material' as mat;
+
 // Carte de Mot (key-preparation.html › `.wc`, `.todo .l`) ; la Carte « à illustrer » ne porte pas encore les
 // suggestions ARASAAC (story 2.4) : elle occupe une seule colonne de la Grille.
 :host {
+  position: relative;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -60,5 +63,22 @@
     flex: none;
     width: var(--cm-taille-icone-badge);
     height: var(--cm-taille-icone-badge);
+  }
+}
+
+// Bouton « Retirer » (croix), toujours visible, dans le coin haut droit de la Carte.
+.carte-mot__retirer {
+  position: absolute;
+  top: var(--cm-espace-1);
+  right: var(--cm-espace-1);
+  @include mat.icon-button-overrides(
+    (
+      icon-color: var(--mat-sys-on-surface-variant),
+    )
+  );
+
+  mat-icon {
+    width: var(--cm-taille-icone);
+    height: var(--cm-taille-icone);
   }
 }

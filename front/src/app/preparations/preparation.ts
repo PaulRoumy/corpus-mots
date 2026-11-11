@@ -11,6 +11,7 @@ import {
   signal,
   untracked,
   viewChild,
+  viewChildren,
 } from '@angular/core';
 import {
   AbstractControl,
@@ -35,6 +36,8 @@ import { ajouterMotPreparation } from '../api/fn/preparations-resource/ajouter-m
 import { lirePreparation } from '../api/fn/preparations-resource/lire-preparation';
 import { listerMotsPreparation } from '../api/fn/preparations-resource/lister-mots-preparation';
 import { reglerPreparation } from '../api/fn/preparations-resource/regler-preparation';
+import { retablirMotPreparation } from '../api/fn/preparations-resource/retablir-mot-preparation';
+import { retirerMotPreparation } from '../api/fn/preparations-resource/retirer-mot-preparation';
 import { creerTheme } from '../api/fn/themes-resource/creer-theme';
 import { listerThemes } from '../api/fn/themes-resource/lister-themes';
 import { renommerTheme } from '../api/fn/themes-resource/renommer-theme';
@@ -44,6 +47,7 @@ import { ModuleDto } from '../api/models/module-dto';
 import { MotPreparationDto } from '../api/models/mot-preparation-dto';
 import { PreparationDto } from '../api/models/preparation-dto';
 import { ThemeDto } from '../api/models/theme-dto';
+import { BandeauAnnuler } from '../commun/bandeau-annuler/bandeau-annuler';
 import { BandeauErreur } from '../commun/bandeau-erreur/bandeau-erreur';
 import { ChampThemes } from '../commun/champ-themes/champ-themes';
 import { CompteCourant } from '../commun/compte-courant';
@@ -137,6 +141,37 @@ export function messageMotDejaPresent(saisie: string): string {
   return `${message} : « ${saisie} ».`;
 }
 
+/** Mots dont le retrait a échoué, revenus à leur place, et le message du dernier échec. */
+interface EchecRetrait {
+  readonly mots: readonly MotPreparationDto[];
+  readonly message: string;
+}
+
+/** « « renard » n'a pas été retiré. », « « a », « b » n'ont pas été retirés. », suivi du message de l'échec. */
+export function messageEchecRetrait(echec: EchecRetrait): string {
+  const mots = echec.mots.map((mot) => `« ${mot.forme} »`).join(', ');
+  const verbe = echec.mots.length === 1 ? "n'a pas été retiré" : "n'ont pas été retirés";
+  return `${mots} ${verbe}. ${echec.message}`;
+}
+
+/** Rétablissement d'un Mot retiré qui a échoué ; `reessayable` est faux si le Mot est revenu entre-temps (409). */
+interface EchecRetablissement {
+  readonly preparationId: string;
+  readonly mot: MotPreparationDto;
+  readonly message: string;
+  readonly reessayable: boolean;
+}
+
+/** « « renard » n'a pas été rétabli. », suivi du message de l'échec. */
+export function messageEchecRetablissement(echec: EchecRetablissement): string {
+  return `« ${echec.mot.forme} » n'a pas été rétabli. ${echec.message}`;
+}
+
+/** Mots dans l'ordre de leur place, `mot` inséré à la sienne. */
+function inserer(mots: readonly MotPreparationDto[], mot: MotPreparationDto): MotPreparationDto[] {
+  return [...mots.filter((autre) => autre.id !== mot.id), mot].sort((a, b) => a.ordre - b.ordre);
+}
+
 /** Champ de l'En-tête relu après une suppression : le Module ou le Thème par défaut. */
 type Source = 'module' | 'theme';
 
@@ -181,6 +216,13 @@ function parNom(themes: ThemeDto[]): ThemeDto[] {
  * de Grille sans prendre le focus, et le compteur de l'En-tête suit la Grille. Un Mot déjà présent est refusé sous le
  * champ, où la saisie revient s'il est vide ; tout autre échec ouvre un Bandeau d'erreur qui nomme le Mot, et
  * « Réessayer » le renvoie.
+ *
+ * Retrait d'un Mot (story 2.3, partie 2) : « Retirer » sur une Carte la fait disparaître aussitôt, sans confirmation,
+ * et le compteur suit ; le focus passe au bouton « Retirer » de la Carte suivante, sinon de la précédente, sinon au
+ * Champ de saisie rapide. Une fois le retrait enregistré, le Bandeau « Annuler » (8 s) propose de rétablir le Mot, avec
+ * le Sens et la place que le back a renvoyés ; le Mot rétabli reprend sa place dans la Grille et son bouton « Retirer »
+ * prend le focus. Échec du retrait : la Carte revient à sa place et un Bandeau d'erreur propose « Réessayer ». Échec du
+ * rétablissement : Bandeau d'erreur avec « Réessayer », sauf si le Mot est revenu entre-temps (message seul).
  *
  * Le Temps passé est un champ texte en mode de saisie décimal plutôt qu'un `type="number"` : celui-ci, selon la langue
  * du navigateur, refuse la virgule sans le dire (sa valeur devient vide, comme un champ effacé).
@@ -255,6 +297,23 @@ function parNom(themes: ThemeDto[]): ThemeDto[] {
             [message]="messageEchecAjout(echec)"
             (reessayer)="reessayerAjouts()"
             (fermer)="echecAjout.set(null)"
+          />
+        }
+        @if (echecRetrait(); as echec) {
+          <app-bandeau-erreur
+            class="erreur-retrait"
+            [message]="messageEchecRetrait(echec)"
+            (reessayer)="reessayerRetraits()"
+            (fermer)="echecRetrait.set(null)"
+          />
+        }
+        @if (echecRetablissement(); as echec) {
+          <app-bandeau-erreur
+            class="erreur-retablissement"
+            [message]="messageEchecRetablissement(echec)"
+            [reessayable]="echec.reessayable"
+            (reessayer)="reessayerRetablissement(echec)"
+            (fermer)="echecRetablissement.set(null)"
           />
         }
         @if (erreurListes(); as message) {
@@ -413,7 +472,9 @@ function parNom(themes: ThemeDto[]): ThemeDto[] {
               <h2 id="mots-titre" class="mots__titre">Mots de la préparation</h2>
               <ul class="mots__grille">
                 @for (mot of motsCharges; track mot.id) {
-                  <li class="mots__element"><app-carte-mot [mot]="mot" /></li>
+                  <li class="mots__element">
+                    <app-carte-mot [mot]="mot" (retirer)="retirerMot(mot)" />
+                  </li>
                 }
               </ul>
             </section>
@@ -434,6 +495,7 @@ export class Preparation {
   private readonly compteCourant = inject(CompteCourant);
   private readonly confirmation = inject(DialogueConfirmation);
   private readonly injecteur = inject(Injector);
+  private readonly bandeauAnnuler = inject(BandeauAnnuler);
 
   /** Identifiant de la Préparation, lu dans l'URL (`withComponentInputBinding`). */
   readonly id = input.required<string>();
@@ -443,6 +505,8 @@ export class Preparation {
   protected readonly messageTempsInvalide = MESSAGE_TEMPS_PASSE_INVALIDE;
   protected readonly optionNouveauModule = OPTION_NOUVEAU_MODULE;
   protected readonly messageEchecAjout = messageEchecAjout;
+  protected readonly messageEchecRetrait = messageEchecRetrait;
+  protected readonly messageEchecRetablissement = messageEchecRetablissement;
 
   /** Préparation telle que le back l'a renvoyée en dernier. */
   protected readonly preparation = signal<PreparationDto | null>(null);
@@ -532,6 +596,9 @@ export class Preparation {
     () => this.mots()?.length ?? this.preparation()?.nombreMots ?? 0,
   );
   private readonly saisieRapide = viewChild(SaisieRapide);
+  private readonly cartesMots = viewChildren(CarteMot);
+  protected readonly echecRetrait = signal<EchecRetrait | null>(null);
+  protected readonly echecRetablissement = signal<EchecRetablissement | null>(null);
   /** Saisies en attente d'envoi, dans l'ordre de frappe ; envoyées une à une. */
   private fileAjouts: string[] = [];
   private ajoutEnCours = false;
@@ -570,6 +637,8 @@ export class Preparation {
     this.mots.set(null);
     this.erreurMots.set(null);
     this.echecAjout.set(null);
+    this.echecRetrait.set(null);
+    this.echecRetablissement.set(null);
     this.annonce.set('');
     this.fileAjouts = [];
     try {
@@ -695,6 +764,119 @@ export class Preparation {
         message: messageErreur(erreur),
       }));
     }
+  }
+
+  /**
+   * « Retirer » sur une Carte : elle disparaît aussitôt et le focus passe à la Carte voisine ; le retrait part ensuite.
+   */
+  protected retirerMot(mot: MotPreparationDto): void {
+    const mots = this.mots();
+    const preparation = this.preparation();
+    const index = mots?.findIndex((autre) => autre.id === mot.id) ?? -1;
+    if (mots === null || preparation === null || index < 0) {
+      return;
+    }
+    const restants = mots.filter((autre) => autre.id !== mot.id);
+    this.mots.set(restants);
+    this.focaliserApresRendu(restants[index] ?? restants[index - 1]);
+    void this.envoyerRetrait(preparation.id, mot);
+  }
+
+  /** « Réessayer » : les Mots dont le retrait a échoué sont retirés de nouveau. */
+  protected reessayerRetraits(): void {
+    const echec = this.echecRetrait();
+    this.echecRetrait.set(null);
+    for (const mot of echec?.mots ?? []) {
+      this.retirerMot(mot);
+    }
+  }
+
+  /** « Réessayer » : le rétablissement repart. */
+  protected reessayerRetablissement(echec: EchecRetablissement): void {
+    this.echecRetablissement.set(null);
+    void this.retablirMot(echec.preparationId, echec.mot, this.dernierChargement);
+  }
+
+  /**
+   * Retire le Mot ; en cas de succès, le Bandeau « Annuler » propose de le rétablir avec le Sens et la place renvoyés.
+   * En échec, la Carte revient à sa place et le Bandeau d'erreur nomme le Mot.
+   */
+  private async envoyerRetrait(preparationId: string, mot: MotPreparationDto): Promise<void> {
+    const numero = this.dernierChargement;
+    try {
+      const retire = await this.api.invoke(retirerMotPreparation, {
+        id: preparationId,
+        motPreparationId: mot.id,
+      });
+      if (numero === this.dernierChargement) {
+        this.bandeauAnnuler.afficher(
+          `« ${retire.forme} » retiré de la préparation.`,
+          () => void this.retablirMot(preparationId, retire, numero),
+        );
+      }
+    } catch (erreur) {
+      if (numero !== this.dernierChargement) {
+        return;
+      }
+      this.mots.update((mots) => (mots === null ? mots : inserer(mots, mot)));
+      this.echecRetrait.update((echec) => ({
+        mots: [...(echec?.mots ?? []), mot],
+        message: messageErreur(erreur),
+      }));
+    }
+  }
+
+  /**
+   * Rétablit un Mot retiré, avec son Sens, à sa place si elle est libre (sinon le back le met en fin) ; son bouton
+   * « Retirer » prend le focus. Le rétablissement est envoyé même si l'enseignant a ouvert une autre Préparation entre-
+   * temps, mais il n'écrit alors rien dans la page : `numero` est le chargement où le retrait a réussi.
+   */
+  private async retablirMot(
+    preparationId: string,
+    retire: MotPreparationDto,
+    numero: number,
+  ): Promise<void> {
+    try {
+      const retabli = await this.api.invoke(retablirMotPreparation, {
+        id: preparationId,
+        body: { motId: retire.motId, sensId: retire.sens.id, ordre: retire.ordre },
+      });
+      if (numero === this.dernierChargement) {
+        this.mots.update((mots) => (mots === null ? mots : inserer(mots, retabli)));
+        this.annonce.set(`« ${retabli.forme} » rétabli.`);
+        this.focaliserApresRendu(retabli);
+      }
+    } catch (erreur) {
+      if (numero !== this.dernierChargement) {
+        return;
+      }
+      this.echecRetablissement.set({
+        preparationId,
+        mot: retire,
+        message: messageErreur(erreur),
+        reessayable: codeErreur(erreur) !== 'preparation.mot_deja_present',
+      });
+      // Le Bandeau « Annuler » ou « Réessayer », qui avait le focus, a disparu : le focus revient au Champ de saisie.
+      if (!(document.activeElement instanceof HTMLElement) || document.activeElement === document.body) {
+        this.focaliserApresRendu(undefined);
+      }
+    }
+  }
+
+  /** Après le rendu, focus au bouton « Retirer » de la Carte de `mot`, ou au Champ de saisie rapide sans Carte. */
+  private focaliserApresRendu(mot: MotPreparationDto | undefined): void {
+    afterNextRender(
+      () => {
+        const carte =
+          mot === undefined ? undefined : this.cartesMots().find((autre) => autre.mot().id === mot.id);
+        if (carte === undefined) {
+          this.saisieRapide()?.focus();
+        } else {
+          carte.focusRetirer();
+        }
+      },
+      { injector: this.injecteur },
+    );
   }
 
   /**

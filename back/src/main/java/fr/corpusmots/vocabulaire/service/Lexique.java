@@ -12,6 +12,7 @@ import java.text.Normalizer;
 import java.util.Collection;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Optional;
 import java.util.UUID;
 import java.util.function.Function;
 import java.util.regex.Pattern;
@@ -122,6 +123,15 @@ public class Lexique {
     public Map<UUID, SensVue> sensRetenus(Collection<UUID> preparationMotIds) {
         return sensRetenus.sensDe(preparationMotIds).entrySet().stream()
                 .collect(Collectors.toMap(Map.Entry::getKey, entree -> vue(entree.getValue())));
+    }
+
+    /** Sens {@code sensId} s'il est un Sens du Mot {@code motId} ; vide s'il n'existe pas ou appartient à un autre Mot. */
+    @Transactional
+    public Optional<SensVue> sensDuMot(UUID motId, UUID sensId) {
+        if (motId == null || sensId == null) {
+            return Optional.empty();
+        }
+        return sens.findByIdOptional(sensId).filter(trouve -> trouve.motId().equals(motId)).map(Lexique::vue);
     }
 
     private static MotVue vue(Mot mot) {

@@ -47,6 +47,7 @@ describe('messageErreur', () => {
     ],
     [400, 'preparation.mot_invalide', 'Saisissez un mot de 1 à 100 caractères.'],
     [409, 'preparation.mot_deja_present', 'Ce mot est déjà dans la préparation.'],
+    [400, 'preparation.sens_invalide', "Ce sens n'appartient pas à ce mot."],
     // referentiels.service.ReferentielsService
     [400, 'album.titre_invalide', 'Saisissez un titre de 1 à 200 caractères.'],
     [400, 'album.auteur_invalide', 'Saisissez un auteur de 1 à 200 caractères.'],

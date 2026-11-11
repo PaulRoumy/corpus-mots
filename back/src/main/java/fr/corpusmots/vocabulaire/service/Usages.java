@@ -29,18 +29,36 @@ public class Usages {
     EnseignantCourant enseignantCourant;
 
     /**
-     * Retient un Sens pour le Mot que la commande ajoute à une Préparation de l'enseignant courant : le Sens qu'il a
-     * retenu le plus récemment pour ce Mot dans ses Préparations ; sinon le Sens « à compléter » du Mot (sans catégorie),
-     * obtenu ou créé. Jamais le Sens retenu par un collègue (AD-2).
+     * Retient un Sens pour le Mot que la commande ajoute à une Préparation de l'enseignant courant : le Sens imposé par
+     * la commande s'il y en a un ; sinon le Sens qu'il a retenu le plus récemment pour ce Mot dans ses Préparations ;
+     * sinon le Sens « à compléter » du Mot (sans catégorie), obtenu ou créé. Jamais le Sens retenu par un collègue
+     * (AD-2).
+     *
+     * @throws IllegalArgumentException si le Sens imposé n'est pas un Sens de ce Mot : l'appelant le vérifie avant par
+     *         {@link Lexique#sensDuMot}
      */
     @Transactional
     public SensVue retenirSens(RetenirSensCommande commande) {
         UUID enseignant = enseignantCourant.id();
-        SensVue retenu = sensRetenus.dernierRetenu(enseignant, commande.motId())
-                .map(Lexique::vue)
-                .orElseGet(() -> lexique.obtenirOuCreerSens(commande.motId(), LIBELLE_A_COMPLETER, null));
+        SensVue retenu = commande.sensId() != null
+                ? lexique.sensDuMot(commande.motId(), commande.sensId())
+                        .orElseThrow(() -> new IllegalArgumentException("Le Sens " + commande.sensId()
+                                + " n'est pas un Sens du Mot " + commande.motId()))
+                : sensRetenus.dernierRetenu(enseignant, commande.motId())
+                        .map(Lexique::vue)
+                        .orElseGet(() -> lexique.obtenirOuCreerSens(commande.motId(), LIBELLE_A_COMPLETER, null));
         sensRetenus.persist(SensRetenu.nouveau(sensRetenus.nouvelIdentifiant(), commande.preparationId(),
                 commande.preparationMotId(), retenu.id(), enseignant, commande.albumId(), commande.section()));
         return retenu;
+    }
+
+    /**
+     * Libère le Mot de Préparation {@code preparationMotId} avant que {@code preparations} ne supprime sa ligne : son
+     * Sens retenu est supprimé (et, dès la story 2.4, ses liens d'Image). Le Mot et ses Sens restent dans le Lexique.
+     * L'appelant a vérifié que ce Mot est celui d'une Préparation de l'enseignant courant.
+     */
+    @Transactional
+    public void libererPreparationMot(UUID preparationMotId) {
+        sensRetenus.supprimerDe(preparationMotId);
     }
 }

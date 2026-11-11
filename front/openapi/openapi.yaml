@@ -399,6 +399,28 @@ components:
           minimum: 0
           description: "Temps passé en minutes, multiple de 30 (demi-heure), null\
             \ s'il n'est pas renseigné"
+    RetablissementMotPreparationDto:
+      type: object
+      required:
+      - motId
+      - sensId
+      properties:
+        motId:
+          description: Identifiant du Mot du Lexique
+          type: string
+          $ref: "#/components/schemas/UUID"
+        sensId:
+          description: "Sens que le Mot avait dans la Préparation, Sens de ce Mot"
+          type: string
+          $ref: "#/components/schemas/UUID"
+        ordre:
+          type:
+          - integer
+          - "null"
+          format: int32
+          minimum: 1
+          description: Place d'origine ; le Mot est placé en fin si elle est prise
+            ou absente
     RoleAdministrateurDto:
       type: object
       required:
@@ -934,6 +956,61 @@ paths:
                 $ref: "#/components/schemas/MotPreparationDto"
         "400":
           description: Bad Request
+      tags:
+      - Preparations Resource
+  /api/preparations/{id}/mots/retablissement:
+    post:
+      summary: "Rétablir un Mot retiré d'une Préparation de l'enseignant connecté\
+        , avec son Sens, à sa place"
+      operationId: retablirMotPreparation
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          $ref: "#/components/schemas/UUID"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RetablissementMotPreparationDto"
+      responses:
+        "201":
+          description: "Mot rétabli, à sa place d'origine si elle est libre, sinon\
+            \ en fin"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MotPreparationDto"
+        "400":
+          description: Bad Request
+      tags:
+      - Preparations Resource
+  /api/preparations/{id}/mots/{motPreparationId}:
+    delete:
+      summary: Retirer un Mot d'une Préparation de l'enseignant connecté ; le Mot
+        reste dans le Lexique
+      operationId: retirerMotPreparation
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          $ref: "#/components/schemas/UUID"
+      - name: motPreparationId
+        in: path
+        required: true
+        schema:
+          $ref: "#/components/schemas/UUID"
+      responses:
+        "200":
+          description: "Mot retiré, avec le Sens et la place qu'il avait, pour le\
+            \ rétablir"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MotPreparationDto"
       tags:
       - Preparations Resource
   /api/preparations/{id}/reglages:

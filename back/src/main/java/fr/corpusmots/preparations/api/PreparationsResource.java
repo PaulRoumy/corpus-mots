@@ -6,6 +6,7 @@ import fr.corpusmots.commun.service.Section;
 import fr.corpusmots.preparations.service.PreparationsService;
 import jakarta.inject.Inject;
 import jakarta.ws.rs.Consumes;
+import jakarta.ws.rs.DELETE;
 import jakarta.ws.rs.GET;
 import jakarta.ws.rs.POST;
 import jakarta.ws.rs.PUT;
@@ -101,6 +102,35 @@ public class PreparationsResource {
             throw new ErreurMetier(400, "requete.invalide", "Le corps de la requête est obligatoire");
         }
         return MotPreparationDto.de(preparations.ajouterMot(id, nouveau.saisie()));
+    }
+
+    @DELETE
+    @Path("/{id}/mots/{motPreparationId}")
+    @Operation(operationId = "retirerMotPreparation",
+            summary = "Retirer un Mot d'une Préparation de l'enseignant connecté ; le Mot reste dans le Lexique")
+    @APIResponse(responseCode = "200", description = "Mot retiré, avec le Sens et la place qu'il avait, pour le rétablir",
+            content = @Content(mediaType = MediaType.APPLICATION_JSON,
+                    schema = @Schema(implementation = MotPreparationDto.class)))
+    public MotPreparationDto retirerMot(@PathParam("id") UUID id,
+            @PathParam("motPreparationId") UUID motPreparationId) {
+        return MotPreparationDto.de(preparations.retirerMot(id, motPreparationId));
+    }
+
+    @POST
+    @Path("/{id}/mots/retablissement")
+    @Consumes(MediaType.APPLICATION_JSON)
+    @ResponseStatus(201)
+    @Operation(operationId = "retablirMotPreparation",
+            summary = "Rétablir un Mot retiré d'une Préparation de l'enseignant connecté, avec son Sens, à sa place")
+    @APIResponse(responseCode = "201", description = "Mot rétabli, à sa place d'origine si elle est libre, sinon en fin",
+            content = @Content(mediaType = MediaType.APPLICATION_JSON,
+                    schema = @Schema(implementation = MotPreparationDto.class)))
+    public MotPreparationDto retablirMot(@PathParam("id") UUID id,
+            @RequestBody(required = true) RetablissementMotPreparationDto retablissement) {
+        if (retablissement == null) {
+            throw new ErreurMetier(400, "requete.invalide", "Le corps de la requête est obligatoire");
+        }
+        return MotPreparationDto.de(preparations.retablirMot(id, retablissement.enCommande()));
     }
 
     @GET

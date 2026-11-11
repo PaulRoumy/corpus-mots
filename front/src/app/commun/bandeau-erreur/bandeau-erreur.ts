@@ -7,6 +7,7 @@ import { MatIconModule } from '@angular/material/icon';
  * icône d'alerte, message, action « Réessayer » et bouton « Fermer ». Il reste affiché tant que le parent le garde
  * (jusqu'au succès de « Réessayer » ou à sa fermeture) et ne touche pas à la saisie de la page. `role="alert"`, porté par
  * le message seul (pas par les boutons), le fait annoncer aux lecteurs d'écran. Le message vient en général de `messageErreur`.
+ * Avec `reessayable` à faux, « Réessayer » est absent.
  */
 @Component({
   selector: 'app-bandeau-erreur',
@@ -17,9 +18,11 @@ import { MatIconModule } from '@angular/material/icon';
     <div class="bandeau-erreur">
       <mat-icon class="bandeau-erreur__icone" svgIcon="alerte" aria-hidden="true" />
       <p class="bandeau-erreur__message" role="alert">{{ message() }}</p>
-      <button matButton class="bandeau-erreur__reessayer" type="button" (click)="reessayer.emit()">
-        Réessayer
-      </button>
+      @if (reessayable()) {
+        <button matButton class="bandeau-erreur__reessayer" type="button" (click)="reessayer.emit()">
+          Réessayer
+        </button>
+      }
       <button
         matIconButton
         class="bandeau-erreur__fermer"
@@ -34,6 +37,8 @@ import { MatIconModule } from '@angular/material/icon';
 })
 export class BandeauErreur {
   readonly message = input.required<string>();
+  /** Faux pour un refus que « Réessayer » ne changerait pas : le Bandeau n'affiche alors que le message. */
+  readonly reessayable = input(true);
   readonly reessayer = output<void>();
   readonly fermer = output<void>();
 }

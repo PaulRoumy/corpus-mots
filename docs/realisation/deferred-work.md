@@ -118,6 +118,7 @@
 - source_spec: none
   summary: Story 2.3, partie 2 : retirer un Mot de la Préparation sans confirmation, Bandeau « Annuler » de 8 s, Mot libéré par `Usages.libererPreparationMot`, et « Annuler » qui le rétablit avec son Sens (et sa place).
   evidence: Découpage de la story 2.3 choisi par Paul (trois objectifs livrables séparément) ; la partie 1 pose la saisie, le Lexique, `Usages` et la Grille.
+  status: fait (`docs/realisation/spec-2-3-2-retirer-un-mot.md`).
 - source_spec: none
   summary: Story 2.3, partie 3 : Thème de chaque Mot, prérempli par le Thème par défaut de la Préparation et modifiable mot par mot (FR-6) ; stockage dans `preparation_mot` et retrait par `ThemesDesPreparations` à la suppression du Thème ; interface à concevoir (aucune maquette ne la décrit).
   evidence: Découpage de la story 2.3 choisi par Paul ; ni l'architecture ni l'UX ne fixent où vit le Thème d'un Mot ni comment le changer sur une Carte.
@@ -127,3 +128,6 @@
 - source_spec: `docs/realisation/spec-2-3-saisir-des-mots-en-serie.md`
   summary: Epic 6 : la fusion d'Albums (`AlbumsFusionnes`) réécrit aussi `sens_retenu.album_id` (et `lien_image.album_id`), copiés depuis la Préparation.
   evidence: Revue de la story 2.3, partie 1, ligne 9 du journal de tri : seule la réécriture de `preparation.album_id` est prévue aujourd'hui.
+- source_spec: `docs/realisation/spec-2-3-2-retirer-un-mot.md`
+  summary: Story 2.4 : `Usages.libererPreparationMot` supprime aussi le `lien_image` du Mot de Préparation, et le rétablissement par « Annuler » rétablit son Image.
+  evidence: Revue de la story 2.3, partie 2, ligne 16 du journal de tri : seul un commentaire Javadoc le prévoit aujourd'hui.

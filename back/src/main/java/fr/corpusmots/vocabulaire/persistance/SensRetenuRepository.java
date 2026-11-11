@@ -43,4 +43,9 @@ public class SensRetenuRepository implements PanacheRepositoryBase<SensRetenu, U
         lignes.forEach(ligne -> parMot.put((UUID) ligne[0], (Sens) ligne[1]));
         return parMot;
     }
+
+    /** Supprime le Sens retenu de ce Mot de Préparation, s'il en a un. */
+    public void supprimerDe(UUID preparationMotId) {
+        delete("preparationMotId", preparationMotId);
+    }
 }
