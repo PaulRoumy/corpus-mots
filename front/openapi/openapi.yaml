@@ -188,6 +188,36 @@ components:
           description: E-mail du jeton Keycloak ; vide s'il n'y figure pas
         administrateur:
           type: boolean
+    MotPreparationDto:
+      type: object
+      required:
+      - id
+      - motId
+      - forme
+      - ordre
+      - sens
+      - illustre
+      properties:
+        id:
+          description: Identifiant du Mot dans cette Préparation
+          type: string
+          $ref: "#/components/schemas/UUID"
+        motId:
+          description: "Identifiant du Mot du Lexique, partagé par l'école"
+          type: string
+          $ref: "#/components/schemas/UUID"
+        forme:
+          type: string
+          description: "Première forme saisie dans l'école, sans article"
+        ordre:
+          type: integer
+          format: int32
+          description: "Place dans l'ordre de saisie, à partir de 1"
+        sens:
+          $ref: "#/components/schemas/SensPreparationDto"
+        illustre:
+          type: boolean
+          description: Vrai si une Image est liée au Mot dans cette Préparation
     NomAfficheDto:
       type: object
       required:
@@ -213,6 +243,14 @@ components:
         nom:
           type: string
           maxLength: 200
+    NouveauMotPreparationDto:
+      type: object
+      required:
+      - saisie
+      properties:
+        saisie:
+          type: string
+          description: De 1 à 100 caractères une fois normalisé
     NouvelAlbumDto:
       type: object
       required:
@@ -368,6 +406,20 @@ components:
       properties:
         administrateur:
           type: boolean
+    SensPreparationDto:
+      type: object
+      required:
+      - id
+      - libelle
+      properties:
+        id:
+          $ref: "#/components/schemas/UUID"
+        libelle:
+          type: string
+          description: « à compléter » pour le Sens par défaut
+        categorie:
+          type: string
+          description: "Catégorie grammaticale, absente si elle reste à compléter"
     ThemeDto:
       type: object
       required:
@@ -834,6 +886,54 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/PreparationDto"
+      tags:
+      - Preparations Resource
+  /api/preparations/{id}/mots:
+    get:
+      summary: "Mots d'une Préparation de l'enseignant connecté, dans l'ordre de saisie"
+      operationId: listerMotsPreparation
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          $ref: "#/components/schemas/UUID"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/MotPreparationDto"
+      tags:
+      - Preparations Resource
+    post:
+      summary: "Ajouter en fin de Préparation de l'enseignant connecté un Mot saisi,\
+        \ normalisé par le Lexique"
+      operationId: ajouterMotPreparation
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          $ref: "#/components/schemas/UUID"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/NouveauMotPreparationDto"
+      responses:
+        "201":
+          description: "Mot ajouté, avec le Sens retenu pour lui"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MotPreparationDto"
+        "400":
+          description: Bad Request
       tags:
       - Preparations Resource
   /api/preparations/{id}/reglages:

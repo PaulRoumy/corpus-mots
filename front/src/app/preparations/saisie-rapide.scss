@@ -1,0 +1,27 @@
+// Champ de saisie rapide (key-preparation.html › `.field`) : champ rempli Material, valeur en typographie de saisie,
+// aide « Entrée pour ajouter » à droite.
+:host {
+  display: block;
+}
+
+.saisie-rapide__champ {
+  width: 100%;
+
+  input {
+    font: var(--cm-typo-input);
+  }
+}
+
+.saisie-rapide__aide {
+  padding-inline-end: var(--cm-espace-4);
+  font: var(--cm-typo-body-sm);
+  color: var(--mat-sys-on-surface-variant);
+  white-space: nowrap;
+}
+
+.saisie-rapide__erreur {
+  margin: var(--cm-espace-1) 0 0;
+  padding-inline-start: var(--cm-espace-4);
+  font: var(--cm-typo-body-sm);
+  color: var(--mat-sys-error);
+}

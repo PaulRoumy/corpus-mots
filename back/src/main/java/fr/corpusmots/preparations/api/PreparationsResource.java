@@ -14,6 +14,7 @@ import jakarta.ws.rs.PathParam;
 import jakarta.ws.rs.Produces;
 import jakarta.ws.rs.QueryParam;
 import jakarta.ws.rs.core.MediaType;
+import java.util.List;
 import java.util.UUID;
 import org.eclipse.microprofile.openapi.annotations.Operation;
 import org.eclipse.microprofile.openapi.annotations.media.Content;
@@ -83,5 +84,30 @@ public class PreparationsResource {
             throw new ErreurMetier(400, "requete.invalide", "Le corps de la requête est obligatoire");
         }
         return PreparationDto.de(preparations.regler(id, reglages.enCommande()));
+    }
+
+    @POST
+    @Path("/{id}/mots")
+    @Consumes(MediaType.APPLICATION_JSON)
+    @ResponseStatus(201)
+    @Operation(operationId = "ajouterMotPreparation",
+            summary = "Ajouter en fin de Préparation de l'enseignant connecté un Mot saisi, normalisé par le Lexique")
+    @APIResponse(responseCode = "201", description = "Mot ajouté, avec le Sens retenu pour lui",
+            content = @Content(mediaType = MediaType.APPLICATION_JSON,
+                    schema = @Schema(implementation = MotPreparationDto.class)))
+    public MotPreparationDto ajouterMot(@PathParam("id") UUID id,
+            @RequestBody(required = true) NouveauMotPreparationDto nouveau) {
+        if (nouveau == null) {
+            throw new ErreurMetier(400, "requete.invalide", "Le corps de la requête est obligatoire");
+        }
+        return MotPreparationDto.de(preparations.ajouterMot(id, nouveau.saisie()));
+    }
+
+    @GET
+    @Path("/{id}/mots")
+    @Operation(operationId = "listerMotsPreparation",
+            summary = "Mots d'une Préparation de l'enseignant connecté, dans l'ordre de saisie")
+    public List<MotPreparationDto> listerMots(@PathParam("id") UUID id) {
+        return preparations.motsDe(id).stream().map(MotPreparationDto::de).toList();
     }
 }

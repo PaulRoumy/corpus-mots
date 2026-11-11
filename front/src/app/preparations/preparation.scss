@@ -134,3 +134,21 @@
   gap: var(--cm-espace-2);
   min-width: 0;
 }
+
+// Champ de saisie rapide sous l'En-tête, puis Grille des Mots (key-preparation.html › `.field`, `.words`, story 2.3).
+// Écart vertical : celui de `.page`.
+.mots__titre {
+  margin: 0 0 var(--cm-espace-3);
+  font: var(--cm-typo-label);
+  color: var(--mat-sys-on-surface-variant);
+}
+
+// Grille à remplissage automatique, dans l'ordre de saisie.
+.mots__grille {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(var(--cm-largeur-carte-min), 1fr));
+  gap: var(--cm-espace-3);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}

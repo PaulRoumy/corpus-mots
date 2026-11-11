@@ -104,6 +104,7 @@
 - source_spec: `docs/realisation/spec-2-2-en-tete-de-preparation-modifiable.md`
   summary: Story 2.3 : brancher `Usages.changerContextePreparation` sur le changement de Module dans `PreparationsService.regler`.
   evidence: Revue de la story 2.2, partie 1, ligne 12 du journal de tri. `Usages` n'existait pas avant la story 2.3, et l'appel prévu par AD-14 et par le critère de la story 2.2 n'est pas fait.
+  status: sans objet (`docs/realisation/spec-2-3-saisir-des-mots-en-serie.md`, Design Notes) : `sens_retenu` n'a pas de colonne Module (AD-14), un changement de Module ne touche aucun usage ; `changerContextePreparation` (Album, Section) attend son premier appelant, la duplication (story 2.10).
 - source_spec: `docs/realisation/spec-2-2-en-tete-de-preparation-modifiable.md`
   summary: Story 2.2, partie 2 : après `preparation.module_invalide` dans l'En-tête, recharger la liste des Modules et retirer le Module disparu, au lieu de renvoyer la même valeur.
   evidence: Revue de la story 2.2, partie 1, ligne 17 du journal de tri. Une fois un Module supprimé, « Réessayer » renverrait le même Module invalide, et tout enregistrement suivant échouerait.
@@ -114,3 +115,15 @@
 - source_spec: `docs/realisation/spec-2-2-3-themes.md`
   summary: Story 2.6 : quand `vocabulaire` implémentera `UtilisationThemes`, empêcher qu'une Image reçoive un Thème en cours de suppression (verrou partagé entre la vérification `theme.utilise` et l'affectation).
   evidence: Revue de la story 2.2, partie 3, ligne 10 du journal de tri (non vérifié, gravité moyenne si confirmé) : `supprimerTheme` interroge les utilisations sans verrou ; aucune affectation n'existe encore pour le démontrer.
+- source_spec: none
+  summary: Story 2.3, partie 2 : retirer un Mot de la Préparation sans confirmation, Bandeau « Annuler » de 8 s, Mot libéré par `Usages.libererPreparationMot`, et « Annuler » qui le rétablit avec son Sens (et sa place).
+  evidence: Découpage de la story 2.3 choisi par Paul (trois objectifs livrables séparément) ; la partie 1 pose la saisie, le Lexique, `Usages` et la Grille.
+- source_spec: none
+  summary: Story 2.3, partie 3 : Thème de chaque Mot, prérempli par le Thème par défaut de la Préparation et modifiable mot par mot (FR-6) ; stockage dans `preparation_mot` et retrait par `ThemesDesPreparations` à la suppression du Thème ; interface à concevoir (aucune maquette ne la décrit).
+  evidence: Découpage de la story 2.3 choisi par Paul ; ni l'architecture ni l'UX ne fixent où vit le Thème d'un Mot ni comment le changer sur une Carte.
+- source_spec: `docs/realisation/spec-2-3-saisir-des-mots-en-serie.md`
+  summary: Story 2.10 : supprimer une Préparation appelle d'abord `Usages.libererPreparation`, pour ne laisser aucun `sens_retenu` (ni `lien_image`) orphelin ; la cascade de `preparation_mot` ne touche pas les tables de `vocabulaire`.
+  evidence: Revue de la story 2.3, partie 1, ligne 8 du journal de tri : des `sens_retenu` orphelins garderaient `enseignant_id` et continueraient d'alimenter le Sens « le plus récent ».
+- source_spec: `docs/realisation/spec-2-3-saisir-des-mots-en-serie.md`
+  summary: Epic 6 : la fusion d'Albums (`AlbumsFusionnes`) réécrit aussi `sens_retenu.album_id` (et `lien_image.album_id`), copiés depuis la Préparation.
+  evidence: Revue de la story 2.3, partie 1, ligne 9 du journal de tri : seule la réécriture de `preparation.album_id` est prévue aujourd'hui.

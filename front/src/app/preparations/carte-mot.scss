@@ -1,0 +1,64 @@
+// Carte de Mot (key-preparation.html › `.wc`, `.todo .l`) ; la Carte « à illustrer » ne porte pas encore les
+// suggestions ARASAAC (story 2.4) : elle occupe une seule colonne de la Grille.
+:host {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--cm-espace-2);
+  box-sizing: border-box;
+  height: 100%;
+  padding: var(--cm-espace-3) var(--cm-espace-2);
+  border-radius: var(--cm-arrondi-lg);
+  background: var(--mat-sys-surface);
+  box-shadow: var(--cm-elevation-1);
+  text-align: center;
+}
+
+:host(.carte-mot--a-illustrer) {
+  border: var(--cm-epaisseur-bordure-a-illustrer) dashed var(--cm-etat-a-illustrer-bordure);
+  background: var(--cm-etat-a-illustrer-fond);
+  box-shadow: none;
+  color: var(--cm-etat-a-illustrer-texte);
+}
+
+.carte-mot__vignette {
+  display: grid;
+  place-items: center;
+  box-sizing: border-box;
+  width: var(--cm-taille-vignette-vide);
+  height: var(--cm-taille-vignette-vide);
+  border: var(--cm-epaisseur-bordure-a-illustrer) dashed var(--cm-etat-a-illustrer-bordure);
+  border-radius: var(--cm-arrondi-md);
+
+  mat-icon {
+    width: var(--cm-taille-icone-grande);
+    height: var(--cm-taille-icone-grande);
+  }
+}
+
+.carte-mot__mot {
+  max-width: 100%;
+  overflow-wrap: anywhere;
+  font: var(--cm-typo-word-cursive);
+  color: var(--mat-sys-on-surface);
+}
+
+.carte-mot__etat {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--cm-espace-1);
+  height: var(--cm-hauteur-badge);
+  padding: 0 var(--cm-espace-2);
+  border-radius: var(--cm-arrondi-sm);
+  background: var(--cm-etat-a-illustrer-fond);
+  color: var(--cm-etat-a-illustrer-texte);
+  font: var(--cm-typo-label-sm);
+  white-space: nowrap;
+
+  mat-icon {
+    flex: none;
+    width: var(--cm-taille-icone-badge);
+    height: var(--cm-taille-icone-badge);
+  }
+}

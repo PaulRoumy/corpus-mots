@@ -31,7 +31,9 @@ import { lireAlbum } from '../api/fn/albums-resource/lire-album';
 import { listerModulesDeLAlbum } from '../api/fn/albums-resource/lister-modules-de-l-album';
 import { renommerModule } from '../api/fn/modules-resource/renommer-module';
 import { supprimerModule } from '../api/fn/modules-resource/supprimer-module';
+import { ajouterMotPreparation } from '../api/fn/preparations-resource/ajouter-mot-preparation';
 import { lirePreparation } from '../api/fn/preparations-resource/lire-preparation';
+import { listerMotsPreparation } from '../api/fn/preparations-resource/lister-mots-preparation';
 import { reglerPreparation } from '../api/fn/preparations-resource/regler-preparation';
 import { creerTheme } from '../api/fn/themes-resource/creer-theme';
 import { listerThemes } from '../api/fn/themes-resource/lister-themes';
@@ -39,6 +41,7 @@ import { renommerTheme } from '../api/fn/themes-resource/renommer-theme';
 import { supprimerTheme } from '../api/fn/themes-resource/supprimer-theme';
 import { AlbumDto } from '../api/models/album-dto';
 import { ModuleDto } from '../api/models/module-dto';
+import { MotPreparationDto } from '../api/models/mot-preparation-dto';
 import { PreparationDto } from '../api/models/preparation-dto';
 import { ThemeDto } from '../api/models/theme-dto';
 import { BandeauErreur } from '../commun/bandeau-erreur/bandeau-erreur';
@@ -48,13 +51,19 @@ import { DialogueConfirmation } from '../commun/dialogue-confirmation/dialogue-c
 import { codeErreur, MESSAGES_PAR_CODE, messageErreur } from '../commun/erreurs/message-erreur';
 import { RepereSection } from '../commun/repere-section/repere-section';
 import { Squelette } from '../commun/squelette/squelette';
+import { CarteMot } from './carte-mot';
 import { ChampNomModule } from './champ-nom-module';
 import { ouvrirDialogueCorrigerAlbum } from './corriger-album-dialogue';
 import { libelleMots } from './preparations';
+import { SaisieRapide } from './saisie-rapide';
 
-/** « 0 déjà illustrés », « 1 déjà illustré ». */
-export function libelleIllustres(nombre: number): string {
-  return `${nombre} déjà illustré${nombre === 1 ? '' : 's'}`;
+/**
+ * « 1 déjà illustré », « 3 déjà illustrés » ; à zéro, l'accord suit le nombre de Mots : « 1 mot, 0 déjà illustré »,
+ * « 2 mots, 0 déjà illustrés ».
+ */
+export function libelleIllustres(nombre: number, nombreMots: number = nombre): string {
+  const accord = nombre === 0 ? nombreMots : nombre;
+  return `${nombre} déjà illustré${accord === 1 ? '' : 's'}`;
 }
 
 /** Borne haute du Temps passé, en heures (le back refuse au-delà de 6 000 minutes). */
@@ -106,6 +115,28 @@ interface ErreurAffichee {
   readonly reessayer: () => void;
 }
 
+/** Mots dont l'ajout a échoué (autrement que par un doublon), et le message du dernier échec. */
+interface EchecAjout {
+  readonly saisies: readonly string[];
+  readonly message: string;
+}
+
+/** « « citrouille » n'a pas été ajouté. », « « a », « b » n'ont pas été ajoutés. », suivi du message de l'échec. */
+export function messageEchecAjout(echec: EchecAjout): string {
+  const mots = echec.saisies.map((saisie) => `« ${saisie} »`).join(', ');
+  const verbe = echec.saisies.length === 1 ? "n'a pas été ajouté" : "n'ont pas été ajoutés";
+  return `${mots} ${verbe}. ${echec.message}`;
+}
+
+/**
+ * Refus d'un Mot déjà présent, qui le nomme : l'enseignant peut déjà taper le Mot suivant quand il s'affiche.
+ * « Ce mot est déjà dans la préparation : « citrouille ». »
+ */
+export function messageMotDejaPresent(saisie: string): string {
+  const message = MESSAGES_PAR_CODE['preparation.mot_deja_present'].replace(/\.$/, '');
+  return `${message} : « ${saisie} ».`;
+}
+
 /** Champ de l'En-tête relu après une suppression : le Module ou le Thème par défaut. */
 type Source = 'module' | 'theme';
 
@@ -144,6 +175,13 @@ function parNom(themes: ThemeDto[]): ThemeDto[] {
  * le dialogue de correction ; l'Album corrigé met à jour le titre de l'En-tête et de l'onglet, sans recharger la page.
  * Le focus revient au bouton du menu à la fermeture du dialogue.
  *
+ * Mots (story 2.3, partie 1) : sous l'En-tête, le Champ de saisie rapide et la Grille des Mots, chargés avec la
+ * Préparation ; le champ prend le focus si la Préparation n'a aucun Mot. Chaque Mot tapé suivi d'Entrée est envoyé dès
+ * que le précédent a reçu sa réponse, dans l'ordre de frappe ; la Carte « à illustrer » du Mot ajouté apparaît en fin
+ * de Grille sans prendre le focus, et le compteur de l'En-tête suit la Grille. Un Mot déjà présent est refusé sous le
+ * champ, où la saisie revient s'il est vide ; tout autre échec ouvre un Bandeau d'erreur qui nomme le Mot, et
+ * « Réessayer » le renvoie.
+ *
  * Le Temps passé est un champ texte en mode de saisie décimal plutôt qu'un `type="number"` : celui-ci, selon la langue
  * du navigateur, refuse la virgule sans le dire (sa valeur devient vide, comme un champ effacé).
  */
@@ -151,6 +189,7 @@ function parNom(themes: ThemeDto[]): ThemeDto[] {
   selector: 'app-preparation',
   imports: [
     BandeauErreur,
+    CarteMot,
     ChampNomModule,
     ChampThemes,
     MatButtonModule,
@@ -161,6 +200,7 @@ function parNom(themes: ThemeDto[]): ThemeDto[] {
     MatSelectModule,
     ReactiveFormsModule,
     RepereSection,
+    SaisieRapide,
     Squelette,
   ],
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -199,6 +239,22 @@ function parNom(themes: ThemeDto[]): ThemeDto[] {
             [message]="affichee.message"
             (reessayer)="affichee.reessayer()"
             (fermer)="erreurTheme.set(null)"
+          />
+        }
+        @if (erreurMots(); as message) {
+          <app-bandeau-erreur
+            class="erreur-mots"
+            [message]="message"
+            (reessayer)="chargerMots(courante.id)"
+            (fermer)="erreurMots.set(null)"
+          />
+        }
+        @if (echecAjout(); as echec) {
+          <app-bandeau-erreur
+            class="erreur-ajout"
+            [message]="messageEchecAjout(echec)"
+            (reessayer)="reessayerAjouts()"
+            (fermer)="echecAjout.set(null)"
           />
         }
         @if (erreurListes(); as message) {
@@ -324,9 +380,9 @@ function parNom(themes: ThemeDto[]): ThemeDto[] {
             </div>
             <div class="entete__bas">
               <p class="entete__compteur">
-                <strong>{{ libelleMots(courante.nombreMots) }}</strong
+                <strong>{{ libelleMots(nombreMots()) }}</strong
                 >,
-                {{ libelleIllustres(courante.nombreIllustres) }}
+                {{ libelleIllustres(courante.nombreIllustres, nombreMots()) }}
               </p>
               <mat-form-field class="entete__champ entete__temps" subscriptSizing="dynamic">
                 <mat-label>Temps passé (facultatif)</mat-label>
@@ -347,6 +403,25 @@ function parNom(themes: ThemeDto[]): ThemeDto[] {
             </div>
           </div>
         </section>
+        @if (mots(); as motsCharges) {
+          <app-saisie-rapide
+            [focusInitial]="motsCharges.length === 0"
+            (ajouter)="ajouterMot($event)"
+          />
+          @if (motsCharges.length > 0) {
+            <section class="mots" aria-labelledby="mots-titre">
+              <h2 id="mots-titre" class="mots__titre">Mots de la préparation</h2>
+              <ul class="mots__grille">
+                @for (mot of motsCharges; track mot.id) {
+                  <li class="mots__element"><app-carte-mot [mot]="mot" /></li>
+                }
+              </ul>
+            </section>
+          }
+        } @else if (!erreurMots()) {
+          <app-squelette forme="carte" [nombre]="3" />
+        }
+        <p class="cm-visuellement-masque" aria-live="polite">{{ annonce() }}</p>
       } @else if (chargementEnCours()) {
         <app-squelette forme="texte" [nombre]="3" />
       }
@@ -367,6 +442,7 @@ export class Preparation {
   protected readonly libelleIllustres = libelleIllustres;
   protected readonly messageTempsInvalide = MESSAGE_TEMPS_PASSE_INVALIDE;
   protected readonly optionNouveauModule = OPTION_NOUVEAU_MODULE;
+  protected readonly messageEchecAjout = messageEchecAjout;
 
   /** Préparation telle que le back l'a renvoyée en dernier. */
   protected readonly preparation = signal<PreparationDto | null>(null);
@@ -445,6 +521,21 @@ export class Preparation {
     return compte.administrateur || album.createurId === compte.id ? album : null;
   });
 
+  /** Mots de la Préparation dans l'ordre de saisie ; `null` tant qu'ils ne sont pas chargés. */
+  protected readonly mots = signal<MotPreparationDto[] | null>(null);
+  protected readonly erreurMots = signal<string | null>(null);
+  protected readonly echecAjout = signal<EchecAjout | null>(null);
+  /** Dernier Mot ajouté, annoncé aux lecteurs d'écran : le focus reste dans le champ. */
+  protected readonly annonce = signal('');
+  /** Compteur de l'En-tête : la Grille une fois chargée, sinon le nombre lu avec la Préparation. */
+  protected readonly nombreMots = computed(
+    () => this.mots()?.length ?? this.preparation()?.nombreMots ?? 0,
+  );
+  private readonly saisieRapide = viewChild(SaisieRapide);
+  /** Saisies en attente d'envoi, dans l'ordre de frappe ; envoyées une à une. */
+  private fileAjouts: string[] = [];
+  private ajoutEnCours = false;
+
   /** Numéro du dernier chargement : la réponse d'une Préparation quittée depuis n'écrit rien. */
   private dernierChargement = 0;
   /** Vrai pendant un enregistrement : un changement survenu entre-temps est envoyé après lui. */
@@ -476,6 +567,11 @@ export class Preparation {
     this.erreurRenommageTheme.set(null);
     this.erreurTheme.set(null);
     this.enregistrementEnAttente = false;
+    this.mots.set(null);
+    this.erreurMots.set(null);
+    this.echecAjout.set(null);
+    this.annonce.set('');
+    this.fileAjouts = [];
     try {
       const preparation = await this.api.invoke(lirePreparation, { id });
       if (numero === this.dernierChargement) {
@@ -486,6 +582,7 @@ export class Preparation {
         this.erreur.set(null);
         this.titre.setTitle(`${preparation.titreAlbum} · corpus-mots`);
         void this.chargerListes(preparation.albumId);
+        void this.chargerMots(preparation.id);
       }
     } catch (erreur) {
       if (numero === this.dernierChargement) {
@@ -518,6 +615,85 @@ export class Preparation {
       if (numero === this.dernierChargement) {
         this.erreurListes.set(messageErreur(erreur));
       }
+    }
+  }
+
+  /** Mots de la Préparation ; en échec, leur propre Bandeau d'erreur, l'En-tête reste affiché. */
+  async chargerMots(id: string): Promise<void> {
+    const numero = this.dernierChargement;
+    this.erreurMots.set(null);
+    try {
+      const mots = await this.api.invoke(listerMotsPreparation, { id });
+      if (numero === this.dernierChargement) {
+        this.mots.set(mots);
+      }
+    } catch (erreur) {
+      if (numero === this.dernierChargement) {
+        this.erreurMots.set(messageErreur(erreur));
+      }
+    }
+  }
+
+  /** Entrée dans le Champ de saisie rapide : la saisie attend son tour, derrière les précédentes. */
+  protected ajouterMot(saisie: string): void {
+    this.fileAjouts.push(saisie);
+    void this.envoyerAjouts();
+  }
+
+  /** « Réessayer » : les Mots en échec repartent, dans leur ordre, derrière ceux qui attendent déjà. */
+  protected reessayerAjouts(): void {
+    const echec = this.echecAjout();
+    this.echecAjout.set(null);
+    if (echec !== null) {
+      this.fileAjouts.push(...echec.saisies);
+      void this.envoyerAjouts();
+    }
+  }
+
+  /** Envoie les saisies en attente une à une, chacune après la réponse de la précédente. */
+  private async envoyerAjouts(): Promise<void> {
+    if (this.ajoutEnCours) {
+      return;
+    }
+    this.ajoutEnCours = true;
+    try {
+      let saisie = this.fileAjouts.shift();
+      while (saisie !== undefined) {
+        await this.envoyerAjout(saisie);
+        saisie = this.fileAjouts.shift();
+      }
+    } finally {
+      this.ajoutEnCours = false;
+    }
+  }
+
+  private async envoyerAjout(saisie: string): Promise<void> {
+    const preparation = this.preparation();
+    if (preparation === null) {
+      return;
+    }
+    const numero = this.dernierChargement;
+    try {
+      const ajoute = await this.api.invoke(ajouterMotPreparation, {
+        id: preparation.id,
+        body: { saisie },
+      });
+      if (numero === this.dernierChargement) {
+        this.mots.update((mots) => (mots === null ? mots : [...mots, ajoute]));
+        this.annonce.set(`« ${ajoute.forme} » ajouté.`);
+      }
+    } catch (erreur) {
+      if (numero !== this.dernierChargement) {
+        return;
+      }
+      if (codeErreur(erreur) === 'preparation.mot_deja_present') {
+        this.saisieRapide()?.refuser(messageMotDejaPresent(saisie), saisie);
+        return;
+      }
+      this.echecAjout.update((echec) => ({
+        saisies: [...(echec?.saisies ?? []), saisie],
+        message: messageErreur(erreur),
+      }));
     }
   }
 

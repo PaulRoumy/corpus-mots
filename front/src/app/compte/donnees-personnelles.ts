@@ -32,7 +32,10 @@ import { ChangeDetectionStrategy, Component } from '@angular/core';
         <h3 class="donnees__sous-titre">Votre travail dans l'application</h3>
         <ul class="donnees__liste">
           <li>les Images que vous ajoutez, avec leur auteur : votre nom affiché ;</li>
-          <li>vos Préparations ;</li>
+          <li>
+            vos Préparations et leurs Mots ; un Mot tapé rejoint le lexique de l'école, sans nom
+            d'auteur, et y reste après la suppression du compte ;
+          </li>
           <li>l'historique des Fiches que vous générez ;</li>
           <li>vos notifications ;</li>
           <li>les mois au cours desquels vous avez utilisé l'application.</li>
@@ -99,7 +102,8 @@ import { ChangeDetectionStrategy, Component } from '@angular/core';
           <li>
             après la suppression d'un compte, ses données sont effacées de l'application. Les Images
             versées dans la Banque restent à l'école, attribuées à « ancien membre de l'équipe ».
-            Les données effacées restent jusqu'à 14 jours dans les sauvegardes, puis disparaissent.
+            Les Mots tapés restent dans le lexique de l'école, sans nom d'auteur. Les données
+            effacées restent jusqu'à 14 jours dans les sauvegardes, puis disparaissent.
           </li>
         </ul>
         <p class="donnees__paragraphe">

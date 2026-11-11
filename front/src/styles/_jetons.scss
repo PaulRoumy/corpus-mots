@@ -189,6 +189,11 @@ $typographie-material: (
   --cm-largeur-champ-temps: 200px;
   // Largeur minimale de la saisie d'un Champ à étiquettes des Thèmes, à côté des puces (story 2.2, partie 3).
   --cm-largeur-saisie-etiquette: 120px;
+  // Carte « à illustrer » (key-preparation.html › `.todo`) : bordure tirets, vignette vide, badge d'état (`.st`).
+  --cm-epaisseur-bordure-a-illustrer: 2px;
+  --cm-taille-vignette-vide: 56px;
+  --cm-hauteur-badge: 22px;
+  --cm-taille-icone-badge: 14px;
 
   // Graisse forte (entrée active de la navigation) et plan du lien d'évitement, au-dessus de la coquille
   --cm-graisse-forte: 900;

@@ -9,6 +9,7 @@ import { MATERIAL_ANIMATIONS } from '@angular/material/core';
 import { Title } from '@angular/platform-browser';
 import { AlbumDto } from '../api/models/album-dto';
 import { ModuleDto } from '../api/models/module-dto';
+import { MotPreparationDto } from '../api/models/mot-preparation-dto';
 import { PreparationDto } from '../api/models/preparation-dto';
 import { ThemeDto } from '../api/models/theme-dto';
 import { CompteCourant } from '../commun/compte-courant';
@@ -84,6 +85,22 @@ const MODULES_LOUP: ModuleDto[] = [
 ];
 
 const URL_REGLAGES = `/api/preparations/${ID}/reglages`;
+const URL_MOTS = `/api/preparations/${ID}/mots`;
+
+/** Mot de la Préparation, « à illustrer », avec le Sens par défaut. */
+function motPreparation(forme: string, ordre: number): MotPreparationDto {
+  const suffixe = String(ordre).padStart(4, '0');
+  return {
+    id: `0190f0a0-0000-7000-8000-0000000f${suffixe}`,
+    motId: `0190f0a0-0000-7000-8000-0000000e${suffixe}`,
+    forme,
+    ordre,
+    sens: { id: `0190f0a0-0000-7000-8000-0000000d${suffixe}`, libelle: 'à compléter' },
+    illustre: false,
+  };
+}
+
+const MOT_CITROUILLE = motPreparation('citrouille', 1);
 
 describe('Preparation (En-tête)', () => {
   let fixture: ComponentFixture<Preparation>;
@@ -118,19 +135,28 @@ describe('Preparation (En-tête)', () => {
 
   const texte = (selecteur: string) =>
     racine.querySelector(selecteur)?.textContent?.replace(/\s+/g, ' ').trim();
+  /** Mot de chaque Carte de la Grille, dans l'ordre. */
+  const cartes = () =>
+    [...racine.querySelectorAll('.mots__grille app-carte-mot .carte-mot__mot')].map((mot) =>
+      mot.textContent?.trim(),
+    );
 
-  /** Répond à la lecture de la Préparation, puis à celle de son Album et aux listes de Modules et de Thèmes. */
+  /**
+   * Répond à la lecture de la Préparation, puis à celle de son Album, aux listes de Modules et de Thèmes et à ses Mots.
+   */
   async function ouvrir(
     preparation: PreparationDto = PREPARATION,
     modules: ModuleDto[] = MODULES,
     themes: ThemeDto[] = THEMES,
     album: AlbumDto = albumDe(preparation),
+    mots: MotPreparationDto[] = [],
   ) {
     serveur.expectOne(`/api/preparations/${preparation.id}`).flush(preparation);
     await stabiliser();
     serveur.expectOne(`/api/albums/${preparation.albumId}`).flush(album);
     serveur.expectOne(`/api/albums/${preparation.albumId}/modules`).flush(modules);
     serveur.expectOne('/api/themes').flush(themes);
+    serveur.expectOne(`/api/preparations/${preparation.id}/mots`).flush(mots);
     await stabiliser();
   }
 
@@ -482,6 +508,7 @@ describe('Preparation (En-tête)', () => {
     serveur.expectOne(`/api/albums/${ALBUM}`).flush(albumDe(PREPARATION));
     serveur.expectOne(`/api/albums/${ALBUM}/modules`).error(new ProgressEvent('error'));
     serveur.expectOne('/api/themes').flush(THEMES);
+    serveur.expectOne(`/api/preparations/${ID}/mots`).flush([]);
     await stabiliser();
 
     expect(bandeau('erreur-listes')).toBe(MESSAGE_RESEAU);
@@ -546,6 +573,7 @@ describe('Preparation (En-tête)', () => {
     const albumA = serveur.expectOne(`/api/albums/${ALBUM}`);
     const modulesA = serveur.expectOne(`/api/albums/${ALBUM}/modules`);
     const [themesA] = serveur.match('/api/themes');
+    const motsA = serveur.expectOne(`/api/preparations/${ID}/mots`);
 
     fixture.componentRef.setInput('id', AUTRE_ID);
     await stabiliser();
@@ -553,7 +581,9 @@ describe('Preparation (En-tête)', () => {
     albumA.flush(albumDe(PREPARATION, MOI));
     modulesA.flush(MODULES);
     themesA.flush(THEMES);
+    motsA.flush([MOT_CITROUILLE]);
     await stabiliser();
+    expect(cartes()).toEqual([]);
 
     champ('Module')!.querySelector<HTMLElement>('.mat-mdc-select-trigger')!.click();
     await stabiliser();
@@ -1570,6 +1600,7 @@ describe('Preparation (En-tête)', () => {
       const albumA = serveur.expectOne(URL_ALBUM);
       serveur.expectOne(`/api/albums/${ALBUM}/modules`).flush(MODULES);
       serveur.expectOne('/api/themes').flush(THEMES);
+      serveur.expectOne(`/api/preparations/${ID}/mots`).flush([]);
 
       fixture.componentRef.setInput('id', AUTRE_ID);
       await stabiliser();
@@ -1600,6 +1631,228 @@ describe('Preparation (En-tête)', () => {
       expect(document.activeElement).toBe(boutonActions());
     });
   });
+
+  describe('Mots (story 2.3, partie 1)', () => {
+    const champSaisie = () => racine.querySelector<HTMLInputElement>('app-saisie-rapide input')!;
+    const erreurSaisie = () => texte('.saisie-rapide__erreur');
+
+    /** Tape `saisie` dans le Champ de saisie rapide, puis Entrée. */
+    async function taper(saisie: string) {
+      champSaisie().value = saisie;
+      champSaisie().dispatchEvent(new Event('input'));
+      champSaisie().dispatchEvent(
+        new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }),
+      );
+      await stabiliser();
+    }
+
+    /** Envoi en cours de `saisie`. */
+    const ajout = (saisie: string): TestRequest =>
+      serveur.expectOne(
+        (requete) =>
+          requete.method === 'POST' && requete.url === URL_MOTS && requete.body?.saisie === saisie,
+      );
+
+    const deja = () =>
+      [
+        { status: 409, code: 'preparation.mot_deja_present' },
+        { status: 409, statusText: 'Conflict' },
+      ] as const;
+
+    it('Préparation sans Mot : « Ajouter un mot » a le focus et affiche « Entrée pour ajouter »', async () => {
+      await ouvrir();
+
+      expect(champSaisie().labels?.[0]?.textContent?.trim()).toBe('Ajouter un mot');
+      expect(texte('.saisie-rapide__aide')).toBe('Entrée pour ajouter');
+      expect(champSaisie().getAttribute('aria-describedby')).toBe(
+        racine.querySelector('.saisie-rapide__aide')!.id,
+      );
+      expect(document.activeElement).toBe(champSaisie());
+      expect(racine.querySelector('.mots')).toBeNull();
+      expect(texte('.entete__compteur')).toBe('0 mots, 0 déjà illustrés');
+    });
+
+    it('Préparation avec des Mots : Grille dans l’ordre de saisie, Cartes « à illustrer », champ sans focus', async () => {
+      await ouvrir({ ...PREPARATION, nombreMots: 2 }, MODULES, THEMES, albumDe(PREPARATION), [
+        MOT_CITROUILLE,
+        motPreparation('loup', 2),
+      ]);
+
+      expect(texte('.mots__titre')).toBe('Mots de la préparation');
+      expect(cartes()).toEqual(['citrouille', 'loup']);
+      expect(texte('app-carte-mot .carte-mot__etat')).toBe('à illustrer');
+      expect(racine.querySelector('app-carte-mot')!.classList).toContain('carte-mot--a-illustrer');
+      expect(document.activeElement).not.toBe(champSaisie());
+      expect(texte('.entete__compteur')).toBe('2 mots, 0 déjà illustrés');
+    });
+
+    it('« la citrouille » puis Entrée : champ vidé et gardant le focus, Carte en fin de Grille, compteur à jour', async () => {
+      await ouvrir({ ...PREPARATION, nombreMots: 1 }, MODULES, THEMES, albumDe(PREPARATION), [
+        motPreparation('loup', 1),
+      ]);
+      champSaisie().focus();
+
+      await taper('  la citrouille ');
+      const requete = ajout('la citrouille');
+      expect(champSaisie().value).toBe('');
+      expect(document.activeElement).toBe(champSaisie());
+
+      requete.flush(motPreparation('citrouille', 2));
+      await stabiliser();
+
+      expect(cartes()).toEqual(['loup', 'citrouille']);
+      expect(document.activeElement).toBe(champSaisie());
+      expect(texte('.entete__compteur')).toBe('2 mots, 0 déjà illustrés');
+      expect(texte('p[aria-live="polite"]')).toBe('« citrouille » ajouté.');
+    });
+
+    it('le premier Mot ajouté affiche « 1 mot, 0 déjà illustré »', async () => {
+      await ouvrir();
+
+      await taper('la citrouille');
+      ajout('la citrouille').flush(MOT_CITROUILLE);
+      await stabiliser();
+
+      expect(cartes()).toEqual(['citrouille']);
+      expect(texte('.entete__compteur')).toBe('1 mot, 0 déjà illustré');
+    });
+
+    it('une saisie vide ou blanche n’est pas envoyée', async () => {
+      await ouvrir();
+
+      await taper('   ');
+
+      serveur.expectNone(URL_MOTS);
+      expect(cartes()).toEqual([]);
+    });
+
+    it('trois Mots tapés vite : envoyés un à un dans l’ordre de frappe, Cartes dans le même ordre', async () => {
+      await ouvrir();
+
+      await taper('galette');
+      await taper('le renard');
+      await taper('un lapin');
+      // Un seul envoi à la fois : le suivant part après la réponse du précédent.
+      const premier = serveur.expectOne(URL_MOTS);
+      expect(premier.request.body).toEqual({ saisie: 'galette' });
+      premier.flush(motPreparation('galette', 1));
+      await stabiliser();
+      const deuxieme = serveur.expectOne(URL_MOTS);
+      expect(deuxieme.request.body).toEqual({ saisie: 'le renard' });
+      deuxieme.flush(motPreparation('renard', 2));
+      await stabiliser();
+      const troisieme = serveur.expectOne(URL_MOTS);
+      expect(troisieme.request.body).toEqual({ saisie: 'un lapin' });
+      troisieme.flush(motPreparation('lapin', 3));
+      await stabiliser();
+
+      expect(cartes()).toEqual(['galette', 'renard', 'lapin']);
+      expect(texte('.entete__compteur')).toBe('3 mots, 0 déjà illustrés');
+    });
+
+    it('Mot déjà présent : message sous le champ, saisie remise dans le champ resté vide', async () => {
+      await ouvrir({ ...PREPARATION, nombreMots: 1 }, MODULES, THEMES, albumDe(PREPARATION), [
+        MOT_CITROUILLE,
+      ]);
+
+      await taper('la Citrouille');
+      ajout('la Citrouille').flush(...deja());
+      await stabiliser();
+
+      expect(erreurSaisie()).toBe('Ce mot est déjà dans la préparation : « la Citrouille ».');
+      const erreur = racine.querySelector('.saisie-rapide__erreur')!;
+      expect(erreur.getAttribute('role')).toBe('alert');
+      expect(champSaisie().getAttribute('aria-describedby')).toContain(erreur.id);
+      expect(champSaisie().value).toBe('la Citrouille');
+      expect(cartes()).toEqual(['citrouille']);
+      expect(racine.querySelector('app-bandeau-erreur')).toBeNull();
+
+      // La frappe suivante efface le message.
+      champSaisie().value = 'la Citrouill';
+      champSaisie().dispatchEvent(new Event('input'));
+      await stabiliser();
+      expect(erreurSaisie()).toBeUndefined();
+    });
+
+    it('Mot déjà présent pendant la frappe du suivant : la saisie en cours est gardée', async () => {
+      await ouvrir({ ...PREPARATION, nombreMots: 1 }, MODULES, THEMES, albumDe(PREPARATION), [
+        MOT_CITROUILLE,
+      ]);
+
+      await taper('citrouille');
+      champSaisie().value = 'lo';
+      champSaisie().dispatchEvent(new Event('input'));
+      ajout('citrouille').flush(...deja());
+      await stabiliser();
+
+      // Le message nomme le Mot refusé, que le champ ne montre plus.
+      expect(champSaisie().value).toBe('lo');
+      expect(erreurSaisie()).toBe('Ce mot est déjà dans la préparation : « citrouille ».');
+    });
+
+    it('autre échec : Bandeau qui nomme le Mot, la suite est envoyée, « Réessayer » le renvoie', async () => {
+      await ouvrir();
+
+      await taper('citrouille');
+      await taper('loup');
+      ajout('citrouille').error(new ProgressEvent('error'));
+      await stabiliser();
+      expect(bandeau('erreur-ajout')).toBe(`« citrouille » n'a pas été ajouté. ${MESSAGE_RESEAU}`);
+      expect(champSaisie().value).toBe('');
+
+      ajout('loup').error(new ProgressEvent('error'));
+      await stabiliser();
+      expect(bandeau('erreur-ajout')).toBe(
+        `« citrouille », « loup » n'ont pas été ajoutés. ${MESSAGE_RESEAU}`,
+      );
+
+      await reessayer('erreur-ajout');
+      expect(racine.querySelector('app-bandeau-erreur.erreur-ajout')).toBeNull();
+      ajout('citrouille').flush(MOT_CITROUILLE);
+      await stabiliser();
+      ajout('loup').flush(motPreparation('loup', 2));
+      await stabiliser();
+
+      expect(cartes()).toEqual(['citrouille', 'loup']);
+      expect(racine.querySelector('app-bandeau-erreur')).toBeNull();
+    });
+
+    it('échec du chargement des Mots : leur propre Bandeau, « Réessayer » les relit', async () => {
+      serveur.expectOne(`/api/preparations/${ID}`).flush({ ...PREPARATION, nombreMots: 1 });
+      await stabiliser();
+      serveur.expectOne(`/api/albums/${ALBUM}`).flush(albumDe(PREPARATION));
+      serveur.expectOne(`/api/albums/${ALBUM}/modules`).flush(MODULES);
+      serveur.expectOne('/api/themes').flush(THEMES);
+      serveur.expectOne(URL_MOTS).error(new ProgressEvent('error'));
+      await stabiliser();
+
+      expect(bandeau('erreur-mots')).toBe(MESSAGE_RESEAU);
+      expect(racine.querySelector('app-saisie-rapide')).toBeNull();
+      expect(texte('.entete__compteur')).toBe('1 mot, 0 déjà illustré');
+
+      await reessayer('erreur-mots');
+      serveur.expectOne(URL_MOTS).flush([MOT_CITROUILLE]);
+      await stabiliser();
+
+      expect(racine.querySelector('app-bandeau-erreur')).toBeNull();
+      expect(cartes()).toEqual(['citrouille']);
+    });
+
+    it('un ajout répondu après l’ouverture d’une autre Préparation n’écrit rien', async () => {
+      await ouvrir();
+      await taper('citrouille');
+      const requete = ajout('citrouille');
+
+      fixture.componentRef.setInput('id', AUTRE_ID);
+      await stabiliser();
+      await ouvrir(LOUP, MODULES_LOUP, THEMES);
+      requete.flush(MOT_CITROUILLE);
+      await stabiliser();
+
+      expect(cartes()).toEqual([]);
+      expect(texte('.entete__compteur')).toBe('0 mots, 0 déjà illustrés');
+    });
+  });
 });
 
 describe('Libellés', () => {
@@ -1608,6 +1861,14 @@ describe('Libellés', () => {
       '0 déjà illustrés',
       '1 déjà illustré',
       '3 déjà illustrés',
+    ]);
+  });
+
+  it('à zéro, « déjà illustré » s’accorde avec le nombre de Mots', () => {
+    expect([0, 1, 2].map((mots) => libelleIllustres(0, mots))).toEqual([
+      '0 déjà illustrés',
+      '0 déjà illustré',
+      '0 déjà illustrés',
     ]);
   });
 });

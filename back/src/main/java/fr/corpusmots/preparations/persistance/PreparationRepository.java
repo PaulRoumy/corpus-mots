@@ -2,6 +2,7 @@ package fr.corpusmots.preparations.persistance;
 
 import io.quarkus.hibernate.orm.panache.PanacheRepositoryBase;
 import jakarta.enterprise.context.ApplicationScoped;
+import jakarta.persistence.LockModeType;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -30,6 +31,15 @@ public class PreparationRepository implements PanacheRepositoryBase<Preparation,
     /** Préparation {@code id} si elle appartient à cet enseignant. */
     public Optional<Preparation> duProprietaire(UUID id, UUID proprietaireId) {
         return find("id = ?1 and proprietaireId = ?2", id, proprietaireId).firstResultOptional();
+    }
+
+    /**
+     * Préparation {@code id} si elle appartient à cet enseignant, verrouillée ({@code SELECT … FOR UPDATE}) jusqu'à la
+     * fin de la transaction : les ajouts de Mots à une même Préparation passent un à un (place en fin, doublons).
+     */
+    public Optional<Preparation> verrouillee(UUID id, UUID proprietaireId) {
+        return find("id = ?1 and proprietaireId = ?2", id, proprietaireId).withLock(LockModeType.PESSIMISTIC_WRITE)
+                .firstResultOptional();
     }
 
     /** Retire le Module {@code moduleId} de toutes les Préparations qui l'avaient, de tous les enseignants. */

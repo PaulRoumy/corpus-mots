@@ -33,6 +33,8 @@ export const MESSAGES_PAR_CODE: Readonly<Record<string, string>> = {
   'preparation.theme_introuvable': "Ce thème n'existe plus. Choisissez-en un autre.",
   'preparation.temps_passe_invalide':
     "Saisissez un nombre d'heures entre 0 et 100, par demi-heure.",
+  'preparation.mot_invalide': 'Saisissez un mot de 1 à 100 caractères.',
+  'preparation.mot_deja_present': 'Ce mot est déjà dans la préparation.',
   'album.titre_invalide': 'Saisissez un titre de 1 à 200 caractères.',
   'album.auteur_invalide': 'Saisissez un auteur de 1 à 200 caractères.',
   'album.editeur_invalide': 'Saisissez un éditeur de 200 caractères au plus.',
