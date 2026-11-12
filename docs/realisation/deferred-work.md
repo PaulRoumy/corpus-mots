@@ -146,6 +146,7 @@
 - source_spec: none
   summary: Story 2.5, partie 2 : « + › Ajouter une image » ouvre le même téléversement avec la saisie du Mot (normalisé comme en story 2.3), et l'Image est enregistrée dans Mes mots sans lien vers une Préparation.
   evidence: Découpage de la story 2.5 choisi par Paul ; la partie 1 pose le téléversement depuis la Carte « à illustrer » et les fondations de l'Image.
+  status: fait (`docs/realisation/spec-2-5-2-ajouter-une-image.md`).
 - source_spec: none
   summary: Story 2.7 : le Panneau de choix d'Image propose « Téléverser » (« Ajouter une image ») avec le formulaire de la story 2.5.
   evidence: Critère de la story 2.5 qui dépend d'un Panneau livré par la story 2.7.

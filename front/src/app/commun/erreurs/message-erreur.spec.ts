@@ -51,6 +51,8 @@ describe('messageErreur', () => {
     [409, 'preparation.mot_deja_illustre', 'Ce mot a déjà une image dans la préparation.'],
     // vocabulaire.service.Images, Usages
     [400, 'image.album_requis', "Album d'origine requis."],
+    [400, 'image.album_introuvable', "Cet album n'existe plus. Choisissez-en un autre."],
+    [400, 'image.mot_invalide', 'Saisissez un mot de 1 à 100 caractères.'],
     [400, 'image.sens_different', 'Cette image illustre un autre sens que celui du mot.'],
     // vocabulaire.service.SuggestionsArasaac
     [503, 'arasaac.indisponible', "ARASAAC ne répond pas pour l'instant."],

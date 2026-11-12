@@ -1,3 +1,4 @@
+import { LiveAnnouncer } from '@angular/cdk/a11y';
 import { BreakpointObserver } from '@angular/cdk/layout';
 import { provideHttpClient } from '@angular/common/http';
 import {
@@ -190,14 +191,19 @@ describe('Coquille', () => {
       expect(bouton(page(fixture), 'Rubriques')).toBeUndefined();
     });
 
-    it('Bouton « + » : un menu à une entrée, « Nouvelle préparation », qui ouvre le dialogue', async () => {
+    it('Bouton « + » : « Nouvelle préparation », puis « Ajouter une image » ; la première ouvre son dialogue', async () => {
       const fixture = await ouvrir('/', enCompte(ENSEIGNANTE));
       const plus = bouton(page(fixture), 'Ajouter')!;
       plus.click();
       await fixture.whenStable();
 
       expect(plus.getAttribute('aria-expanded')).toBe('true');
-      expect(entreesDuMenu()).toEqual(['Nouvelle préparation']);
+      expect(entreesDuMenu()).toEqual(['Nouvelle préparation', 'Ajouter une image']);
+      expect(
+        bouton(document, 'Ajouter une image')!
+          .querySelector('mat-icon')
+          ?.getAttribute('data-mat-icon-name'),
+      ).toBe('image');
 
       bouton(document, 'Nouvelle préparation')!.click();
       // Le dialogue est chargé à la demande.
@@ -218,6 +224,81 @@ describe('Coquille', () => {
       await tour();
 
       expect(document.querySelector('mat-dialog-container')).toBeNull();
+      expect(document.activeElement).toBe(plus);
+    });
+
+    it('« Ajouter une image » : saisir « citrouille », enregistrer une image libre ; annonce, focus sur le « + »', async () => {
+      const annonce = vi.spyOn(TestBed.inject(LiveAnnouncer), 'announce');
+      const fixture = await ouvrir('/', enCompte(ENSEIGNANTE));
+      const plus = bouton(page(fixture), 'Ajouter')!;
+      plus.click();
+      await fixture.whenStable();
+
+      bouton(document, 'Ajouter une image')!.click();
+      // Le dialogue est chargé à la demande.
+      await import('../preparations/televerser-image-dialogue');
+      await tour();
+      await fixture.whenStable();
+      const dialogue = document.querySelector<HTMLElement>('mat-dialog-container')!;
+      expect(dialogue.querySelector('h2')?.textContent?.trim()).toBe('Téléverser une image');
+
+      const mot = dialogue.querySelector<HTMLInputElement>('.televerser__saisie-mot')!;
+      mot.value = 'citrouille';
+      mot.dispatchEvent(new Event('input'));
+      const selecteur = dialogue.querySelector<HTMLInputElement>('input[type="file"]')!;
+      Object.defineProperty(selecteur, 'files', {
+        value: [new File([new Uint8Array(4)], 'citrouille.png', { type: 'image/png' })],
+      });
+      const creer = URL.createObjectURL;
+      const revoquer = URL.revokeObjectURL;
+      URL.createObjectURL = vi.fn(() => 'blob:http://localhost/apercu');
+      URL.revokeObjectURL = vi.fn();
+      try {
+        selecteur.dispatchEvent(new Event('change'));
+        await fixture.whenStable();
+        dialogue.querySelector<HTMLElement>('.televerser__type .mat-mdc-select-trigger')!.click();
+        await tour();
+        await fixture.whenStable();
+        [...document.querySelectorAll<HTMLElement>('.cdk-overlay-pane mat-option')]
+          .find((option) => option.textContent?.trim() === 'image libre')!
+          .click();
+        await tour();
+        await fixture.whenStable();
+        [...dialogue.querySelectorAll<HTMLButtonElement>('button')]
+          .find((element) => element.textContent?.trim() === 'Enregistrer')!
+          .click();
+        await tour();
+
+        const requete = TestBed.inject(HttpTestingController).expectOne('/api/images');
+        expect((requete.request.body as FormData).get('mot')).toBe('citrouille');
+        requete.flush(
+          {
+            id: '0190f0a0-0000-7000-8000-0000000c0002',
+            proprietaireId: ENSEIGNANTE.id,
+            etat: 'privee',
+            aRemplacer: null,
+            reutilisable: true,
+            typeImage: 'image_libre',
+            aCompleter: true,
+            motId: '0190f0a0-0000-7000-8000-0000000e0001',
+            forme: 'citrouille',
+            sens: { id: '0190f0a0-0000-7000-8000-0000000d0001', libelle: 'à compléter' },
+          },
+          { status: 201, statusText: 'Created' },
+        );
+        await tour();
+        await fixture.whenStable();
+        await tour();
+      } finally {
+        URL.createObjectURL = creer;
+        URL.revokeObjectURL = revoquer;
+      }
+
+      expect(document.querySelector('mat-dialog-container')).toBeNull();
+      expect(annonce).toHaveBeenCalledWith(
+        'Image enregistrée dans Mes mots pour « citrouille ».',
+        'polite',
+      );
       expect(document.activeElement).toBe(plus);
     });
 

@@ -18,6 +18,7 @@ import { map } from 'rxjs';
 import { Authentification } from '../commun/authentification/authentification';
 import { CompteCourant } from '../commun/compte-courant';
 import { MESSAGE_COMPTE_NON_CHARGE, MESSAGES_PAR_CODE } from '../commun/erreurs/message-erreur';
+import { AjouterImage } from '../preparations/ajouter-image';
 import { NouvellePreparation } from '../preparations/nouvelle-preparation';
 
 /**
@@ -91,7 +92,7 @@ import { NouvellePreparation } from '../preparations/nouvelle-preparation';
 
               <span class="coquille__espace"></span>
 
-              <!-- « Ajouter une image » et « Importer des fichiers » s'ajoutent avec les stories 2.5 et 5.x. -->
+              <!-- « Importer des fichiers » s'ajoute avec les stories 5.x. -->
               <button
                 #plus
                 matButton="filled"
@@ -106,6 +107,10 @@ import { NouvellePreparation } from '../preparations/nouvelle-preparation';
                 <button mat-menu-item type="button" (click)="ouvrirNouvellePreparation()">
                   <mat-icon svgIcon="preparation" aria-hidden="true" />
                   Nouvelle préparation
+                </button>
+                <button mat-menu-item type="button" (click)="ouvrirAjouterImage()">
+                  <mat-icon svgIcon="image" aria-hidden="true" />
+                  Ajouter une image
                 </button>
               </mat-menu>
 
@@ -197,6 +202,7 @@ export class Coquille {
   private readonly authentification = inject(Authentification);
   private readonly router = inject(Router);
   private readonly nouvellePreparation = inject(NouvellePreparation);
+  private readonly ajouterImage = inject(AjouterImage);
   private readonly boutonPlus = viewChild('plus', { read: ElementRef<HTMLElement> });
 
   protected readonly messageInactif = MESSAGES_PAR_CODE['compte.inconnu_ou_inactif'];
@@ -244,6 +250,11 @@ export class Coquille {
   /** Choix « Nouvelle préparation » du Bouton « + » : le focus revient au « + » quand le dialogue se ferme. */
   protected ouvrirNouvellePreparation(): void {
     void this.nouvellePreparation.ouvrir(this.boutonPlus()?.nativeElement);
+  }
+
+  /** Choix « Ajouter une image » du Bouton « + » : le focus revient au « + » quand le dialogue se ferme. */
+  protected ouvrirAjouterImage(): void {
+    void this.ajouterImage.ouvrir(this.boutonPlus()?.nativeElement);
   }
 
   protected deconnecter(): void {

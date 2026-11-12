@@ -84,3 +84,10 @@
   color: var(--mat-sys-on-surface-variant);
   font: var(--cm-typo-body-sm);
 }
+
+// Suggestion d'Album (mode « Mes mots ») : icône livre puis titre.
+.televerser__suggestion {
+  display: flex;
+  align-items: center;
+  gap: var(--cm-espace-2);
+}

@@ -11,12 +11,9 @@ import {
 import { FormControl, ReactiveFormsModule } from '@angular/forms';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatInputModule } from '@angular/material/input';
+import { LONGUEUR_MAX_MOT, LONGUEUR_MAX_SAISIE } from './longueurs-mot';
 
-/** Longueur maximale d'un Mot, une fois la saisie normalisée (le back applique la limite exacte). */
-export const LONGUEUR_MAX_MOT = 100;
-
-/** Longueur maximale du champ : un Mot de 100 caractères précédé de l'article le plus long et d'une espace (« une »). */
-export const LONGUEUR_MAX_SAISIE = LONGUEUR_MAX_MOT + 'une '.length;
+export { LONGUEUR_MAX_MOT, LONGUEUR_MAX_SAISIE };
 
 let prochainNumero = 0;
 

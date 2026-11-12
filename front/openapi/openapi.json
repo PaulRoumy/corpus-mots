@@ -2,6 +2,43 @@
   "openapi" : "3.1.0",
   "components" : {
     "schemas" : {
+      "AjoutImageMesMotsDto" : {
+        "type" : "object",
+        "required" : [ "fichier", "mot", "typeImage" ],
+        "properties" : {
+          "fichier" : {
+            "type" : "string",
+            "format" : "binary",
+            "description" : "Fichier JPEG, PNG ou GIF, 20 Mo au plus"
+          },
+          "mot" : {
+            "type" : "string",
+            "description" : "Mot illustré, normalisé comme à la saisie (article initial retiré), 100 caractères au plus"
+          },
+          "typeImage" : {
+            "type" : "string",
+            "enum" : [ "image_album", "image_libre", "photo_personnelle", "inconnu" ]
+          },
+          "source" : {
+            "type" : "string",
+            "description" : "Source de l'image (site, ouvrage…), facultative, 500 caractères au plus"
+          },
+          "licence" : {
+            "type" : "string",
+            "description" : "Licence, facultative ; ignorée pour une photo personnelle ou une image d'album, qui reçoivent la leur",
+            "enum" : [ "arasaac_cc_by_nc_sa", "sclera_cc_by_nc", "mulberry_cc_by_sa", "cc0_domaine_public", "pixabay", "autre_inconnue" ]
+          },
+          "auteur" : {
+            "type" : "string",
+            "description" : "Auteur de l'image, facultatif, 500 caractères au plus"
+          },
+          "albumId" : {
+            "type" : "string",
+            "description" : "Album d'origine, obligatoire pour une image d'album et ignoré sinon",
+            "format" : "uuid"
+          }
+        }
+      },
       "AlbumDto" : {
         "type" : "object",
         "required" : [ "id", "titre", "auteur", "createurId", "nombreModules" ],
@@ -147,6 +184,68 @@
         "properties" : {
           "email" : {
             "type" : "string"
+          }
+        }
+      },
+      "MesMotsImageDto" : {
+        "type" : "object",
+        "required" : [ "id", "proprietaireId", "etat", "reutilisable", "typeImage", "aCompleter", "motId", "forme", "sens" ],
+        "properties" : {
+          "id" : {
+            "$ref" : "#/components/schemas/UUID"
+          },
+          "proprietaireId" : {
+            "$ref" : "#/components/schemas/UUID"
+          },
+          "etat" : {
+            "type" : "string",
+            "enum" : [ "privee", "versee", "abandonnee", "supprimee" ]
+          },
+          "aRemplacer" : {
+            "type" : [ "string", "null" ],
+            "description" : "État « à remplacer », calculé à la lecture ; null tant que l'Image reste disponible",
+            "enum" : [ "retiree", "supprimee" ]
+          },
+          "reutilisable" : {
+            "type" : "boolean",
+            "description" : "Vrai si l'enseignant connecté peut réutiliser cette Image"
+          },
+          "typeImage" : {
+            "type" : "string",
+            "enum" : [ "image_album", "image_libre", "photo_personnelle", "inconnu" ]
+          },
+          "aCompleter" : {
+            "type" : "boolean",
+            "description" : "Vrai pour une image libre sans source ou sans licence"
+          },
+          "motId" : {
+            "description" : "Identifiant du Mot du Lexique, partagé par l'école",
+            "type" : "string",
+            "$ref" : "#/components/schemas/UUID"
+          },
+          "forme" : {
+            "type" : "string",
+            "description" : "Première forme saisie dans l'école, sans article"
+          },
+          "sens" : {
+            "$ref" : "#/components/schemas/MesMotsSensDto"
+          }
+        }
+      },
+      "MesMotsSensDto" : {
+        "type" : "object",
+        "required" : [ "id", "libelle" ],
+        "properties" : {
+          "id" : {
+            "$ref" : "#/components/schemas/UUID"
+          },
+          "libelle" : {
+            "type" : "string",
+            "description" : "« à compléter » pour le Sens par défaut"
+          },
+          "categorie" : {
+            "type" : "string",
+            "description" : "Catégorie grammaticale, absente si elle reste à compléter"
           }
         }
       },
@@ -1089,6 +1188,35 @@
           }
         },
         "tags" : [ "Enseignants Resource" ]
+      }
+    },
+    "/api/images" : {
+      "post" : {
+        "summary" : "Ajouter une Image dans Mes mots de l'enseignant connecté, sans Préparation ; le Mot est créé s'il n'existe pas",
+        "operationId" : "ajouterImage",
+        "requestBody" : {
+          "content" : {
+            "multipart/form-data" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/AjoutImageMesMotsDto"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "201" : {
+            "description" : "Image créée (privee), réduite, sur le Sens par défaut du Mot",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/MesMotsImageDto"
+                }
+              }
+            }
+          }
+        },
+        "tags" : [ "Images Resource" ]
       }
     },
     "/api/images/{id}/fichier" : {

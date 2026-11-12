@@ -2,6 +2,7 @@ package fr.corpusmots.vocabulaire.service;
 
 import fr.corpusmots.commun.api.ErreurMetier;
 import fr.corpusmots.commun.service.EnseignantCourant;
+import fr.corpusmots.referentiels.service.ReferentielsService;
 import fr.corpusmots.vocabulaire.persistance.Image;
 import fr.corpusmots.vocabulaire.persistance.ImageFichier;
 import fr.corpusmots.vocabulaire.persistance.ImageFichierRepository;
@@ -20,6 +21,8 @@ import java.util.UUID;
 public class Images {
 
     static final String CODE_ALBUM_REQUIS = "image.album_requis";
+    static final String CODE_ALBUM_INTROUVABLE = "image.album_introuvable";
+    static final String CODE_MOT_INVALIDE = "image.mot_invalide";
     static final String CODE_REQUETE_INVALIDE = "requete.invalide";
     static final String TYPE_MEDIA_IMAGE = "image";
 
@@ -37,6 +40,55 @@ public class Images {
 
     @Inject
     EnseignantCourant enseignantCourant;
+
+    @Inject
+    Lexique lexique;
+
+    @Inject
+    Usages usages;
+
+    @Inject
+    ReferentielsService referentiels;
+
+    /**
+     * Ajoute une Image dans Mes mots de l'enseignant courant, sans aucun lien vers une Préparation (FR-13) : le Mot
+     * saisi est obtenu ou créé par {@link Lexique#obtenirOuCreerMot}, l'Image illustre son
+     * {@link Usages#sensParDefaut Sens par défaut} et elle est créée par {@link #televerser}. Seule une image d'album
+     * reçoit un Album d'origine, qui doit exister ; l'Album envoyé pour un autre type est ignoré. Aucun Sens retenu ni
+     * lien d'Image n'est écrit. Rien n'est enregistré en cas de refus.
+     *
+     * @throws ErreurMetier {@code 400 image.mot_invalide} si la saisie normalisée par {@link Lexique#normaliser} est
+     *         vide ou dépasse {@value Lexique#LONGUEUR_MAX_FORME} caractères (comme en Préparation : un article seul
+     *         est un Mot) ; {@code 400 image.album_requis} pour une image d'album sans Album ;
+     *         {@code 400 image.album_introuvable} si cet Album n'existe pas ; et les refus de {@link #televerser}
+     */
+    @Transactional
+    public ImageMesMotsVue ajouterDansMesMots(AjouterImageCommande commande) {
+        TypeImage type = commande.typeImage();
+        if (type == null) {
+            throw new ErreurMetier(400, CODE_REQUETE_INVALIDE, "Le type d'image est obligatoire");
+        }
+        String forme = Lexique.normaliser(commande.mot());
+        if (forme.isEmpty() || forme.length() > Lexique.LONGUEUR_MAX_FORME) {
+            throw new ErreurMetier(400, CODE_MOT_INVALIDE,
+                    "Le mot doit compter de 1 à " + Lexique.LONGUEUR_MAX_FORME + " caractères");
+        }
+        UUID albumId = null;
+        if (type == TypeImage.IMAGE_ALBUM) {
+            if (commande.albumId() == null) {
+                throw new ErreurMetier(400, CODE_ALBUM_REQUIS, "Une image d'album exige son Album d'origine");
+            }
+            albumId = referentiels.album(commande.albumId())
+                    .orElseThrow(() -> new ErreurMetier(400, CODE_ALBUM_INTROUVABLE,
+                            "Aucun album ne porte cet identifiant"))
+                    .id();
+        }
+        MotVue mot = lexique.obtenirOuCreerMot(forme);
+        SensVue sens = usages.sensParDefaut(mot.id());
+        ImageVue image = televerser(new TeleverserImageCommande(commande.fichier(), sens.id(), type,
+                commande.licence(), commande.source(), commande.auteur(), albumId));
+        return new ImageMesMotsVue(image, mot, sens);
+    }
 
     /**
      * Crée l'Image téléversée et son fichier, déjà réduit. La licence suit le type : {@code droits_auteur_enseignant}

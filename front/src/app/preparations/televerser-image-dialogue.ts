@@ -3,11 +3,20 @@ import {
   Component,
   computed,
   DestroyRef,
+  ElementRef,
   inject,
   Injector,
   signal,
+  viewChild,
 } from '@angular/core';
-import { FormControl, ReactiveFormsModule } from '@angular/forms';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
+import {
+  AbstractControl,
+  FormControl,
+  ReactiveFormsModule,
+  ValidationErrors,
+} from '@angular/forms';
+import { MatAutocompleteModule } from '@angular/material/autocomplete';
 import { MatButtonModule } from '@angular/material/button';
 import {
   MAT_DIALOG_DATA,
@@ -19,9 +28,13 @@ import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatIconModule } from '@angular/material/icon';
 import { MatInputModule } from '@angular/material/input';
 import { MatSelectModule } from '@angular/material/select';
-import { firstValueFrom } from 'rxjs';
+import { debounceTime, filter, firstValueFrom, from, map, of, switchMap, tap } from 'rxjs';
 import { Api } from '../api/api';
+import { rechercherAlbums } from '../api/fn/albums-resource/rechercher-albums';
+import { ajouterImage } from '../api/fn/images-resource/ajouter-image';
 import { televerserImageMotPreparation } from '../api/fn/preparations-resource/televerser-image-mot-preparation';
+import { AlbumDto } from '../api/models/album-dto';
+import { MesMotsImageDto } from '../api/models/mes-mots-image-dto';
 import { MotPreparationDto } from '../api/models/mot-preparation-dto';
 import { TeleversementImageMotPreparationDto } from '../api/models/televersement-image-mot-preparation-dto';
 import {
@@ -30,7 +43,13 @@ import {
   TypeImage,
 } from '../commun/badge-type-image/badge-type-image';
 import { BandeauErreur } from '../commun/bandeau-erreur/bandeau-erreur';
-import { codeErreur, messageErreur } from '../commun/erreurs/message-erreur';
+import { codeErreur, MESSAGES_PAR_CODE, messageErreur } from '../commun/erreurs/message-erreur';
+import { LONGUEUR_MAX_SAISIE } from './longueurs-mot';
+import {
+  DELAI_RECHERCHE_ALBUMS_MS,
+  LONGUEUR_MIN_RECHERCHE,
+  MESSAGE_AUCUN_ALBUM,
+} from './recherche-albums';
 
 /** Licence du Sélecteur de licence (image libre, type inconnu), énumération du client généré. */
 export type LicenceChoisie = NonNullable<TeleversementImageMotPreparationDto['licence']>;
@@ -64,22 +83,48 @@ export const MESSAGE_FICHIER_NON_IMAGE = 'Choisissez un fichier JPEG, PNG ou GIF
 
 const TYPES_MIME_ACCEPTES = ['image/jpeg', 'image/png', 'image/gif'];
 
+export const MESSAGE_MOT_REQUIS = "Saisissez le mot illustré par l'image.";
+
+/** Nombre de suggestions d'Albums demandées. */
+const NOMBRE_SUGGESTIONS = 20;
+
 /** Refus que « Réessayer » ne changerait pas : le Bandeau n'affiche alors que le message. */
 const CODES_REFUS = new Set([
   'requete.invalide',
   'requete.trop_volumineuse',
   'format.non_supporte',
   'image.album_requis',
+  'image.album_introuvable',
+  'image.mot_invalide',
   'preparation.mot_deja_illustre',
   'ressource.introuvable',
 ]);
 
-/** Données du Dialogue « Téléverser une image ». */
+/** Données du Dialogue « Téléverser une image » ouvert depuis la Carte d'un Mot « à illustrer ». */
 export interface DonneesTeleverserImage {
   readonly preparationId: string;
   readonly mot: MotPreparationDto;
   /** Titre de l'Album de la Préparation, Album d'origine de l'Image. */
   readonly titreAlbum: string;
+}
+
+/** Données du Dialogue « Téléverser une image » ouvert par « + › Ajouter une image » : sans Préparation. */
+interface DonneesAjouterImage {
+  readonly mode: 'mes-mots';
+}
+
+type DonneesDialogue = DonneesTeleverserImage | DonneesAjouterImage;
+
+/** Mot saisi, une fois rogné, non vide. */
+function motRenseigne(controle: AbstractControl<string>): ValidationErrors | null {
+  return controle.value.trim() === '' ? { motRequis: true } : null;
+}
+
+/** Album choisi dans les suggestions (un texte tapé sans choix ne suffit pas). */
+function albumChoisi(controle: AbstractControl<string | AlbumDto>): ValidationErrors | null {
+  return typeof controle.value === 'object' && controle.value !== null
+    ? null
+    : { albumRequis: true };
 }
 
 interface ErreurAffichee {
@@ -102,11 +147,18 @@ interface ErreurAffichee {
  * formulaire et ferme le dialogue avec le Mot renvoyé, illustré ; « Annuler », Échap ou un clic hors du dialogue le
  * ferment sans rien envoyer. Pendant l'envoi, le dialogue ne se ferme pas ; en échec, il reste ouvert et le message
  * s'affiche dans un Bandeau d'erreur.
+ *
+ * Mode « Mes mots » (story 2.5, partie 2), ouvert par « + › Ajouter une image », sans Préparation : le champ Mot,
+ * obligatoire, vient en tête à la place du Mot en cursive ; l'Album d'origine n'apparaît que pour une image d'album, où
+ * il se cherche parmi les Albums existants (autocomplete à partir de 2 caractères, sans « Créer l'album »). Un Mot vide
+ * ou une image d'album sans Album choisi affichent leur erreur sous le champ, sans requête. « Enregistrer » ferme le
+ * dialogue avec l'Image ajoutée dans Mes mots.
  */
 @Component({
   selector: 'app-televerser-image',
   imports: [
     BandeauErreur,
+    MatAutocompleteModule,
     MatButtonModule,
     MatDialogModule,
     MatFormFieldModule,
@@ -125,9 +177,27 @@ interface ErreurAffichee {
   template: `
     <h2 mat-dialog-title>Téléverser une image</h2>
     <mat-dialog-content class="televerser">
-      <p class="televerser__mot">
-        <span class="cm-visuellement-masque">Mot : </span>{{ donnees.mot.forme }}
-      </p>
+      @if (carte; as carte) {
+        <p class="televerser__mot">
+          <span class="cm-visuellement-masque">Mot : </span>{{ carte.mot.forme }}
+        </p>
+      } @else {
+        <mat-form-field class="televerser__champ" subscriptSizing="dynamic">
+          <mat-label>Mot</mat-label>
+          <input
+            #champMot
+            matInput
+            class="televerser__saisie-mot"
+            autocomplete="off"
+            required
+            [maxlength]="longueurMaxMot"
+            [formControl]="mot"
+          />
+          @if (mot.hasError('motRequis')) {
+            <mat-error>{{ messageMotRequis }}</mat-error>
+          }
+        </mat-form-field>
+      }
       @if (erreur(); as affichee) {
         <app-bandeau-erreur
           [message]="affichee.message"
@@ -227,10 +297,45 @@ interface ErreurAffichee {
           </mat-select>
         </mat-form-field>
       }
-      <mat-form-field class="televerser__champ" subscriptSizing="dynamic">
-        <mat-label>Album d'origine</mat-label>
-        <input matInput class="televerser__album" readonly [value]="donnees.titreAlbum" />
-      </mat-form-field>
+      @if (carte; as carte) {
+        <mat-form-field class="televerser__champ" subscriptSizing="dynamic">
+          <mat-label>Album d'origine</mat-label>
+          <input matInput class="televerser__album" readonly [value]="carte.titreAlbum" />
+        </mat-form-field>
+      } @else if (type() === 'image_album') {
+        <mat-form-field class="televerser__champ" subscriptSizing="dynamic">
+          <mat-label>Album d'origine</mat-label>
+          <mat-icon matPrefix svgIcon="recherche" aria-hidden="true" />
+          <input
+            #champAlbum
+            matInput
+            class="televerser__recherche-album"
+            type="text"
+            autocomplete="off"
+            required
+            [formControl]="rechercheAlbum"
+            [matAutocomplete]="suggestionsAlbums"
+          />
+          @if (rechercheAlbum.hasError('albumRequis') && rechercheAlbum.touched) {
+            <mat-error>{{ messageAlbumRequis }}</mat-error>
+          } @else {
+            <mat-hint>Tapez au moins 2 lettres du titre</mat-hint>
+          }
+          <mat-autocomplete #suggestionsAlbums="matAutocomplete" [displayWith]="titreAlbum">
+            @for (suggestion of suggestions(); track suggestion.id) {
+              <mat-option [value]="suggestion">
+                <span class="televerser__suggestion">
+                  <mat-icon svgIcon="livre" aria-hidden="true" />
+                  <span>{{ suggestion.titre }}</span>
+                </span>
+              </mat-option>
+            }
+            @if (aucunAlbum()) {
+              <mat-option disabled>{{ messageAucunAlbum }}</mat-option>
+            }
+          </mat-autocomplete>
+        </mat-form-field>
+      }
       <mat-form-field class="televerser__champ" subscriptSizing="dynamic">
         <mat-label>Auteur</mat-label>
         <input
@@ -261,12 +366,25 @@ interface ErreurAffichee {
 export class TeleverserImageDialogue {
   private readonly api = inject(Api);
   private readonly reference =
-    inject<MatDialogRef<TeleverserImageDialogue, MotPreparationDto>>(MatDialogRef);
-  protected readonly donnees = inject<DonneesTeleverserImage>(MAT_DIALOG_DATA);
+    inject<MatDialogRef<TeleverserImageDialogue, MotPreparationDto | MesMotsImageDto>>(
+      MatDialogRef,
+    );
+  private readonly donnees = inject<DonneesDialogue>(MAT_DIALOG_DATA);
+  /** Mot de la Carte et Album de sa Préparation, ou `null` en mode « Mes mots ». */
+  protected readonly carte: DonneesTeleverserImage | null =
+    'mode' in this.donnees ? null : this.donnees;
 
   protected readonly types = TYPES_IMAGE;
   protected readonly libellesTypes = LIBELLES_TYPE_IMAGE;
   protected readonly licences = LICENCES_CHOISIES;
+  /** Comme la saisie rapide : 100 caractères une fois l'article retiré (le back applique la limite exacte). */
+  protected readonly longueurMaxMot = LONGUEUR_MAX_SAISIE;
+  protected readonly messageMotRequis = MESSAGE_MOT_REQUIS;
+  protected readonly messageAlbumRequis = MESSAGES_PAR_CODE['image.album_requis'];
+  protected readonly messageAucunAlbum = MESSAGE_AUCUN_ALBUM;
+
+  private readonly champMot = viewChild<ElementRef<HTMLInputElement>>('champMot');
+  private readonly champAlbum = viewChild<ElementRef<HTMLInputElement>>('champAlbum');
 
   protected readonly fichier = signal<File | null>(null);
   /** URL `blob:` locale de l'aperçu du fichier choisi (aucune requête). */
@@ -277,6 +395,16 @@ export class TeleverserImageDialogue {
   protected readonly licence = signal<LicenceChoisie | null>(null);
   protected readonly source = new FormControl('', { nonNullable: true });
   protected readonly auteur = new FormControl('', { nonNullable: true });
+  /** Mode « Mes mots » : Mot illustré. */
+  protected readonly mot = new FormControl('', { nonNullable: true, validators: motRenseigne });
+  /** Mode « Mes mots », image d'album : texte tapé, ou l'Album choisi dans les suggestions. */
+  protected readonly rechercheAlbum = new FormControl<string | AlbumDto>('', {
+    nonNullable: true,
+    validators: albumChoisi,
+  });
+  protected readonly suggestions = signal<AlbumDto[]>([]);
+  /** Vrai quand la dernière recherche lancée (2 caractères au moins) n'a rien trouvé. */
+  protected readonly aucunAlbum = signal(false);
   protected readonly envoiEnCours = signal(false);
   protected readonly erreur = signal<ErreurAffichee | null>(null);
 
@@ -288,8 +416,61 @@ export class TeleverserImageDialogue {
     () => this.fichier() !== null && this.type() !== null && !this.envoiEnCours(),
   );
 
+  /** Dernier texte d'Album cherché, `null` après un échec de sa recherche. */
+  private texteCherche: string | null = null;
+  /** Bandeau du dernier échec de recherche d'Album, effacé par la recherche réussie suivante. */
+  private erreurRecherche: ErreurAffichee | null = null;
+
+  protected readonly titreAlbum = (valeur: string | AlbumDto | null): string =>
+    typeof valeur === 'string' ? valeur : (valeur?.titre ?? '');
+
   constructor() {
-    inject(DestroyRef).onDestroy(() => this.poserApercu(null));
+    const destruction = inject(DestroyRef);
+    destruction.onDestroy(() => this.poserApercu(null));
+    if (this.carte === null) {
+      this.rechercheAlbum.valueChanges
+        .pipe(
+          map((valeur) => (typeof valeur === 'string' ? valeur.trim() : null)),
+          filter((texte) => texte !== null),
+          debounceTime(DELAI_RECHERCHE_ALBUMS_MS),
+          // Comme distinctUntilChanged, sauf après un échec : le même texte retapé relance la recherche.
+          filter((texte) => texte !== this.texteCherche),
+          tap((texte) => (this.texteCherche = texte)),
+          switchMap((texte) =>
+            texte.length < LONGUEUR_MIN_RECHERCHE ? of(null) : from(this.chercherAlbums(texte)),
+          ),
+          takeUntilDestroyed(destruction),
+        )
+        .subscribe((albums) => {
+          this.suggestions.set(albums ?? []);
+          this.aucunAlbum.set(albums !== null && albums.length === 0);
+        });
+    }
+  }
+
+  /**
+   * Albums trouvés pour `texte`, ou `null` en échec : Bandeau d'erreur, et le même texte retapé relance la recherche.
+   * Une recherche réussie efface le Bandeau d'un échec de recherche.
+   */
+  private async chercherAlbums(texte: string): Promise<AlbumDto[] | null> {
+    try {
+      const page = await this.api.invoke(rechercherAlbums, {
+        recherche: texte,
+        taille: NOMBRE_SUGGESTIONS,
+      });
+      if (this.erreur() === this.erreurRecherche) {
+        this.erreur.set(null);
+      }
+      this.erreurRecherche = null;
+      return page.elements;
+    } catch (erreur) {
+      if (this.texteCherche === texte) {
+        this.texteCherche = null;
+      }
+      this.erreurRecherche = { message: messageErreur(erreur), reessayable: false };
+      this.erreur.set(this.erreurRecherche);
+      return null;
+    }
   }
 
   protected choisirDepuis(selecteur: HTMLInputElement): void {
@@ -346,30 +527,44 @@ export class TeleverserImageDialogue {
     this.poserApercu(URL.createObjectURL(choisi));
   }
 
-  /** Envoie le fichier et sa Carte d'identité ; ferme avec le Mot renvoyé, illustré. */
+  /**
+   * Envoie le fichier et sa Carte d'identité ; ferme avec le Mot renvoyé, illustré, ou en mode « Mes mots » avec
+   * l'Image ajoutée. En mode « Mes mots », un Mot vide ou une image d'album sans Album choisi affichent leur erreur et
+   * prennent le focus, sans requête.
+   */
   async enregistrer(): Promise<void> {
     const fichier = this.fichier();
     const type = this.type();
     if (fichier === null || type === null || this.envoiEnCours()) {
       return;
     }
+    const album = this.carte === null ? this.albumVerifie(type) : null;
+    if (album === undefined) {
+      return;
+    }
     this.envoiEnCours.set(true);
     this.reference.disableClose = true;
     this.erreur.set(null);
     const licence = this.licenceImposee() === null ? this.licence() : null;
+    const carteIdentite = {
+      fichier,
+      typeImage: type,
+      source: texte(this.source.value),
+      licence: licence ?? undefined,
+      auteur: texte(this.auteur.value),
+    };
     try {
-      const illustre = await this.api.invoke(televerserImageMotPreparation, {
-        id: this.donnees.preparationId,
-        motPreparationId: this.donnees.mot.id,
-        body: {
-          fichier,
-          typeImage: type,
-          source: texte(this.source.value),
-          licence: licence ?? undefined,
-          auteur: texte(this.auteur.value),
-        },
-      });
-      this.reference.close(illustre);
+      const resultat =
+        this.carte !== null
+          ? await this.api.invoke(televerserImageMotPreparation, {
+              id: this.carte.preparationId,
+              motPreparationId: this.carte.mot.id,
+              body: carteIdentite,
+            })
+          : await this.api.invoke(ajouterImage, {
+              body: { ...carteIdentite, mot: this.mot.value.trim(), albumId: album?.id },
+            });
+      this.reference.close(resultat);
     } catch (erreur) {
       const code = codeErreur(erreur);
       this.erreur.set({
@@ -380,6 +575,29 @@ export class TeleverserImageDialogue {
       this.envoiEnCours.set(false);
       this.reference.disableClose = false;
     }
+  }
+
+  /**
+   * Mode « Mes mots » : l'Album d'origine à envoyer (`null` hors image d'album), ou `undefined` si le Mot ou l'Album
+   * manquent ; l'erreur s'affiche alors sous chaque champ fautif, et le premier prend le focus.
+   */
+  private albumVerifie(type: TypeImage): AlbumDto | null | undefined {
+    const albumRequis = type === 'image_album';
+    this.mot.markAsTouched();
+    if (albumRequis) {
+      this.rechercheAlbum.markAsTouched();
+    }
+    const album = albumRequis ? this.rechercheAlbum.value : null;
+    // Seul le Mot vide bloque ici ; la longueur, plafonnée par le champ, est vérifiée par le back.
+    if (this.mot.hasError('motRequis')) {
+      this.champMot()?.nativeElement.focus();
+      return undefined;
+    }
+    if (typeof album === 'string') {
+      this.champAlbum()?.nativeElement.focus();
+      return undefined;
+    }
+    return album;
   }
 
   private poserApercu(url: string | null): void {
@@ -407,15 +625,34 @@ export async function ouvrirDialogueTeleverserImage(
   donnees: DonneesTeleverserImage,
   declencheur?: HTMLElement,
 ): Promise<MotPreparationDto | undefined> {
+  return (await ouvrir(injecteur, donnees, '.televerser__choisir', declencheur)) as
+    MotPreparationDto | undefined;
+}
+
+/**
+ * Ouvre le Dialogue « Téléverser une image » en mode « Mes mots » (« + › Ajouter une image ») et rend l'Image ajoutée,
+ * ou `undefined` s'il est fermé sans rien enregistrer. Le champ Mot prend le focus, qui revient à `declencheur` à la
+ * fermeture.
+ */
+export async function ouvrirDialogueAjouterImage(
+  injecteur: Injector,
+  declencheur?: HTMLElement,
+): Promise<MesMotsImageDto | undefined> {
+  return (await ouvrir(injecteur, { mode: 'mes-mots' }, '.televerser__saisie-mot', declencheur)) as
+    MesMotsImageDto | undefined;
+}
+
+function ouvrir(
+  injecteur: Injector,
+  donnees: DonneesDialogue,
+  autoFocus: string,
+  declencheur?: HTMLElement,
+): Promise<MotPreparationDto | MesMotsImageDto | undefined> {
   const reference = injecteur
     .get(MatDialog)
-    .open<TeleverserImageDialogue, DonneesTeleverserImage, MotPreparationDto>(
+    .open<TeleverserImageDialogue, DonneesDialogue, MotPreparationDto | MesMotsImageDto>(
       TeleverserImageDialogue,
-      {
-        data: donnees,
-        autoFocus: '.televerser__choisir',
-        restoreFocus: declencheur ?? true,
-      },
+      { data: donnees, autoFocus, restoreFocus: declencheur ?? true },
     );
   return firstValueFrom(reference.afterClosed());
 }

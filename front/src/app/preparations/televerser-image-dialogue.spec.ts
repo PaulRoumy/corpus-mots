@@ -3,14 +3,20 @@ import { HttpTestingController, provideHttpClientTesting } from '@angular/common
 import { ApplicationRef, Injector } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { MATERIAL_ANIMATIONS } from '@angular/material/core';
+import { AlbumDto } from '../api/models/album-dto';
+import { MesMotsImageDto } from '../api/models/mes-mots-image-dto';
 import { MotPreparationDto } from '../api/models/mot-preparation-dto';
+import { MESSAGE_RESEAU } from '../commun/erreurs/message-erreur';
 import { provideIcones } from '../commun/icones';
 import {
   MESSAGE_FICHIER_NON_IMAGE,
   MESSAGE_FICHIER_TROP_LOURD,
+  MESSAGE_MOT_REQUIS,
+  ouvrirDialogueAjouterImage,
   ouvrirDialogueTeleverserImage,
   TAILLE_MAX_FICHIER,
 } from './televerser-image-dialogue';
+import { DELAI_RECHERCHE_ALBUMS_MS } from './recherche-albums';
 
 const PREPARATION = '0190f0a0-0000-7000-8000-00000000d001';
 const CITROUILLE: MotPreparationDto = {
@@ -35,11 +41,31 @@ const ILLUSTREE: MotPreparationDto = {
   },
 };
 const URL_TELEVERSEMENT = `/api/preparations/${PREPARATION}/mots/${CITROUILLE.id}/image`;
+const URL_AJOUT = '/api/images';
+const ROULE_GALETTE: AlbumDto = {
+  id: '0190f0a0-0000-7000-8000-00000000a001',
+  titre: 'La Roule Galette',
+  auteur: 'Natha Caputo',
+  createurId: '0190f0a0-0000-7000-8000-00000000e001',
+  nombreModules: 2,
+};
+const AJOUTEE: MesMotsImageDto = {
+  id: '0190f0a0-0000-7000-8000-0000000c0002',
+  proprietaireId: '0190f0a0-0000-7000-8000-00000000e001',
+  etat: 'privee',
+  aRemplacer: null,
+  reutilisable: true,
+  typeImage: 'image_libre',
+  aCompleter: false,
+  motId: '0190f0a0-0000-7000-8000-0000000e0001',
+  forme: 'citrouille',
+  sens: { id: '0190f0a0-0000-7000-8000-0000000d0001', libelle: 'à compléter' },
+};
 
 describe('Dialogue « Téléverser une image »', () => {
   let serveur: HttpTestingController;
   let declencheur: HTMLButtonElement;
-  let resultat: Promise<MotPreparationDto | undefined>;
+  let resultat: Promise<MotPreparationDto | MesMotsImageDto | undefined>;
   const original = { creer: URL.createObjectURL, revoquer: URL.revokeObjectURL };
 
   const tour = () => new Promise((fin) => setTimeout(fin));
@@ -56,6 +82,11 @@ describe('Dialogue « Téléverser une image »', () => {
       { preparationId: PREPARATION, mot: CITROUILLE, titreAlbum: 'La Roule Galette' },
       declencheur,
     );
+    await stabiliser();
+  }
+
+  async function ouvrirMesMots() {
+    resultat = ouvrirDialogueAjouterImage(TestBed.inject(Injector), declencheur);
     await stabiliser();
   }
 
@@ -371,5 +402,209 @@ describe('Dialogue « Téléverser une image »', () => {
     expect(await resultat).toBeUndefined();
     expect(document.activeElement).toBe(declencheur);
     serveur.expectNone(URL_TELEVERSEMENT);
+  });
+  describe('mode « Mes mots » (« + › Ajouter une image »)', () => {
+    const erreurs = () =>
+      [...dialogue().querySelectorAll('mat-error')].map((erreur) => erreur.textContent?.trim());
+    const attendreFrappe = () =>
+      new Promise((fin) => setTimeout(fin, DELAI_RECHERCHE_ALBUMS_MS + 50));
+
+    it('le champ Mot vient en tête, a le focus, longueur de la saisie rapide ; Album pour une image d’album seulement', async () => {
+      await ouvrirMesMots();
+
+      expect(texte('h2')).toBe('Téléverser une image');
+      expect(dialogue().querySelector('.televerser__mot')).toBeNull();
+      const mot = champ('Mot')!.querySelector<HTMLInputElement>('input')!;
+      expect(document.activeElement).toBe(mot);
+      // Comme la saisie rapide : 100 caractères après l'article le plus long (« une »).
+      expect(mot.getAttribute('maxlength')).toBe('104');
+      expect(mot.required).toBe(true);
+      const etiquettes = [...dialogue().querySelectorAll('mat-form-field mat-label')].map((label) =>
+        label.textContent?.trim(),
+      );
+      expect(etiquettes[0]).toBe('Mot');
+      expect(champ("Album d'origine")).toBeUndefined();
+
+      await choisirOption("Type d'image", 'image libre');
+      expect(champ("Album d'origine")).toBeUndefined();
+      await choisirOption("Type d'image", "image d'album");
+      expect(champ("Album d'origine")).toBeDefined();
+      expect(texte('.televerser__repere')).toBe('simple, claire, peu de détails');
+    });
+
+    it('« Enregistrer » envoie le Mot et la Carte d’identité, sans Album, et ferme avec l’Image ajoutée', async () => {
+      await ouvrirMesMots();
+      await saisir('Mot', '  citrouille ');
+      await choisirFichier(fichier('citrouille.png', 'image/png'));
+      await choisirOption("Type d'image", 'image libre');
+      await choisirOption('Licence', 'domaine public / CC0');
+      bouton('Enregistrer').click();
+      await stabiliser();
+
+      const requete = serveur.expectOne(URL_AJOUT);
+      expect(requete.request.method).toBe('POST');
+      const corps = requete.request.body as FormData;
+      expect((corps.get('fichier') as File).name).toBe('citrouille.png');
+      expect(corps.get('mot')).toBe('citrouille');
+      expect(corps.get('typeImage')).toBe('image_libre');
+      expect(corps.get('licence')).toBe('cc0_domaine_public');
+      expect(corps.has('albumId')).toBe(false);
+      expect(corps.has('source')).toBe(false);
+      requete.flush(AJOUTEE, { status: 201, statusText: 'Created' });
+      await stabiliser();
+
+      expect(await resultat).toEqual(AJOUTEE);
+      expect(document.querySelector('app-televerser-image')).toBeNull();
+    });
+
+    it('Mot vide : erreur sous le champ, focus sur le Mot, aucune requête', async () => {
+      await ouvrirMesMots();
+      await saisir('Mot', '   ');
+      await choisirFichier(fichier('a.png', 'image/png'));
+      await choisirOption("Type d'image", 'image libre');
+      bouton('Enregistrer').click();
+      await stabiliser();
+
+      expect(erreurs()).toEqual([MESSAGE_MOT_REQUIS]);
+      expect(document.activeElement).toBe(champ('Mot')!.querySelector('input'));
+      serveur.expectNone(URL_AJOUT);
+    });
+
+    it('image d’album sans Album choisi : « Album d’origine requis », aucune requête', async () => {
+      await ouvrirMesMots();
+      await saisir('Mot', 'galette');
+      await choisirFichier(fichier('page.jpg', 'image/jpeg'));
+      await choisirOption("Type d'image", "image d'album");
+      bouton('Enregistrer').click();
+      await stabiliser();
+
+      expect(erreurs()).toEqual(["Album d'origine requis."]);
+      expect(document.activeElement).toBe(champ("Album d'origine")!.querySelector('input'));
+      serveur.expectNone(URL_AJOUT);
+    });
+
+    it('image d’album : l’Album se cherche parmi les existants, sans « Créer l’album », et part avec l’Image', async () => {
+      await ouvrirMesMots();
+      await saisir('Mot', 'galette');
+      await choisirFichier(fichier('page.jpg', 'image/jpeg'));
+      await choisirOption("Type d'image", "image d'album");
+      const album = champ("Album d'origine")!.querySelector<HTMLInputElement>('input')!;
+      album.focus();
+      album.value = 'r';
+      album.dispatchEvent(new Event('input'));
+      await attendreFrappe();
+      await stabiliser();
+      serveur.expectNone((requete) => requete.url.startsWith('/api/albums'));
+
+      album.value = 'la roule';
+      album.dispatchEvent(new Event('input'));
+      await attendreFrappe();
+      await stabiliser();
+      serveur
+        .expectOne('/api/albums?recherche=la%20roule&taille=20')
+        .flush({ elements: [ROULE_GALETTE], total: 1 });
+      await stabiliser();
+      const options = [...document.querySelectorAll<HTMLElement>('.cdk-overlay-pane mat-option')];
+      expect(options.map((option) => option.textContent?.trim())).toEqual(['La Roule Galette']);
+      options[0].click();
+      await stabiliser();
+      expect(album.value).toBe('La Roule Galette');
+
+      bouton('Enregistrer').click();
+      await stabiliser();
+      const requete = serveur.expectOne(URL_AJOUT);
+      const corps = requete.request.body as FormData;
+      expect(corps.get('typeImage')).toBe('image_album');
+      expect(corps.get('albumId')).toBe(ROULE_GALETTE.id);
+      expect(corps.has('licence')).toBe(false);
+      const galette: MesMotsImageDto = { ...AJOUTEE, typeImage: 'image_album', forme: 'galette' };
+      requete.flush(galette);
+      expect(await resultat).toEqual(galette);
+    });
+
+    it('recherche sans résultat : « Aucun album trouvé »', async () => {
+      await ouvrirMesMots();
+      await choisirOption("Type d'image", "image d'album");
+      const album = champ("Album d'origine")!.querySelector<HTMLInputElement>('input')!;
+      album.focus();
+      album.value = 'zzz';
+      album.dispatchEvent(new Event('input'));
+      await attendreFrappe();
+      await stabiliser();
+      serveur.expectOne('/api/albums?recherche=zzz&taille=20').flush({ elements: [], total: 0 });
+      await stabiliser();
+
+      const options = [...document.querySelectorAll<HTMLElement>('.cdk-overlay-pane mat-option')];
+      expect(options.map((option) => option.textContent?.trim())).toEqual(['Aucun album trouvé']);
+    });
+
+    it('échec de la recherche d’Album : Bandeau sans « Réessayer » ; le même texte retapé relance, le Bandeau part', async () => {
+      await ouvrirMesMots();
+      await choisirOption("Type d'image", "image d'album");
+      const album = champ("Album d'origine")!.querySelector<HTMLInputElement>('input')!;
+      album.focus();
+      const taper = async (texteTape: string) => {
+        album.value = texteTape;
+        album.dispatchEvent(new Event('input'));
+        await attendreFrappe();
+        await stabiliser();
+      };
+      const options = () =>
+        [...document.querySelectorAll<HTMLElement>('.cdk-overlay-pane mat-option')].map((option) =>
+          option.textContent?.trim(),
+        );
+
+      await taper('la roule');
+      serveur
+        .expectOne('/api/albums?recherche=la%20roule&taille=20')
+        .error(new ProgressEvent('error'), { status: 0 });
+      await stabiliser();
+
+      expect(bandeau()).toBe(MESSAGE_RESEAU);
+      expect(bouton('Réessayer')).toBeUndefined();
+      expect(options()).not.toContain('Aucun album trouvé');
+      expect(document.querySelector('app-televerser-image')).not.toBeNull();
+
+      // Retaper le même texte : effacer la dernière lettre puis la retaper, avant la fin du délai de frappe.
+      album.value = 'la roul';
+      album.dispatchEvent(new Event('input'));
+      await taper('la roule');
+      serveur
+        .expectOne('/api/albums?recherche=la%20roule&taille=20')
+        .flush({ elements: [ROULE_GALETTE], total: 1 });
+      await stabiliser();
+
+      expect(bandeau()).toBeUndefined();
+      expect(options()).toEqual(['La Roule Galette']);
+    });
+
+    it('refus du back (Mot invalide) : Bandeau traduit sans « Réessayer », le dialogue reste ouvert', async () => {
+      await ouvrirMesMots();
+      await saisir('Mot', 'citrouille'.repeat(11));
+      await choisirFichier(fichier('a.png', 'image/png'));
+      await choisirOption("Type d'image", 'inconnu');
+      bouton('Enregistrer').click();
+      await stabiliser();
+
+      serveur
+        .expectOne(URL_AJOUT)
+        .flush({ code: 'image.mot_invalide' }, { status: 400, statusText: 'Bad Request' });
+      await stabiliser();
+
+      expect(bandeau()).toBe('Saisissez un mot de 1 à 100 caractères.');
+      expect(bouton('Réessayer')).toBeUndefined();
+      expect(document.querySelector('app-televerser-image')).not.toBeNull();
+    });
+
+    it('« Annuler » ferme sans rien envoyer ; le focus revient au déclencheur', async () => {
+      await ouvrirMesMots();
+
+      bouton('Annuler').click();
+      await stabiliser();
+
+      expect(await resultat).toBeUndefined();
+      expect(document.activeElement).toBe(declencheur);
+      serveur.expectNone(URL_AJOUT);
+    });
   });
 });

@@ -66,12 +66,22 @@ public class Usages {
                 ? lexique.sensDuMot(commande.motId(), commande.sensId())
                         .orElseThrow(() -> new IllegalArgumentException("Le Sens " + commande.sensId()
                                 + " n'est pas un Sens du Mot " + commande.motId()))
-                : sensRetenus.dernierRetenu(enseignant, commande.motId())
-                        .map(Lexique::vue)
-                        .orElseGet(() -> lexique.obtenirOuCreerSens(commande.motId(), LIBELLE_A_COMPLETER, null));
+                : sensParDefaut(commande.motId());
         sensRetenus.persist(SensRetenu.nouveau(sensRetenus.nouvelIdentifiant(), commande.preparationId(),
                 commande.preparationMotId(), retenu.id(), enseignant, commande.albumId(), commande.section()));
         return retenu;
+    }
+
+    /**
+     * Sens par défaut du Mot {@code motId} pour l'enseignant courant : celui qu'il a retenu le plus récemment pour ce
+     * Mot dans ses Préparations, sinon le Sens « à compléter » du Mot (sans catégorie), obtenu ou créé. Jamais le Sens
+     * retenu par un collègue (AD-2). N'écrit aucun Sens retenu.
+     */
+    @Transactional
+    public SensVue sensParDefaut(UUID motId) {
+        return sensRetenus.dernierRetenu(enseignantCourant.id(), motId)
+                .map(Lexique::vue)
+                .orElseGet(() -> lexique.obtenirOuCreerSens(motId, LIBELLE_A_COMPLETER, null));
     }
 
     /**

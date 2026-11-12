@@ -51,20 +51,19 @@ import { ChampThemes } from '../commun/champ-themes/champ-themes';
 import { codeErreur, messageErreur } from '../commun/erreurs/message-erreur';
 import { LIBELLES_SECTION, Section, SECTIONS } from '../commun/repere-section/repere-section';
 import { ChampNomModule } from './champ-nom-module';
+import {
+  DELAI_RECHERCHE_ALBUMS_MS,
+  LONGUEUR_MIN_RECHERCHE,
+  MESSAGE_AUCUN_ALBUM,
+} from './recherche-albums';
 
-/** Délai de frappe avant de chercher les Albums, ou les titres proches du titre à créer. */
-export const DELAI_RECHERCHE_ALBUMS_MS = 250;
-
-/** Longueur minimale du texte cherché (le back applique la même, après normalisation). */
-export const LONGUEUR_MIN_RECHERCHE = 2;
+export { DELAI_RECHERCHE_ALBUMS_MS, LONGUEUR_MIN_RECHERCHE, MESSAGE_AUCUN_ALBUM };
 
 /** Longueur maximale du titre, de l'auteur et de l'éditeur d'un Album (le back applique la même). */
 export const LONGUEUR_MAX_CHAMP_ALBUM = 200;
 
 /** Nombre de suggestions d'Albums demandées. */
 const NOMBRE_SUGGESTIONS = 20;
-
-export const MESSAGE_AUCUN_ALBUM = 'Aucun album trouvé';
 
 /** « 0 modules », « 1 module », « 3 modules ». */
 export function libelleModules(nombre: number): string {
