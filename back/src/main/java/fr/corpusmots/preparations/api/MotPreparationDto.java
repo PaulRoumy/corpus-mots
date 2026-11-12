@@ -13,11 +13,13 @@ public record MotPreparationDto(
         @Schema(required = true) SensPreparationDto sens,
         @Schema(required = true, description = "Vrai si une Image est liée au Mot dans cette Préparation")
         boolean illustre,
-        @Schema(nullable = true, description = "Thème du Mot dans cette Préparation, null pour aucun") UUID themeId) {
+        @Schema(nullable = true, description = "Thème du Mot dans cette Préparation, null pour aucun") UUID themeId,
+        @Schema(nullable = true, description = "Image liée au Mot dans cette Préparation, null s'il est à illustrer")
+        PreparationImageDto image) {
 
     static MotPreparationDto de(MotPreparationVue vue) {
         return new MotPreparationDto(vue.id(), vue.motId(), vue.forme(), vue.ordre(),
                 new SensPreparationDto(vue.sensId(), vue.libelleSens(), vue.categorieSens()), vue.illustre(),
-                vue.themeId());
+                vue.themeId(), PreparationImageDto.de(vue.image()));
     }
 }

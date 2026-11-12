@@ -231,6 +231,15 @@
             }, {
               "type" : "null"
             } ]
+          },
+          "image" : {
+            "description" : "Image liée au Mot dans cette Préparation, null s'il est à illustrer",
+            "type" : [ "object", "null" ],
+            "anyOf" : [ {
+              "$ref" : "#/components/schemas/PreparationImageDto"
+            }, {
+              "type" : "null"
+            } ]
           }
         }
       },
@@ -408,6 +417,39 @@
           }
         }
       },
+      "PreparationImageDto" : {
+        "type" : "object",
+        "required" : [ "id", "proprietaireId", "etat", "reutilisable", "typeImage", "aCompleter" ],
+        "properties" : {
+          "id" : {
+            "$ref" : "#/components/schemas/UUID"
+          },
+          "proprietaireId" : {
+            "$ref" : "#/components/schemas/UUID"
+          },
+          "etat" : {
+            "type" : "string",
+            "enum" : [ "privee", "versee", "abandonnee", "supprimee" ]
+          },
+          "aRemplacer" : {
+            "type" : [ "string", "null" ],
+            "description" : "État « à remplacer », calculé à la lecture ; null tant que l'Image reste disponible",
+            "enum" : [ "retiree", "supprimee" ]
+          },
+          "reutilisable" : {
+            "type" : "boolean",
+            "description" : "Vrai si l'enseignant connecté peut réutiliser cette Image"
+          },
+          "typeImage" : {
+            "type" : "string",
+            "enum" : [ "image_album", "image_libre", "photo_personnelle", "inconnu" ]
+          },
+          "aCompleter" : {
+            "type" : "boolean",
+            "description" : "Vrai pour une image libre sans source ou sans licence"
+          }
+        }
+      },
       "ReglagesPreparationDto" : {
         "type" : "object",
         "properties" : {
@@ -466,6 +508,15 @@
             }, {
               "type" : "null"
             } ]
+          },
+          "imageId" : {
+            "description" : "Image qui était liée au Mot, null pour aucune ; liée de nouveau (origine reutilisee)",
+            "type" : [ "string", "null" ],
+            "anyOf" : [ {
+              "$ref" : "#/components/schemas/UUID"
+            }, {
+              "type" : "null"
+            } ]
           }
         }
       },
@@ -507,6 +558,34 @@
           "motCle" : {
             "type" : "string",
             "description" : "Premier mot-clé français du pictogramme, ou le Mot cherché si ARASAAC n'en donne aucun ; alternative de sa vignette"
+          }
+        }
+      },
+      "TeleversementImageMotPreparationDto" : {
+        "type" : "object",
+        "required" : [ "fichier", "typeImage" ],
+        "properties" : {
+          "fichier" : {
+            "type" : "string",
+            "format" : "binary",
+            "description" : "Fichier JPEG, PNG ou GIF, 20 Mo au plus"
+          },
+          "typeImage" : {
+            "type" : "string",
+            "enum" : [ "image_album", "image_libre", "photo_personnelle", "inconnu" ]
+          },
+          "source" : {
+            "type" : "string",
+            "description" : "Source de l'image (site, ouvrage…), facultative, 500 caractères au plus"
+          },
+          "licence" : {
+            "type" : "string",
+            "description" : "Licence, facultative ; ignorée pour une photo personnelle ou une image d'album, qui reçoivent la leur",
+            "enum" : [ "arasaac_cc_by_nc_sa", "sclera_cc_by_nc", "mulberry_cc_by_sa", "cc0_domaine_public", "pixabay", "autre_inconnue" ]
+          },
+          "auteur" : {
+            "type" : "string",
+            "description" : "Auteur de l'image, facultatif, 500 caractères au plus"
           }
         }
       },
@@ -1012,6 +1091,42 @@
         "tags" : [ "Enseignants Resource" ]
       }
     },
+    "/api/images/{id}/fichier" : {
+      "get" : {
+        "summary" : "Fichier d'une Image que l'enseignant connecté peut consulter (JPEG ou PNG, sans métadonnées)",
+        "operationId" : "fichierImage",
+        "parameters" : [ {
+          "name" : "id",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "$ref" : "#/components/schemas/UUID"
+          }
+        }, {
+          "description" : "miniature (256 px au plus, pour les listes) ou grande (par défaut)",
+          "schema" : {
+            "type" : "string",
+            "enum" : [ "miniature", "grande" ]
+          },
+          "name" : "taille",
+          "in" : "query"
+        } ],
+        "responses" : {
+          "200" : {
+            "description" : "Fichier de l'Image, à la taille demandée",
+            "content" : {
+              "image/*" : {
+                "schema" : {
+                  "format" : "binary",
+                  "type" : "string"
+                }
+              }
+            }
+          }
+        },
+        "tags" : [ "Images Resource" ]
+      }
+    },
     "/api/modules/{id}" : {
       "delete" : {
         "summary" : "Supprimer un Module (son créateur ou l'administrateur) : les Préparations qui l'avaient n'en ont plus",
@@ -1365,6 +1480,50 @@
         "responses" : {
           "200" : {
             "description" : "Mot retiré, avec le Sens et la place qu'il avait, pour le rétablir",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/MotPreparationDto"
+                }
+              }
+            }
+          }
+        },
+        "tags" : [ "Preparations Resource" ]
+      }
+    },
+    "/api/preparations/{id}/mots/{motPreparationId}/image" : {
+      "post" : {
+        "summary" : "Téléverser une Image pour un Mot d'une Préparation de l'enseignant connecté et la lui lier",
+        "operationId" : "televerserImageMotPreparation",
+        "parameters" : [ {
+          "name" : "id",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "$ref" : "#/components/schemas/UUID"
+          }
+        }, {
+          "name" : "motPreparationId",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "$ref" : "#/components/schemas/UUID"
+          }
+        } ],
+        "requestBody" : {
+          "content" : {
+            "multipart/form-data" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/TeleversementImageMotPreparationDto"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "201" : {
+            "description" : "Image créée (privee), réduite et liée au Mot (origine nouvelle)",
             "content" : {
               "application/json" : {
                 "schema" : {

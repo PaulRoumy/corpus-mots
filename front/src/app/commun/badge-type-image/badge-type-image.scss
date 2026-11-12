@@ -1,0 +1,67 @@
+// Badge de type d'image (DESIGN.md › components.badge-type-image, Types d'image) : fond carte, texte à l'encre,
+// icône et bordure à la couleur du type.
+:host {
+  display: inline-flex;
+  max-width: 100%;
+}
+
+.badge-type {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--cm-espace-1);
+  box-sizing: border-box;
+  max-width: 100%;
+  height: var(--cm-hauteur-badge);
+  padding: 0 var(--cm-espace-2);
+  overflow: hidden;
+  border-width: var(--cm-epaisseur-bordure-type-image);
+  border-radius: var(--cm-arrondi-sm);
+  background: var(--mat-sys-surface);
+  color: var(--mat-sys-on-surface);
+  font: var(--cm-typo-label-sm);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.badge-type__icone {
+  flex: none;
+  width: var(--cm-taille-icone-badge);
+  height: var(--cm-taille-icone-badge);
+}
+
+.badge-type--image_libre {
+  border-style: solid;
+  border-color: var(--cm-image-libre);
+
+  .badge-type__icone {
+    color: var(--cm-image-libre);
+  }
+}
+
+.badge-type--photo_personnelle {
+  border-width: var(--cm-epaisseur-bordure-type-photo);
+  border-style: double;
+  border-color: var(--cm-image-photo);
+
+  .badge-type__icone {
+    color: var(--cm-image-photo);
+  }
+}
+
+.badge-type--image_album {
+  border-style: dashed;
+  border-color: var(--cm-image-album);
+
+  .badge-type__icone {
+    color: var(--cm-image-album);
+  }
+}
+
+.badge-type--inconnu {
+  border-style: dotted;
+  border-color: var(--cm-image-inconnu);
+
+  .badge-type__icone {
+    color: var(--cm-image-inconnu);
+  }
+}

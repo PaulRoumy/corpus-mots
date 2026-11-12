@@ -6,6 +6,7 @@ import {
 } from '@angular/common/http/testing';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { MATERIAL_ANIMATIONS } from '@angular/material/core';
+import { MatDialog } from '@angular/material/dialog';
 import { Title } from '@angular/platform-browser';
 import { AlbumDto } from '../api/models/album-dto';
 import { ModuleDto } from '../api/models/module-dto';
@@ -1955,6 +1956,7 @@ describe('Preparation (En-tête)', () => {
         sensId: animal.sens.id,
         ordre: 2,
         themeId: null,
+        imageId: null,
       });
       const retabli = { ...animal, id: '0190f0a0-0000-7000-8000-0000000f9002' };
       requete.flush(retabli, { status: 201, statusText: 'Created' });
@@ -2200,6 +2202,7 @@ describe('Preparation (En-tête)', () => {
         motId: avecTheme.motId,
         sensId: avecTheme.sens.id,
         ordre: 2,
+        imageId: null,
         themeId: ANIMAUX,
       });
       requete.flush(avecTheme, { status: 201, statusText: 'Created' });
@@ -2454,6 +2457,119 @@ describe('Preparation (En-tête)', () => {
       await stabiliser();
 
       expect(themesDesCartes()).toEqual(['la cuisine', 'Sans thème']);
+    });
+  });
+
+  describe('Téléverser une image (story 2.5, partie 1)', () => {
+    const GALETTE = motPreparation('galette', 1);
+    const CITROUILLE = motPreparation('citrouille', 2);
+    const IMAGE = '0190f0a0-0000-7000-8000-0000000c0001';
+    const ILLUSTREE: MotPreparationDto = {
+      ...CITROUILLE,
+      illustre: true,
+      image: {
+        id: IMAGE,
+        proprietaireId: MOI,
+        etat: 'privee',
+        aRemplacer: null,
+        reutilisable: true,
+        typeImage: 'photo_personnelle',
+        aCompleter: false,
+      },
+    };
+    const original = { creer: URL.createObjectURL, revoquer: URL.revokeObjectURL };
+
+    beforeEach(() => {
+      URL.createObjectURL = vi.fn(() => 'blob:http://localhost/image');
+      URL.revokeObjectURL = vi.fn();
+    });
+
+    afterEach(() => {
+      serveur.match((requete) => requete.url.startsWith('/api/images/'));
+      document
+        .querySelectorAll('.cdk-overlay-container')
+        .forEach((surcouche) => surcouche.remove());
+      URL.createObjectURL = original.creer;
+      URL.revokeObjectURL = original.revoquer;
+    });
+
+    const boutonTeleverser = (forme: string) =>
+      racine.querySelector<HTMLButtonElement>(
+        `app-carte-mot button[aria-label="Téléverser une image pour « ${forme} »"]`,
+      )!;
+    const boutonRetirer = (forme: string) =>
+      racine.querySelector<HTMLButtonElement>(
+        `app-carte-mot button[aria-label="Retirer « ${forme} » de la préparation"]`,
+      )!;
+
+    it('« Téléverser » ouvre le Dialogue ; le Mot illustré remplace la Carte, sur une colonne, compteur et focus suivent', async () => {
+      await ouvrir({ ...PREPARATION, nombreMots: 2 }, MODULES, THEMES, albumDe(PREPARATION), [
+        GALETTE,
+        CITROUILLE,
+      ]);
+      expect(texte('.entete__compteur')).toBe('2 mots, 0 déjà illustrés');
+
+      boutonTeleverser('citrouille').click();
+      await stabiliser();
+      const dialogue = document.querySelector('app-televerser-image')!;
+      expect(dialogue.querySelector('.televerser__mot')?.textContent).toContain('citrouille');
+      expect(dialogue.querySelector<HTMLInputElement>('.televerser__album')?.value).toBe(
+        'La Roule Galette',
+      );
+
+      // Le Dialogue ferme avec le Mot illustré renvoyé par le back (couvert par son propre spec).
+      TestBed.inject(MatDialog).openDialogs[0].close(ILLUSTREE);
+      await stabiliser();
+
+      expect(cartes()).toEqual(['galette', 'citrouille']);
+      expect(
+        [...racine.querySelectorAll('.mots__element')].map((element) =>
+          element.classList.contains('mots__element--a-illustrer'),
+        ),
+      ).toEqual([true, false]);
+      serveur
+        .expectOne((requete) => requete.url === `/api/images/${IMAGE}/fichier`)
+        .flush(new Blob(['png']));
+      await stabiliser();
+      expect(racine.querySelector('.carte-mot__miniature')?.getAttribute('alt')).toBe(
+        'citrouille, à compléter',
+      );
+      expect(texte('.entete__compteur')).toBe('2 mots, 1 déjà illustré');
+      expect(document.activeElement).toBe(boutonRetirer('citrouille'));
+      expect(texte('p[aria-live="polite"]')).toBe('Image enregistrée pour « citrouille ».');
+    });
+
+    it('« Annuler » le retrait d’un Mot illustré : le rétablissement renvoie son Image', async () => {
+      const afficher = vi.fn<(message: string, annuler: () => unknown) => void>();
+      vi.spyOn(TestBed.inject(BandeauAnnuler), 'afficher').mockImplementation(afficher);
+      await ouvrir(
+        { ...PREPARATION, nombreMots: 2, nombreIllustres: 1 },
+        MODULES,
+        THEMES,
+        albumDe(PREPARATION),
+        [GALETTE, ILLUSTREE],
+      );
+      expect(texte('.entete__compteur')).toBe('2 mots, 1 déjà illustré');
+
+      boutonRetirer('citrouille').click();
+      await stabiliser();
+      expect(texte('.entete__compteur')).toBe('1 mot, 0 déjà illustré');
+      serveur.expectOne(`${URL_MOTS}/${ILLUSTREE.id}`).flush(ILLUSTREE);
+      await stabiliser();
+      afficher.mock.lastCall![1]();
+      await stabiliser();
+
+      const requete = serveur.expectOne(`${URL_MOTS}/retablissement`);
+      expect(requete.request.body).toEqual({
+        motId: ILLUSTREE.motId,
+        sensId: ILLUSTREE.sens.id,
+        ordre: 2,
+        themeId: null,
+        imageId: IMAGE,
+      });
+      requete.flush(ILLUSTREE, { status: 201, statusText: 'Created' });
+      await stabiliser();
+      expect(texte('.entete__compteur')).toBe('2 mots, 1 déjà illustré');
     });
   });
 });

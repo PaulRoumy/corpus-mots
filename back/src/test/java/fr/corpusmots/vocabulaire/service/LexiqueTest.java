@@ -32,6 +32,9 @@ class LexiqueTest {
     @BeforeEach
     void viderLeLexique() {
         QuarkusTransaction.requiringNew().run(() -> {
+            entityManager.createNativeQuery("delete from lien_image").executeUpdate();
+            entityManager.createNativeQuery("delete from image_fichier").executeUpdate();
+            entityManager.createNativeQuery("delete from image").executeUpdate();
             entityManager.createNativeQuery("delete from sens_retenu").executeUpdate();
             entityManager.createNativeQuery("delete from preparation_mot").executeUpdate();
             entityManager.createNativeQuery("delete from sens").executeUpdate();

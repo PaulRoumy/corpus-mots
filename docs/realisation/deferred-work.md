@@ -143,3 +143,9 @@
 - source_spec: `docs/realisation/spec-2-4-suggestions-arasaac.md`
   summary: Story 2.4, partie 2 : une Carte illustrée n'interroge pas ARASAAC et occupe une seule colonne ; décider du placement des Cartes « à illustrer » sur 3 colonnes parmi les Cartes illustrées (trous de la Grille), et tester `illustre: true` dans `carte-mot.spec.ts` et `preparation.spec.ts`.
   evidence: Revue de la story 2.4, partie 1, ligne 13 du journal de tri : `grid-column: span 3` avec `auto-fill` laisse des cellules vides en fin de ligne.
+- source_spec: none
+  summary: Story 2.5, partie 2 : « + › Ajouter une image » ouvre le même téléversement avec la saisie du Mot (normalisé comme en story 2.3), et l'Image est enregistrée dans Mes mots sans lien vers une Préparation.
+  evidence: Découpage de la story 2.5 choisi par Paul ; la partie 1 pose le téléversement depuis la Carte « à illustrer » et les fondations de l'Image.
+- source_spec: none
+  summary: Story 2.7 : le Panneau de choix d'Image propose « Téléverser » (« Ajouter une image ») avec le formulaire de la story 2.5.
+  evidence: Critère de la story 2.5 qui dépend d'un Panneau livré par la story 2.7.

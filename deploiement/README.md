@@ -91,6 +91,8 @@ Le realm n'est importé que s'il n'existe pas encore : une modification de `keyc
 
 Chaque nuit à 03:00, `sauvegarde.sh` écrit un `pg_dumpall` compressé des deux bases (`corpusmots` et `keycloak`, rôles compris) sur le disque externe, sous le nom `corpus-mots-AAAA-MM-JJ_HHMM.sql.gz`, et garde `SAUVEGARDE_JOURS` jours (14 par défaut). Il est lancé par un timer systemd **utilisateur**, au nom du même utilisateur que Podman rootless (pas de `cron`, rien en root). Si la machine était éteinte à 03:00, la sauvegarde est faite à son démarrage suivant ; en cas d'échec, systemd la relance toutes les 15 minutes, dans la limite de 4 lancements en 2 heures.
 
+Les Images téléversées sont enregistrées dans la base `corpusmots` (réduites, sans métadonnées, aucun fichier sur le disque du serveur) : elles sont donc dans chaque sauvegarde, dont la taille croît avec elles.
+
 Les anciennes sauvegardes ne sont supprimées qu'après une sauvegarde réussie : disque absent, disque plein ou base injoignable, rien n'est effacé.
 
 ### Installation

@@ -4,7 +4,10 @@ import fr.corpusmots.preparations.service.RetablirMotCommande;
 import java.util.UUID;
 import org.eclipse.microprofile.openapi.annotations.media.Schema;
 
-/** Mot retiré d'une Préparation à rétablir, tel que le retrait l'a renvoyé : Mot, Sens, place et Thème qu'il avait. */
+/**
+ * Mot retiré d'une Préparation à rétablir, tel que le retrait l'a renvoyé : Mot, Sens, place, Thème et Image qu'il
+ * avait.
+ */
 public record RetablissementMotPreparationDto(
         @Schema(required = true, description = "Identifiant du Mot du Lexique") UUID motId,
         @Schema(required = true, description = "Sens que le Mot avait dans la Préparation, Sens de ce Mot") UUID sensId,
@@ -12,9 +15,12 @@ public record RetablissementMotPreparationDto(
                 description = "Place d'origine ; le Mot est placé en fin si elle est prise ou absente") Integer ordre,
         @Schema(nullable = true,
                 description = "Thème que le Mot avait, null pour aucun ; un Thème supprimé entre-temps est ignoré")
-        UUID themeId) {
+        UUID themeId,
+        @Schema(nullable = true,
+                description = "Image qui était liée au Mot, null pour aucune ; liée de nouveau (origine reutilisee)")
+        UUID imageId) {
 
     RetablirMotCommande enCommande() {
-        return new RetablirMotCommande(motId, sensId, ordre, themeId);
+        return new RetablirMotCommande(motId, sensId, ordre, themeId, imageId);
     }
 }

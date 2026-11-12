@@ -23,4 +23,5 @@ COPY --from=construction /construction/target/quarkus-app/quarkus/ quarkus/
 ENV QUARKUS_PROFILE=prod
 EXPOSE 8080
 USER 1001
-ENTRYPOINT ["java", "-jar", "/app/quarkus-run.jar"]
+# Sans affichage : la réduction des images (java.awt) tourne en mode headless.
+ENTRYPOINT ["java", "-Djava.awt.headless=true", "-jar", "/app/quarkus-run.jar"]

@@ -31,7 +31,10 @@ import { ChangeDetectionStrategy, Component } from '@angular/core';
 
         <h3 class="donnees__sous-titre">Votre travail dans l'application</h3>
         <ul class="donnees__liste">
-          <li>les Images que vous ajoutez, avec leur auteur : votre nom affiché ;</li>
+          <li>
+            les Images que vous ajoutez, avec leur auteur : votre nom affiché ; une Image téléversée
+            est réduite et enregistrée sans ses métadonnées (date, appareil, lieu de prise de vue) ;
+          </li>
           <li>
             vos Préparations et leurs Mots ; un Mot tapé rejoint le lexique de l'école, sans nom
             d'auteur, et y reste après la suppression du compte ;

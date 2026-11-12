@@ -48,6 +48,10 @@ describe('messageErreur', () => {
     [400, 'preparation.mot_invalide', 'Saisissez un mot de 1 à 100 caractères.'],
     [409, 'preparation.mot_deja_present', 'Ce mot est déjà dans la préparation.'],
     [400, 'preparation.sens_invalide', "Ce sens n'appartient pas à ce mot."],
+    [409, 'preparation.mot_deja_illustre', 'Ce mot a déjà une image dans la préparation.'],
+    // vocabulaire.service.Images, Usages
+    [400, 'image.album_requis', "Album d'origine requis."],
+    [400, 'image.sens_different', 'Cette image illustre un autre sens que celui du mot.'],
     // vocabulaire.service.SuggestionsArasaac
     [503, 'arasaac.indisponible', "ARASAAC ne répond pas pour l'instant."],
     // referentiels.service.ReferentielsService

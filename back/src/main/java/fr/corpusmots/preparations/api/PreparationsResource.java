@@ -4,6 +4,11 @@ import fr.corpusmots.commun.api.ErreurMetier;
 import fr.corpusmots.commun.service.Pagination;
 import fr.corpusmots.commun.service.Section;
 import fr.corpusmots.preparations.service.PreparationsService;
+import fr.corpusmots.preparations.service.TeleverserImageMotCommande;
+import fr.corpusmots.vocabulaire.service.Licence;
+import fr.corpusmots.vocabulaire.service.ImageReduiteVue;
+import fr.corpusmots.vocabulaire.service.ReductionImages;
+import fr.corpusmots.vocabulaire.service.TypeImage;
 import jakarta.inject.Inject;
 import jakarta.ws.rs.Consumes;
 import jakarta.ws.rs.DELETE;
@@ -15,6 +20,9 @@ import jakarta.ws.rs.PathParam;
 import jakarta.ws.rs.Produces;
 import jakarta.ws.rs.QueryParam;
 import jakarta.ws.rs.core.MediaType;
+import java.io.IOException;
+import java.io.UncheckedIOException;
+import java.nio.file.Files;
 import java.util.List;
 import java.util.UUID;
 import org.eclipse.microprofile.openapi.annotations.Operation;
@@ -35,6 +43,9 @@ public class PreparationsResource {
 
     @Inject
     PreparationsService preparations;
+
+    @Inject
+    ReductionImages reduction;
 
     @POST
     @Consumes(MediaType.APPLICATION_JSON)
@@ -131,6 +142,39 @@ public class PreparationsResource {
             throw new ErreurMetier(400, "requete.invalide", "Le corps de la requête est obligatoire");
         }
         return MotPreparationDto.de(preparations.retablirMot(id, retablissement.enCommande()));
+    }
+
+    @POST
+    @Path("/{id}/mots/{motPreparationId}/image")
+    @Consumes(MediaType.MULTIPART_FORM_DATA)
+    @ResponseStatus(201)
+    @Operation(operationId = "televerserImageMotPreparation",
+            summary = "Téléverser une Image pour un Mot d'une Préparation de l'enseignant connecté et la lui lier")
+    @APIResponse(responseCode = "201", description = "Image créée (privee), réduite et liée au Mot (origine nouvelle)",
+            content = @Content(mediaType = MediaType.APPLICATION_JSON,
+                    schema = @Schema(implementation = MotPreparationDto.class)))
+    public MotPreparationDto televerserImage(@PathParam("id") UUID id,
+            @PathParam("motPreparationId") UUID motPreparationId, TeleversementImageMotPreparationDto televersement) {
+        if (televersement == null || televersement.fichier == null) {
+            throw new ErreurMetier(400, "requete.invalide", "Le fichier est obligatoire");
+        }
+        TypeImage type = TypeImage.deValeur(televersement.typeImage)
+                .orElseThrow(() -> new ErreurMetier(400, "requete.invalide", "Type d'image absent ou inconnu"));
+        Licence licence = televersement.licence == null || televersement.licence.isBlank() ? null
+                : Licence.deValeur(televersement.licence)
+                        .orElseThrow(() -> new ErreurMetier(400, "requete.invalide", "Licence inconnue"));
+        // 413 avant de lire le fichier en mémoire : reduire() ne prend que des octets déjà lus.
+        reduction.verifierTaille(televersement.fichier.size());
+        byte[] octets;
+        try {
+            octets = Files.readAllBytes(televersement.fichier.uploadedFile());
+        } catch (IOException erreur) {
+            throw new UncheckedIOException(erreur);
+        }
+        // Réduction coûteuse hors transaction : aucune connexion tenue pendant le décodage.
+        ImageReduiteVue fichier = reduction.reduire(octets, type);
+        return MotPreparationDto.de(preparations.televerserImage(id, motPreparationId,
+                new TeleverserImageMotCommande(fichier, type, licence, televersement.source, televersement.auteur)));
     }
 
     @PUT

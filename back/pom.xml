@@ -115,6 +115,10 @@
                 <artifactId>quarkus-maven-plugin</artifactId>
                 <version>${quarkus.platform.version}</version>
                 <extensions>true</extensions>
+                <configuration>
+                    <!-- ReductionImages (AWT) sans session graphique, comme dans le Containerfile. -->
+                    <jvmArgs>-Djava.awt.headless=true</jvmArgs>
+                </configuration>
             </plugin>
             <plugin>
                 <artifactId>maven-compiler-plugin</artifactId>
@@ -127,7 +131,7 @@
                 <artifactId>maven-surefire-plugin</artifactId>
                 <version>${surefire-plugin.version}</version>
                 <configuration>
-                    <argLine>@{argLine}</argLine>
+                    <argLine>@{argLine} -Djava.awt.headless=true</argLine>
                     <systemPropertyVariables>
                         <java.util.logging.manager>org.jboss.logmanager.LogManager</java.util.logging.manager>
                         <maven.home>${maven.home}</maven.home>
@@ -146,7 +150,7 @@
                     </execution>
                 </executions>
                 <configuration>
-                    <argLine>@{argLine}</argLine>
+                    <argLine>@{argLine} -Djava.awt.headless=true</argLine>
                     <systemPropertyVariables>
                         <java.util.logging.manager>org.jboss.logmanager.LogManager</java.util.logging.manager>
                         <maven.home>${maven.home}</maven.home>

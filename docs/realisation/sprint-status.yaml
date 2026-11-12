@@ -29,7 +29,7 @@
 # - Dev moves story to 'review', then runs code-review (fresh context, different LLM recommended)
 # - Retrospective appends its action items to action_items; the status view surfaces open ones
 generated: 10-30-2026 18:50
-last_updated: 11-11-2026 12:35
+last_updated: 2026-11-12
 project: corpus-mots
 project_key: NOKEY
 tracking_system: file-system
@@ -50,7 +50,7 @@ development_status:
   2-2-modules-thèmes-et-réglages-de-la-préparation: review
   2-3-saisir-des-mots-en-série: review
   2-4-illustrer-un-mot-avec-un-pictogramme-arasaac: in-progress
-  2-5-téléverser-une-image: backlog
+  2-5-téléverser-une-image: in-progress
   2-6-carte-d-identité-d-une-image: backlog
   2-7-détection-immédiate-et-réutilisation-en-un-geste: backlog
   2-8-choisir-ou-créer-un-sens: backlog

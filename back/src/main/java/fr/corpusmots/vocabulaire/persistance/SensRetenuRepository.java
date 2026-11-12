@@ -44,6 +44,11 @@ public class SensRetenuRepository implements PanacheRepositoryBase<SensRetenu, U
         return parMot;
     }
 
+    /** Identifiant du Sens retenu pour ce Mot de Préparation, vide s'il n'en a pas. */
+    public Optional<UUID> sensIdDe(UUID preparationMotId) {
+        return find("preparationMotId", preparationMotId).firstResultOptional().map(SensRetenu::sensId);
+    }
+
     /** Supprime le Sens retenu de ce Mot de Préparation, s'il en a un. */
     public void supprimerDe(UUID preparationMotId) {
         delete("preparationMotId", preparationMotId);

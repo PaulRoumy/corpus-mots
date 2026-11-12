@@ -2,7 +2,8 @@
 
 // Carte de Mot (key-preparation.html › `.wc`, `.todo`). La Carte « à illustrer » s'étend sur trois colonnes de la
 // Grille (`preparation.scss`) : partie gauche de 120 px (`.todo .l`) séparée par des tirets, suggestions ARASAAC à
-// droite (`.todo .r`, story 2.4).
+// droite (`.todo .r`, story 2.4), suivies de « Téléverser » (story 2.5). La Carte illustrée (`.wc`) occupe une colonne :
+// vignette carrée de la miniature, Badge de type, Mot en cursive.
 :host {
   position: relative;
   display: block;
@@ -39,10 +40,52 @@
   }
 }
 
-// Suggestions à droite, en laissant la place du bouton « Retirer » du coin haut droit.
-.carte-mot__suggestions {
+// Suggestions et « Téléverser » à droite, en laissant la place du bouton « Retirer » du coin haut droit.
+.carte-mot__droite {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--cm-espace-2);
+  min-width: 0;
   padding: var(--cm-espace-3) calc(var(--cm-taille-bouton-icone) + var(--cm-espace-1))
     var(--cm-espace-3) var(--cm-espace-3);
+}
+
+// Bouton texte « Téléverser », à la couleur du texte « à illustrer ».
+.carte-mot__televerser {
+  @include mat.button-overrides(
+    (
+      text-label-text-color: var(--cm-etat-a-illustrer-texte),
+    )
+  );
+}
+
+// Vignette de la Carte illustrée (DESIGN.md › Vignette d'Image) : carrée, l'image d'abord, entière.
+.carte-mot__image {
+  display: grid;
+  place-items: center;
+  box-sizing: border-box;
+  width: 100%;
+  aspect-ratio: 1;
+  overflow: hidden;
+  border-radius: var(--cm-arrondi-md);
+  background: var(--mat-sys-surface-container-low);
+}
+
+.carte-mot__miniature {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+.carte-mot__repli {
+  width: var(--cm-taille-icone-grande);
+  height: var(--cm-taille-icone-grande);
+  color: var(--mat-sys-on-surface-variant);
+}
+
+.carte-mot__type {
+  max-width: 100%;
 }
 
 .carte-mot__vignette {
@@ -86,7 +129,8 @@
   }
 }
 
-// Bouton « Retirer » (croix), toujours visible, dans le coin haut droit de la Carte.
+// Bouton « Retirer » (croix), toujours visible, dans le coin haut droit de la Carte ; sur fond carte, pour rester
+// lisible au-dessus de la vignette d'une Carte illustrée.
 .carte-mot__retirer {
   position: absolute;
   top: var(--cm-espace-1);
@@ -100,6 +144,11 @@
   mat-icon {
     width: var(--cm-taille-icone);
     height: var(--cm-taille-icone);
+  }
+
+  :host(:not(.carte-mot--a-illustrer)) & {
+    border-radius: var(--cm-arrondi-plein);
+    background: var(--mat-sys-surface);
   }
 }
 

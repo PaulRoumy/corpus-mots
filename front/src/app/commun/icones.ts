@@ -37,6 +37,16 @@ const TRACES = {
   horloge: '<circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 2"/>',
   // Crayon (`i-pen` de la maquette) : badge d'état « à illustrer » d'une Carte de Mot.
   crayon: '<path d="M4 20l1-4L16 5l3 3L8 19z"/>',
+  // Badges de type d'image (DESIGN.md › Types d'image) : globe (image libre), appareil photo (photo personnelle),
+  // point d'interrogation (inconnu) ; l'image d'album reprend le livre ouvert.
+  globe:
+    '<circle cx="12" cy="12" r="8.5"/><path d="M3.5 12h17"/>' +
+    '<path d="M12 3.5c2.4 2.5 3.5 5.3 3.5 8.5s-1.1 6-3.5 8.5c-2.4-2.5-3.5-5.3-3.5-8.5s1.1-6 3.5-8.5z"/>',
+  'appareil-photo':
+    '<path d="M4 8h3.2l1.6-2.5h6.4L16.8 8H20v11H4z"/><circle cx="12" cy="13.2" r="3.4"/>',
+  interrogation:
+    '<circle cx="12" cy="12" r="8.5"/>' +
+    '<path d="M9.6 9.6a2.5 2.5 0 1 1 3.4 2.3c-.6.3-1 .9-1 1.6v.5M12 16.8h.01"/>',
   // Trois points verticaux : bouton du menu « Actions du module » de l'En-tête de Préparation.
   actions:
     '<circle cx="12" cy="5.5" r="1.2"/><circle cx="12" cy="12" r="1.2"/><circle cx="12" cy="18.5" r="1.2"/>',

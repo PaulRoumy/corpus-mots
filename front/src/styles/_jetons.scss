@@ -199,6 +199,11 @@ $typographie-material: (
   --cm-largeur-carte-a-illustrer-gauche: 120px;
   --cm-taille-suggestion-arasaac: 60px;
   --cm-taille-pictogramme-suggestion: 50px;
+  // Badge de type d'image (DESIGN.md › Types d'image, story 2.5) : bordure pleine, tirets ou pointillés de 2 px, double
+  // de 3 px pour la photo personnelle ; aperçu du fichier dans le Dialogue « Téléverser une image ».
+  --cm-epaisseur-bordure-type-image: 2px;
+  --cm-epaisseur-bordure-type-photo: 3px;
+  --cm-taille-apercu-televersement: 160px;
   // Bouton texte du Thème d'une Carte de Mot (story 2.3, partie 3) : cible de 24 px au moins (WCAG 2.5.8).
   --cm-hauteur-bouton-theme-mot: 24px;
 

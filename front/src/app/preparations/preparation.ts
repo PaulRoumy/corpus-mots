@@ -60,6 +60,7 @@ import { ChampNomModule } from './champ-nom-module';
 import { ouvrirDialogueCorrigerAlbum } from './corriger-album-dialogue';
 import { libelleMots } from './preparations';
 import { SaisieRapide } from './saisie-rapide';
+import { ouvrirDialogueTeleverserImage } from './televerser-image-dialogue';
 import {
   ChangementTheme,
   ouvrirDialogueThemeMot,
@@ -229,6 +230,12 @@ type Source = 'module' | 'theme';
  * « Thème de « … » » ; le Mot renvoyé met à jour la Carte et le focus revient au bouton à la fermeture. Un Thème créé,
  * renommé ou supprimé depuis le Dialogue met aussitôt à jour les Thèmes, l'En-tête et les Cartes ; supprimer un Thème
  * depuis l'En-tête le retire aussi des Cartes.
+ *
+ * Téléverser une image (story 2.5, partie 1) : « Téléverser » d'une Carte « à illustrer » ouvre le Dialogue
+ * « Téléverser une image » ; le Mot illustré renvoyé remplace celui de la Carte, qui passe sur une colonne avec sa
+ * vignette et son Badge de type, sans recharger la page ; le focus va à son bouton « Retirer ». Le compteur « M déjà
+ * illustrés » suit la Grille une fois chargée. Retirer un Mot illustré ne supprime pas son Image : « Annuler » le
+ * rétablit avec la même Image.
  *
  * Le Temps passé est un champ texte en mode de saisie décimal plutôt qu'un `type="number"` : celui-ci, selon la langue
  * du navigateur, refuse la virgule sans le dire (sa valeur devient vide, comme un champ effacé).
@@ -447,7 +454,7 @@ type Source = 'module' | 'theme';
               <p class="entete__compteur">
                 <strong>{{ libelleMots(nombreMots()) }}</strong
                 >,
-                {{ libelleIllustres(courante.nombreIllustres, nombreMots()) }}
+                {{ libelleIllustres(nombreIllustres(), nombreMots()) }}
               </p>
               <mat-form-field class="entete__champ entete__temps" subscriptSizing="dynamic">
                 <mat-label>Temps passé (facultatif)</mat-label>
@@ -484,6 +491,7 @@ type Source = 'module' | 'theme';
                       [theme]="nomTheme(mot)"
                       (retirer)="retirerMot(mot)"
                       (changerTheme)="ouvrirThemeMot(mot)"
+                      (televerser)="ouvrirTeleverser(mot)"
                     />
                   </li>
                 }
@@ -611,6 +619,13 @@ export class Preparation {
   protected readonly nombreMots = computed(
     () => this.mots()?.length ?? this.preparation()?.nombreMots ?? 0,
   );
+  /** Compteur « M déjà illustrés » : la Grille une fois chargée, sinon le nombre lu avec la Préparation. */
+  protected readonly nombreIllustres = computed(() => {
+    const mots = this.mots();
+    return mots === null
+      ? (this.preparation()?.nombreIllustres ?? 0)
+      : mots.filter((mot) => mot.illustre).length;
+  });
   private readonly saisieRapide = viewChild(SaisieRapide);
   private readonly cartesMots = viewChildren(CarteMot);
   protected readonly echecRetrait = signal<EchecRetrait | null>(null);
@@ -860,6 +875,7 @@ export class Preparation {
           sensId: retire.sens.id,
           ordre: retire.ordre,
           themeId: retire.themeId ?? null,
+          imageId: retire.image?.id ?? null,
         },
       });
       if (numero === this.dernierChargement) {
@@ -878,7 +894,10 @@ export class Preparation {
         reessayable: codeErreur(erreur) !== 'preparation.mot_deja_present',
       });
       // Le Bandeau « Annuler » ou « Réessayer », qui avait le focus, a disparu : le focus revient au Champ de saisie.
-      if (!(document.activeElement instanceof HTMLElement) || document.activeElement === document.body) {
+      if (
+        !(document.activeElement instanceof HTMLElement) ||
+        document.activeElement === document.body
+      ) {
         this.focaliserApresRendu(undefined);
       }
     }
@@ -932,6 +951,35 @@ export class Preparation {
     );
   }
 
+  /**
+   * « Téléverser » d'une Carte « à illustrer » : ouvre le Dialogue « Téléverser une image » ; le Mot illustré renvoyé
+   * remplace celui de la Carte et son bouton « Retirer » prend le focus. Fermé sans enregistrement, le focus revient au
+   * bouton « Téléverser ».
+   */
+  protected async ouvrirTeleverser(mot: MotPreparationDto): Promise<void> {
+    const preparation = this.preparation();
+    if (preparation === null) {
+      return;
+    }
+    const numero = this.dernierChargement;
+    const declencheur = this.cartesMots()
+      .find((carte) => carte.mot().id === mot.id)
+      ?.elementTeleverser();
+    const illustre = await ouvrirDialogueTeleverserImage(
+      this.injecteur,
+      { preparationId: preparation.id, mot, titreAlbum: preparation.titreAlbum },
+      declencheur,
+    );
+    if (illustre === undefined || numero !== this.dernierChargement) {
+      return;
+    }
+    this.mots.update((mots) =>
+      mots === null ? mots : mots.map((autre) => (autre.id === illustre.id ? illustre : autre)),
+    );
+    this.annonce.set(`Image enregistrée pour « ${illustre.forme} ».`);
+    this.focaliserApresRendu(illustre);
+  }
+
   /** Thème créé, renommé ou supprimé depuis le Dialogue du Thème d'un Mot. */
   private appliquerChangementTheme({ type, theme }: ChangementTheme): void {
     if (type === 'cree') {
@@ -977,7 +1025,9 @@ export class Preparation {
     afterNextRender(
       () => {
         const carte =
-          mot === undefined ? undefined : this.cartesMots().find((autre) => autre.mot().id === mot.id);
+          mot === undefined
+            ? undefined
+            : this.cartesMots().find((autre) => autre.mot().id === mot.id);
         if (carte === undefined) {
           this.saisieRapide()?.focus();
         } else {

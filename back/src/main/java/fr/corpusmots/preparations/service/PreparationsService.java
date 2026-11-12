@@ -12,10 +12,15 @@ import fr.corpusmots.referentiels.service.AlbumVue;
 import fr.corpusmots.referentiels.service.ModuleVue;
 import fr.corpusmots.referentiels.service.ReferentielsService;
 import fr.corpusmots.referentiels.service.ThemeVue;
+import fr.corpusmots.vocabulaire.service.ImageVue;
+import fr.corpusmots.vocabulaire.service.Images;
 import fr.corpusmots.vocabulaire.service.Lexique;
+import fr.corpusmots.vocabulaire.service.LierImageCommande;
 import fr.corpusmots.vocabulaire.service.MotVue;
+import fr.corpusmots.vocabulaire.service.OrigineLien;
 import fr.corpusmots.vocabulaire.service.RetenirSensCommande;
 import fr.corpusmots.vocabulaire.service.SensVue;
+import fr.corpusmots.vocabulaire.service.TeleverserImageCommande;
 import fr.corpusmots.vocabulaire.service.Usages;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
@@ -33,6 +38,10 @@ import java.util.UUID;
  *
  * <p>Mots d'une Préparation (story 2.3) : seul point d'écriture de {@code preparation_mot}. Le Mot est obtenu ou créé
  * par {@link Lexique} et son Sens retenu par {@link Usages}, dans la transaction ouverte ici (AD-14, AD-17).
+ *
+ * <p>Images des Mots (story 2.5) : une Image téléversée depuis la Carte d'un Mot, réduite avant la transaction par
+ * {@code ReductionImages}, est créée par {@link Images} et liée au Mot par {@link Usages#lierImage}, dans la
+ * transaction ouverte ici ; {@code preparations} ne stocke aucune donnée d'Image (AD-14).
  */
 @ApplicationScoped
 public class PreparationsService {
@@ -69,6 +78,9 @@ public class PreparationsService {
     Usages usages;
 
     @Inject
+    Images images;
+
+    @Inject
     EnseignantCourant enseignantCourant;
 
     /**
@@ -90,7 +102,7 @@ public class PreparationsService {
         Preparation preparation = Preparation.nouvelle(preparations.nouvelIdentifiant(), enseignantCourant.id(),
                 album.id(), section, module == null ? null : module.id(), theme == null ? null : theme.id());
         preparations.persistAndFlush(preparation);
-        return vue(preparation, album, module, theme, 0);
+        return vue(preparation, album, module, theme, 0, 0);
     }
 
     /**
@@ -117,7 +129,7 @@ public class PreparationsService {
                             + TEMPS_PASSE_MAXIMUM_MINUTES);
         }
         preparation.regler(module == null ? null : module.id(), theme == null ? null : theme.id(), temps);
-        return vue(preparation, album, module, theme, nombreMots(preparation));
+        return vue(preparation, album, module, theme, nombreMots(preparation), nombreIllustres(preparation));
     }
 
     /** Préparations de l'enseignant courant, les plus récentes d'abord. */
@@ -128,15 +140,17 @@ public class PreparationsService {
         Map<UUID, AlbumVue> albums = referentiels.albums(page.stream().map(Preparation::albumId).toList());
         Map<UUID, ModuleVue> modules = referentiels.modules(
                 page.stream().map(Preparation::moduleId).filter(Objects::nonNull).toList());
-        Map<UUID, Integer> nombresMots = preparationMots.compter(page.stream().map(Preparation::id).toList());
+        List<UUID> ids = page.stream().map(Preparation::id).toList();
+        Map<UUID, Integer> nombresMots = preparationMots.compter(ids);
+        Map<UUID, Integer> nombresIllustres = usages.nombresIllustres(ids);
         List<CartePreparationVue> cartes = page.stream().map(preparation -> {
             ModuleVue module = preparation.moduleId() == null ? null : modules.get(preparation.moduleId());
             int nombreMots = nombresMots.getOrDefault(preparation.id(), 0);
-            // Aucun Mot n'a encore d'Image avant la story 2.4 : tous sont à illustrer.
+            int nombreIllustres = nombresIllustres.getOrDefault(preparation.id(), 0);
             return new CartePreparationVue(preparation.id(), preparation.albumId(),
                     albumDe(preparation, albums.get(preparation.albumId())).titre(), preparation.section(),
                     module == null ? null : module.id(), module == null ? null : module.nom(), nombreMots,
-                    nombreMots, preparation.creeLe());
+                    nombreMots - nombreIllustres, preparation.creeLe());
         }).toList();
         return new PageCartesPreparationVue(cartes, preparations.compterDuProprietaire(proprietaire));
     }
@@ -154,7 +168,7 @@ public class PreparationsService {
                 : referentiels.module(preparation.moduleId()).orElse(null);
         ThemeVue theme = preparation.themeDefautId() == null ? null
                 : referentiels.theme(preparation.themeDefautId()).orElse(null);
-        return vue(preparation, album, module, theme, nombreMots(preparation));
+        return vue(preparation, album, module, theme, nombreMots(preparation), nombreIllustres(preparation));
     }
 
     /**
@@ -185,7 +199,7 @@ public class PreparationsService {
         preparationMots.persistAndFlush(ligne);
         SensVue sens = usages.retenirSens(new RetenirSensCommande(preparation.id(), ligne.id(), mot.id(),
                 preparation.albumId(), preparation.section()));
-        return vue(ligne, mot, sens);
+        return vue(ligne, mot, sens, null);
     }
 
     /**
@@ -193,7 +207,8 @@ public class PreparationsService {
      * registre des usages le libère ({@link Usages#libererPreparationMot}), puis sa ligne est supprimée, dans une même
      * transaction. Le Mot et ses Sens restent dans le Lexique ; les places des autres Mots ne changent pas.
      *
-     * @return le Mot retiré, avec le Sens, la place et le Thème qu'il avait, pour le rétablir
+     * @return le Mot retiré, avec le Sens, la place, le Thème et l'Image qu'il avait, pour le rétablir ; l'Image
+     *         n'est pas supprimée, seulement déliée
      * @throws ErreurMetier {@code 404 ressource.introuvable} si la Préparation n'existe pas ou appartient à un
      *         collègue, ou si le Mot de Préparation n'existe pas ou appartient à une autre Préparation
      */
@@ -202,7 +217,8 @@ public class PreparationsService {
         Preparation preparation = verrouillee(id);
         PreparationMot ligne = deLaPreparation(preparation, motPreparationId);
         MotVue mot = motDe(ligne, lexique.mots(List.of(ligne.motId())));
-        MotPreparationVue retire = vue(ligne, mot, lexique.sensRetenus(List.of(ligne.id())).get(ligne.id()));
+        MotPreparationVue retire = vue(ligne, mot, lexique.sensRetenus(List.of(ligne.id())).get(ligne.id()),
+                usages.imagesLiees(List.of(ligne.id())).get(ligne.id()));
         usages.libererPreparationMot(ligne.id());
         preparationMots.delete(ligne);
         preparationMots.flush();
@@ -211,12 +227,15 @@ public class PreparationsService {
 
     /**
      * Rétablit dans la Préparation {@code id} de l'enseignant courant un Mot retiré, avec le Sens et le Thème qu'il
-     * avait, à sa place d'origine si elle est libre, sinon en fin ; un Thème supprimé entre-temps n'est pas repris. Rien
-     * n'est ajouté en cas de refus.
+     * avait, à sa place d'origine si elle est libre, sinon en fin ; un Thème supprimé entre-temps n'est pas repris.
+     * L'Image qui lui était liée l'est de nouveau, avec l'origine {@code reutilisee} (AD-14). Rien n'est ajouté en cas
+     * de refus.
      *
      * @throws ErreurMetier {@code 404 ressource.introuvable} si la Préparation n'existe pas ou appartient à un
-     *         collègue, ou si le Mot n'existe pas ; {@code 400 preparation.sens_invalide} si le Sens n'est pas un Sens
-     *         de ce Mot ; {@code 409 preparation.mot_deja_present} si le Mot figure de nouveau dans la Préparation
+     *         collègue, si le Mot n'existe pas, ou si l'Image n'existe pas ou n'est plus proposable ;
+     *         {@code 400 preparation.sens_invalide} si le Sens n'est pas un Sens de ce Mot ;
+     *         {@code 400 image.sens_different} si l'Image illustre un autre Sens ;
+     *         {@code 409 preparation.mot_deja_present} si le Mot figure de nouveau dans la Préparation
      */
     @Transactional
     public MotPreparationVue retablirMot(UUID id, RetablirMotCommande commande) {
@@ -241,7 +260,37 @@ public class PreparationsService {
         preparationMots.persistAndFlush(ligne);
         SensVue sens = usages.retenirSens(new RetenirSensCommande(preparation.id(), ligne.id(), mot.id(),
                 preparation.albumId(), preparation.section(), commande.sensId()));
-        return vue(ligne, mot, sens);
+        ImageVue image = commande.imageId() == null ? null
+                : usages.lierImage(new LierImageCommande(preparation.id(), ligne.id(), commande.imageId(),
+                        preparation.albumId(), preparation.section(), OrigineLien.REUTILISEE));
+        return vue(ligne, mot, sens, image);
+    }
+
+    /**
+     * Téléverse une Image pour le Mot de Préparation {@code motPreparationId} de la Préparation {@code id} de
+     * l'enseignant courant, à partir du fichier déjà réduit (hors transaction) : l'Image est créée ({@code privee},
+     * Sens retenu du Mot, Album d'origine de la Préparation) et liée au Mot avec l'origine {@code nouvelle}, dans une
+     * même transaction. Rien n'est enregistré en cas de refus.
+     *
+     * @throws ErreurMetier {@code 404 ressource.introuvable} si la Préparation n'existe pas ou appartient à un
+     *         collègue, ou si le Mot de Préparation n'existe pas ou appartient à une autre Préparation ;
+     *         {@code 400 requete.invalide} si la licence ne peut pas être choisie pour ce type ;
+     *         {@code 409 preparation.mot_deja_illustre} si le Mot a déjà une Image
+     */
+    @Transactional
+    public MotPreparationVue televerserImage(UUID id, UUID motPreparationId, TeleverserImageMotCommande commande) {
+        Preparation preparation = verrouillee(id);
+        PreparationMot ligne = deLaPreparation(preparation, motPreparationId);
+        SensVue sens = lexique.sensRetenus(List.of(ligne.id())).get(ligne.id());
+        if (sens == null) {
+            throw new IllegalStateException("Sens retenu du mot de préparation " + ligne.id() + " introuvable");
+        }
+        ImageVue creee = images.televerser(new TeleverserImageCommande(commande.fichier(), sens.id(), commande.typeImage(),
+                commande.licence(), commande.source(), commande.auteur(), preparation.albumId()));
+        ImageVue liee = usages.lierImage(new LierImageCommande(preparation.id(), ligne.id(), creee.id(),
+                preparation.albumId(), preparation.section(), OrigineLien.NOUVELLE));
+        MotVue mot = motDe(ligne, lexique.mots(List.of(ligne.motId())));
+        return vue(ligne, mot, sens, liee);
     }
 
     /**
@@ -263,7 +312,8 @@ public class PreparationsService {
         ligne.changerTheme(theme == null ? null : theme.id());
         preparationMots.flush();
         MotVue mot = motDe(ligne, lexique.mots(List.of(ligne.motId())));
-        return vue(ligne, mot, lexique.sensRetenus(List.of(ligne.id())).get(ligne.id()));
+        return vue(ligne, mot, lexique.sensRetenus(List.of(ligne.id())).get(ligne.id()),
+                usages.imagesLiees(List.of(ligne.id())).get(ligne.id()));
     }
 
     /**
@@ -276,8 +326,12 @@ public class PreparationsService {
         Preparation preparation = mienne(id);
         List<PreparationMot> lignes = preparationMots.deLaPreparation(preparation.id());
         Map<UUID, MotVue> mots = lexique.mots(lignes.stream().map(PreparationMot::motId).toList());
-        Map<UUID, SensVue> sens = lexique.sensRetenus(lignes.stream().map(PreparationMot::id).toList());
-        return lignes.stream().map(ligne -> vue(ligne, motDe(ligne, mots), sens.get(ligne.id()))).toList();
+        List<UUID> ids = lignes.stream().map(PreparationMot::id).toList();
+        Map<UUID, SensVue> sens = lexique.sensRetenus(ids);
+        Map<UUID, ImageVue> imagesLiees = usages.imagesLiees(ids);
+        return lignes.stream()
+                .map(ligne -> vue(ligne, motDe(ligne, mots), sens.get(ligne.id()), imagesLiees.get(ligne.id())))
+                .toList();
     }
 
     /** Section de la Préparation la plus récente de l'enseignant courant, vide s'il n'en a aucune. */
@@ -327,6 +381,10 @@ public class PreparationsService {
         return (int) preparationMots.compter(preparation.id());
     }
 
+    private int nombreIllustres(Preparation preparation) {
+        return usages.nombresIllustres(List.of(preparation.id())).getOrDefault(preparation.id(), 0);
+    }
+
     /** Module {@code moduleId} s'il appartient à l'Album, {@code null} si {@code moduleId} est nul. */
     private ModuleVue moduleDeLAlbum(UUID moduleId, UUID albumId) {
         if (moduleId == null) {
@@ -347,22 +405,24 @@ public class PreparationsService {
                 .orElseThrow(() -> new ErreurMetier(400, CODE_THEME_INTROUVABLE, "Aucun thème ne porte cet identifiant"));
     }
 
-    /** Aucun Mot n'a encore d'Image avant la story 2.4 : {@code nombreIllustres} vaut 0. */
     private static PreparationVue vue(Preparation preparation, AlbumVue album, ModuleVue module, ThemeVue theme,
-            int nombreMots) {
+            int nombreMots, int nombreIllustres) {
         return new PreparationVue(preparation.id(), album.id(), album.titre(), preparation.section(),
                 module == null ? null : module.id(), module == null ? null : module.nom(),
                 theme == null ? null : theme.id(), theme == null ? null : theme.nom(), preparation.tempsPasseMinutes(),
-                nombreMots, 0, preparation.creeLe());
+                nombreMots, nombreIllustres, preparation.creeLe());
     }
 
-    /** Un Mot de Préparation a toujours un Sens retenu (même transaction) ; son absence est une anomalie. */
-    private static MotPreparationVue vue(PreparationMot ligne, MotVue mot, SensVue sens) {
+    /**
+     * Un Mot de Préparation a toujours un Sens retenu (même transaction) ; son absence est une anomalie. {@code image}
+     * est l'Image liée, {@code null} pour un Mot « à illustrer ».
+     */
+    private static MotPreparationVue vue(PreparationMot ligne, MotVue mot, SensVue sens, ImageVue image) {
         if (sens == null) {
             throw new IllegalStateException("Sens retenu du mot de préparation " + ligne.id() + " introuvable");
         }
         return new MotPreparationVue(ligne.id(), mot.id(), mot.forme(), ligne.ordre(), sens.id(), sens.libelle(),
-                sens.categorie(), false, ligne.themeId());
+                sens.categorie(), ligne.themeId(), image);
     }
 
     /** Un Album n'est jamais supprimé (sa fusion, Epic 6, réécrira les Préparations) : son absence est une anomalie. */

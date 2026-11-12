@@ -1,0 +1,86 @@
+:host {
+  display: block;
+  width: var(--cm-largeur-dialogue);
+  max-width: 100%;
+}
+
+.televerser {
+  display: flex;
+  flex-direction: column;
+  gap: var(--cm-espace-3);
+}
+
+// Mot de vocabulaire en cursive (DESIGN.md › typography.word-cursive).
+.televerser__mot {
+  margin: 0;
+  font: var(--cm-typo-word-cursive-lg);
+  color: var(--mat-sys-primary);
+}
+
+// Zone de dépôt : le glisser-déposer s'ajoute au bouton « Choisir un fichier », jamais à sa place.
+.televerser__depot {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--cm-espace-2);
+  padding: var(--cm-espace-4);
+  border: var(--cm-epaisseur-bordure-a-illustrer) dashed var(--mat-sys-outline);
+  border-radius: var(--cm-arrondi-lg);
+  background: var(--mat-sys-surface-container-low);
+  text-align: center;
+}
+
+.televerser__depot--survol {
+  border-color: var(--mat-sys-primary);
+  background: var(--mat-sys-primary-container);
+}
+
+.televerser__apercu {
+  max-width: var(--cm-taille-apercu-televersement);
+  max-height: var(--cm-taille-apercu-televersement);
+  border-radius: var(--cm-arrondi-md);
+  object-fit: contain;
+}
+
+.televerser__icone {
+  width: var(--cm-taille-illustration);
+  height: var(--cm-taille-illustration);
+  color: var(--mat-sys-on-surface-variant);
+}
+
+.televerser__fichier {
+  max-width: 100%;
+  margin: 0;
+  overflow-wrap: anywhere;
+  font: var(--cm-typo-body);
+}
+
+.televerser__aide {
+  margin: 0;
+  font: var(--cm-typo-body-sm);
+  color: var(--mat-sys-on-surface-variant);
+}
+
+// Repère de qualité (DESIGN.md) : une ligne body-sm en on-surface-variant.
+.televerser__repere {
+  margin: 0;
+  font: var(--cm-typo-body-sm);
+  color: var(--mat-sys-on-surface-variant);
+}
+
+// Annonce polie de l'envoi en cours, vide le reste du temps (une région live doit rester dans le rendu).
+.televerser__envoi {
+  margin: 0;
+  font: var(--cm-typo-body-sm);
+  color: var(--mat-sys-on-surface-variant);
+}
+
+.televerser__champ {
+  width: 100%;
+}
+
+// Sélecteur de licence : « non partageable » en on-surface-variant (DESIGN.md).
+.televerser__non-partageable {
+  color: var(--mat-sys-on-surface-variant);
+  font: var(--cm-typo-body-sm);
+}
