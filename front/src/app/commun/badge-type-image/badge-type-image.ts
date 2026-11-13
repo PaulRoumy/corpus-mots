@@ -1,26 +1,9 @@
 import { ChangeDetectionStrategy, Component, computed, input } from '@angular/core';
 import { MatIconModule } from '@angular/material/icon';
-import { PreparationImageDto } from '../../api/models/preparation-image-dto';
 import { Icone } from '../icones';
+import { LIBELLES_TYPE_IMAGE, TypeImage } from '../libelles-images';
 
-/** Type d'une Image, même valeur en base, dans l'API et dans le front (énumération du client généré). */
-export type TypeImage = PreparationImageDto['typeImage'];
-
-/** Types d'image, dans l'ordre du Glossaire. */
-export const TYPES_IMAGE: readonly TypeImage[] = [
-  'image_libre',
-  'photo_personnelle',
-  'image_album',
-  'inconnu',
-];
-
-/** Libellé affiché d'un type d'image. */
-export const LIBELLES_TYPE_IMAGE: Readonly<Record<TypeImage, string>> = {
-  image_libre: 'image libre',
-  photo_personnelle: 'photo personnelle',
-  image_album: "image d'album",
-  inconnu: 'inconnu',
-};
+export type { TypeImage } from '../libelles-images';
 
 const ICONES_TYPE_IMAGE: Readonly<Record<TypeImage, Icone>> = {
   image_libre: 'globe',

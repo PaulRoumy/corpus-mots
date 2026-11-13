@@ -207,6 +207,18 @@ $typographie-material: (
   // Bouton texte du Thème d'une Carte de Mot (story 2.3, partie 3) : cible de 24 px au moins (WCAG 2.5.8).
   --cm-hauteur-bouton-theme-mot: 24px;
 
+  // Panneau Carte d'identité (key-banque.html › `.cid`, `dl.ro`, story 2.6) : grande vignette de 176 px, colonne des
+  // intitulés de 132 px ; collé en haut du contenu à côté de la Grille, il tient dans la zone visible du contenu (écran
+  // moins la barre supérieure de la coquille, 80 px : marges de 16 px et Bouton « + » de 48 px, et moins les marges
+  // haute et basse du contenu), et couvre tout l'écran sous 600 px de large, au-dessus de la coquille.
+  --cm-hauteur-vignette-carte-identite: 176px;
+  --cm-largeur-intitule-carte-identite: 132px;
+  --cm-hauteur-barre-superieure: 80px;
+  --cm-hauteur-zone-contenu: calc(
+    100dvh - var(--cm-hauteur-barre-superieure) - var(--cm-espace-2) - var(--cm-espace-6)
+  );
+  --cm-plan-panneau: 5;
+
   // Graisse forte (entrée active de la navigation) et plan du lien d'évitement, au-dessus de la coquille
   --cm-graisse-forte: 900;
   --cm-plan-evitement: 2;

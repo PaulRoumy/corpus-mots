@@ -27,7 +27,9 @@ import { SuggestionsArasaac } from './suggestions-arasaac';
  *
  * Une fois illustrée, la Carte occupe une colonne (key-preparation.html › `.wc`) : vignette de la miniature de l'Image,
  * chargée en `blob` par le client généré (`?taille=miniature`, AD-23), d'alternative « Mot, Sens » ; Badge de type
- * d'image ; Mot en cursive. Une miniature qui ne se charge pas laisse voir l'icône d'image.
+ * d'image ; Mot en cursive. Une miniature qui ne se charge pas laisse voir l'icône d'image. La vignette est un bouton
+ * « Carte d'identité de « forme » », qui émet `ouvrirCarteIdentite` : la page ouvre le Panneau Carte d'identité
+ * (story 2.6, partie 1).
  *
  * Le bouton icône « Retirer « forme » de la préparation » (croix), toujours visible, émet `retirer` : le retrait se
  * fait sans confirmation et s'annule par le Bandeau « Annuler » (story 2.3, partie 2).
@@ -56,10 +58,16 @@ import { SuggestionsArasaac } from './suggestions-arasaac';
     </button>
     <div class="carte-mot__gauche">
       @if (chargerVignette(); as charger) {
-        <span class="carte-mot__image">
+        <button
+          #boutonVignette
+          class="carte-mot__image"
+          type="button"
+          [attr.aria-label]="nomAccessibleVignette()"
+          [attr.aria-describedby]="idAlternative()"
+          (click)="ouvrirCarteIdentite.emit()"
+        >
           @if (echecVignette()) {
             <mat-icon class="carte-mot__repli" svgIcon="image" aria-hidden="true" />
-            <span class="cm-visuellement-masque">{{ alternative() }}</span>
           } @else {
             <img
               class="carte-mot__miniature"
@@ -68,7 +76,8 @@ import { SuggestionsArasaac } from './suggestions-arasaac';
               (echec)="echecVignette.set(true)"
             />
           }
-        </span>
+        </button>
+        <span class="cm-visuellement-masque" [id]="idAlternative()">{{ alternative() }}</span>
       } @else {
         <span class="carte-mot__vignette" aria-hidden="true"><mat-icon svgIcon="plus" /></span>
       }
@@ -119,6 +128,8 @@ export class CarteMot {
   readonly retirer = output<void>();
   readonly changerTheme = output<void>();
   readonly televerser = output<void>();
+  /** Clic sur la vignette d'une Carte illustrée : la page ouvre le Panneau Carte d'identité. */
+  readonly ouvrirCarteIdentite = output<void>();
 
   private readonly api = inject(Api);
 
@@ -139,6 +150,14 @@ export class CarteMot {
     () => `${this.mot().forme}, ${this.mot().sens.libelle}`,
   );
 
+  /** Identifiant de l'alternative « Mot, Sens », description du bouton de la vignette. */
+  protected readonly idAlternative = computed(() => `carte-mot-alternative-${this.mot().id}`);
+
+  /** Nom du bouton de la vignette : « Carte d'identité de « citrouille » ». */
+  protected readonly nomAccessibleVignette = computed(
+    () => `Carte d'identité de « ${this.mot().forme} »`,
+  );
+
   protected readonly nomAccessibleTheme = computed(
     () => `Thème de « ${this.mot().forme} » : ${this.theme() ?? 'sans thème'}`,
   );
@@ -147,6 +166,9 @@ export class CarteMot {
     read: ElementRef<HTMLButtonElement>,
   });
   private readonly boutonTheme = viewChild('boutonTheme', { read: ElementRef<HTMLButtonElement> });
+  private readonly boutonVignette = viewChild('boutonVignette', {
+    read: ElementRef<HTMLButtonElement>,
+  });
   private readonly boutonTeleverser = viewChild('boutonTeleverser', {
     read: ElementRef<HTMLButtonElement>,
   });
@@ -159,6 +181,11 @@ export class CarteMot {
   /** Bouton du Thème, auquel le focus revient à la fermeture du Dialogue du Thème. */
   elementTheme(): HTMLButtonElement | undefined {
     return this.boutonTheme()?.nativeElement;
+  }
+
+  /** Vignette d'une Carte illustrée, à laquelle le focus revient à la fermeture du Panneau Carte d'identité. */
+  elementVignette(): HTMLButtonElement | undefined {
+    return this.boutonVignette()?.nativeElement;
   }
 
   /** Bouton « Téléverser », auquel le focus revient à la fermeture du Dialogue sans enregistrement. */

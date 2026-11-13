@@ -73,6 +73,126 @@ components:
         nombreModules:
           type: integer
           format: int64
+    CarteIdentiteAlbumDto:
+      type: object
+      required:
+      - id
+      - titre
+      - auteur
+      properties:
+        id:
+          $ref: "#/components/schemas/UUID"
+        titre:
+          type: string
+        auteur:
+          type: string
+    CarteIdentiteImageDto:
+      type: object
+      required:
+      - id
+      - proprietaireId
+      - etat
+      - reutilisable
+      - typeImage
+      - aCompleter
+      - motId
+      - forme
+      - sens
+      properties:
+        id:
+          $ref: "#/components/schemas/UUID"
+        proprietaireId:
+          $ref: "#/components/schemas/UUID"
+        etat:
+          type: string
+          enum:
+          - privee
+          - versee
+          - abandonnee
+          - supprimee
+        aRemplacer:
+          type:
+          - string
+          - "null"
+          description: "État « à remplacer », calculé à la lecture ; null tant que\
+            \ l'Image reste disponible"
+          enum:
+          - retiree
+          - supprimee
+        reutilisable:
+          type: boolean
+          description: Vrai si l'enseignant connecté peut réutiliser cette Image
+        typeImage:
+          type: string
+          enum:
+          - image_album
+          - image_libre
+          - photo_personnelle
+          - inconnu
+        aCompleter:
+          type: boolean
+          description: Vrai pour une image libre sans source ou sans licence
+        motId:
+          description: "Identifiant du Mot du Lexique, partagé par l'école"
+          type: string
+          $ref: "#/components/schemas/UUID"
+        forme:
+          type: string
+          description: "Première forme saisie dans l'école, sans article"
+        sens:
+          $ref: "#/components/schemas/CarteIdentiteSensDto"
+        albumOrigine:
+          description: "Album d'origine d'une image d'album, null pour un autre type"
+          type:
+          - object
+          - "null"
+          anyOf:
+          - $ref: "#/components/schemas/CarteIdentiteAlbumDto"
+          - type: "null"
+        licence:
+          type:
+          - string
+          - "null"
+          description: "Licence, null si elle n'est pas renseignée"
+          enum:
+          - arasaac_cc_by_nc_sa
+          - sclera_cc_by_nc
+          - mulberry_cc_by_sa
+          - cc0_domaine_public
+          - pixabay
+          - autre_inconnue
+          - droits_auteur_enseignant
+          - usage_pedagogique_album
+        source:
+          type:
+          - string
+          - "null"
+          description: "Source, null si elle n'est pas renseignée"
+        auteur:
+          type:
+          - string
+          - "null"
+          description: "Auteur, null s'il n'est pas renseigné"
+    CarteIdentiteSensDto:
+      type: object
+      required:
+      - id
+      - libelle
+      - aCompleter
+      properties:
+        id:
+          $ref: "#/components/schemas/UUID"
+        libelle:
+          type: string
+          description: « à compléter » pour le Sens par défaut
+        categorie:
+          type:
+          - string
+          - "null"
+          description: "Catégorie grammaticale, null si elle reste à compléter"
+        aCompleter:
+          type: boolean
+          description: Vrai pour le Sens par défaut « à compléter »
     CartePreparationDto:
       type: object
       required:
@@ -1068,6 +1188,25 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/MesMotsImageDto"
+      tags:
+      - Images Resource
+  /api/images/{id}:
+    get:
+      summary: Carte d'identité d'une Image que l'enseignant connecté peut consulter
+      operationId: carteIdentiteImage
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          $ref: "#/components/schemas/UUID"
+      responses:
+        "200":
+          description: Carte d'identité de l'Image
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CarteIdentiteImageDto"
       tags:
       - Images Resource
   /api/images/{id}/fichier:

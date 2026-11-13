@@ -36,43 +36,22 @@ import { televerserImageMotPreparation } from '../api/fn/preparations-resource/t
 import { AlbumDto } from '../api/models/album-dto';
 import { MesMotsImageDto } from '../api/models/mes-mots-image-dto';
 import { MotPreparationDto } from '../api/models/mot-preparation-dto';
-import { TeleversementImageMotPreparationDto } from '../api/models/televersement-image-mot-preparation-dto';
-import {
-  LIBELLES_TYPE_IMAGE,
-  TYPES_IMAGE,
-  TypeImage,
-} from '../commun/badge-type-image/badge-type-image';
 import { BandeauErreur } from '../commun/bandeau-erreur/bandeau-erreur';
 import { codeErreur, MESSAGES_PAR_CODE, messageErreur } from '../commun/erreurs/message-erreur';
+import {
+  LIBELLES_TYPE_IMAGE,
+  LICENCES_CHOISIES,
+  LICENCES_IMPOSEES,
+  LicenceChoisie,
+  TYPES_IMAGE,
+  TypeImage,
+} from '../commun/libelles-images';
 import { LONGUEUR_MAX_SAISIE } from './longueurs-mot';
 import {
   DELAI_RECHERCHE_ALBUMS_MS,
   LONGUEUR_MIN_RECHERCHE,
   MESSAGE_AUCUN_ALBUM,
 } from './recherche-albums';
-
-/** Licence du Sélecteur de licence (image libre, type inconnu), énumération du client généré. */
-export type LicenceChoisie = NonNullable<TeleversementImageMotPreparationDto['licence']>;
-
-/** Les six licences du Sélecteur de licence, dans l'ordre d'EXPERIENCE.md, avec leur libellé. */
-export const LICENCES_CHOISIES: readonly {
-  readonly valeur: LicenceChoisie;
-  readonly libelle: string;
-  readonly partageable: boolean;
-}[] = [
-  { valeur: 'arasaac_cc_by_nc_sa', libelle: 'ARASAAC (CC BY-NC-SA)', partageable: true },
-  { valeur: 'sclera_cc_by_nc', libelle: 'Sclera (CC BY-NC)', partageable: true },
-  { valeur: 'mulberry_cc_by_sa', libelle: 'Mulberry (CC BY-SA)', partageable: true },
-  { valeur: 'cc0_domaine_public', libelle: 'domaine public / CC0', partageable: true },
-  { valeur: 'pixabay', libelle: 'Pixabay', partageable: false },
-  { valeur: 'autre_inconnue', libelle: 'autre / inconnue', partageable: false },
-];
-
-/** Licence posée d'office pour une photo personnelle et une image d'album (AD-4). */
-export const LICENCES_IMPOSEES: Readonly<Partial<Record<TypeImage, string>>> = {
-  photo_personnelle: "droits d'auteur de l'enseignant",
-  image_album: "usage pédagogique de l'album",
-};
 
 /** Taille maximale d'un fichier téléversé : 20 Mo, comme `corpusmots.limites.taille-fichier` du back. */
 export const TAILLE_MAX_FICHIER = 20 * 1024 * 1024;

@@ -1,3 +1,31 @@
+// Page et Panneau Carte d'identité (story 2.6) : le panneau de 400 px s'ouvre à droite sans masquer la page, collé en
+// haut du contenu pendant le défilement de la Grille, à la hauteur de la zone visible, et défile à l'intérieur ; sous
+// 600 px de large, il couvre l'écran.
+.disposition--panneau {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) var(--cm-largeur-panneau);
+  align-items: start;
+  gap: var(--cm-espace-4);
+}
+
+.disposition__panneau {
+  position: sticky;
+  top: 0;
+  max-height: var(--cm-hauteur-zone-contenu);
+  overflow-y: auto;
+}
+
+.disposition--plein-ecran {
+  display: block;
+
+  .disposition__panneau {
+    position: fixed;
+    inset: 0;
+    z-index: var(--cm-plan-panneau);
+    max-height: none;
+  }
+}
+
 // En-tête de Préparation (key-preparation.html › `.hero`).
 .entete {
   display: flex;

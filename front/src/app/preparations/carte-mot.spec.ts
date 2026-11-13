@@ -228,14 +228,37 @@ describe('CarteMot illustrée', () => {
       .flush(new Blob(['png']));
   });
 
-  it('miniature en échec : l’icône d’image, l’alternative reste lue', async () => {
+  it('miniature en échec : l’icône d’image, le bouton garde son nom et sa description', async () => {
     miniature().flush(null, { status: 404, statusText: 'Not Found' });
     await stabiliser();
 
     expect(racine.querySelector('.carte-mot__miniature')).toBeNull();
     expect(racine.querySelector('.carte-mot__repli')).not.toBeNull();
-    expect(racine.querySelector('.carte-mot__image .cm-visuellement-masque')?.textContent).toBe(
-      'citrouille, légume',
+    expect(racine.querySelector('.carte-mot__image')?.getAttribute('aria-label')).toBe(
+      "Carte d'identité de « citrouille »",
     );
+    const description = racine
+      .querySelector('.carte-mot__image')!
+      .getAttribute('aria-describedby')!;
+    expect(racine.querySelector(`[id="${description}"]`)?.textContent).toBe('citrouille, légume');
+  });
+
+  it('la vignette est un bouton « Carte d’identité de « citrouille » » qui émet `ouvrirCarteIdentite`', async () => {
+    miniature().flush(new Blob(['png']));
+    await stabiliser();
+    let ouvertures = 0;
+    fixture.componentInstance.ouvrirCarteIdentite.subscribe(() => ouvertures++);
+    const bouton = racine.querySelector<HTMLButtonElement>('button.carte-mot__image')!;
+
+    expect(bouton.getAttribute('type')).toBe('button');
+    expect(bouton.getAttribute('aria-label')).toBe("Carte d'identité de « citrouille »");
+    // L'alternative « Mot, Sens » reste annoncée, en description du bouton.
+    const description = racine.querySelector(`[id="${bouton.getAttribute('aria-describedby')}"]`);
+    expect(description?.textContent).toBe('citrouille, légume');
+    expect(description?.classList).toContain('cm-visuellement-masque');
+    bouton.click();
+
+    expect(ouvertures).toBe(1);
+    expect(fixture.componentInstance.elementVignette()).toBe(bouton);
   });
 });

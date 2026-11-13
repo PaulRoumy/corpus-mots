@@ -47,6 +47,40 @@ public class ImagesDeTest {
         });
     }
 
+    /**
+     * Insère une Image de ce propriétaire, à cet état, avec sa Carte d'identité (licence, source, auteur et Album
+     * d'origine facultatifs) et son fichier ({@code image/png}).
+     */
+    public UUID image(UUID proprietaire, UUID sensId, String etat, String typeImage, String licence, String source,
+            String auteur, UUID albumId) {
+        UUID id = image(proprietaire, sensId, etat, new byte[] { 1 }, new byte[] { 2 });
+        // Une valeur absente est écrite en NULL littéral : aucun paramètre nul à typer.
+        QuarkusTransaction.requiringNew().run(() -> {
+            var requete = entityManager.createNativeQuery("update image set type_image = :type"
+                    + ", licence = " + (licence == null ? "null" : ":licence")
+                    + ", source = " + (source == null ? "null" : ":source")
+                    + ", auteur = " + (auteur == null ? "null" : ":auteur")
+                    + ", album_id = " + (albumId == null ? "null" : ":album")
+                    + " where id = :id")
+                    .setParameter("type", typeImage)
+                    .setParameter("id", id);
+            if (licence != null) {
+                requete.setParameter("licence", licence);
+            }
+            if (source != null) {
+                requete.setParameter("source", source);
+            }
+            if (auteur != null) {
+                requete.setParameter("auteur", auteur);
+            }
+            if (albumId != null) {
+                requete.setParameter("album", albumId);
+            }
+            requete.executeUpdate();
+        });
+        return id;
+    }
+
     /** Insère un lien de cette Image vers un Mot de Préparation (identifiants quelconques) de cet enseignant. */
     public void lien(UUID imageId, UUID enseignant, UUID albumId) {
         QuarkusTransaction.requiringNew().run(() -> entityManager.createNativeQuery(

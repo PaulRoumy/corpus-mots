@@ -188,3 +188,12 @@
 - source_spec: none
   summary: Relire `deploiement/RESTAURATION.md` et `deploiement/README.md` pour les Images en `bytea` (`image_fichier`) : taille des sauvegardes et durée d'une restauration.
   evidence: Revue de mi-epic de l'Epic 2 (2026-11-13, diff 757d63c..8a08761, action 11 de la rétrospective de l'Epic 1), lentille adversarial : AGENTS.md demande cette relecture quand les données conservées changent ; la story 2.5 a ajouté les fichiers d'Image en base sans la faire.
+- source_spec: none
+  summary: Story 2.6, partie 2 : le propriétaire modifie dans la Carte d'identité le type, la source, la licence et l'auteur de son Image (enregistrement à la sortie du champ, valeur gardée et Bandeau d'erreur en cas d'échec) ; passage en `image_album` avec Album exigé, réduction immédiate à 400 × 400 px, mention « basse résolution » et référence de l'Album ; `403` pour tout autre enseignant, administrateur compris.
+  evidence: Découpage de la story 2.6 en quatre parties choisi par Paul ; la partie 1 pose le Panneau Carte d'identité en lecture.
+- source_spec: none
+  summary: Story 2.6, partie 3 : Sections (PS, MS, GS cochées librement), Module et Thèmes d'une Image (nouvelles tables de `vocabulaire`, Champ à étiquettes) ; `vocabulaire` implémente `UtilisationThemes` (suppression d'un Thème porté par une Image refusée) et observe `ModuleSupprime` pour détacher le Module de ses Images dans la même transaction (AD-15).
+  evidence: Découpage de la story 2.6 en quatre parties choisi par Paul ; l'Image n'a encore ni Sections, ni Module, ni Thèmes en base.
+- source_spec: none
+  summary: Story 2.6, partie 4 : Sens et catégorie grammaticale dans la Carte d'identité ; changer le Sens d'une Image refusé dès qu'elle a un lien, chez quiconque, avec un message qui propose d'ajouter une nouvelle Image (AD-5) ; la Création de Sens dans le panneau arrive avec la story 2.8.
+  evidence: Découpage de la story 2.6 en quatre parties choisi par Paul.

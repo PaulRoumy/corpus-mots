@@ -2,14 +2,18 @@ package fr.corpusmots.vocabulaire.service;
 
 import fr.corpusmots.commun.api.ErreurMetier;
 import fr.corpusmots.commun.service.EnseignantCourant;
+import fr.corpusmots.referentiels.service.AlbumVue;
 import fr.corpusmots.referentiels.service.ReferentielsService;
 import fr.corpusmots.vocabulaire.persistance.Image;
 import fr.corpusmots.vocabulaire.persistance.ImageFichier;
 import fr.corpusmots.vocabulaire.persistance.ImageFichierRepository;
 import fr.corpusmots.vocabulaire.persistance.ImageRepository;
+import fr.corpusmots.vocabulaire.persistance.LienImageRepository;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 import jakarta.transaction.Transactional;
+import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 
 /**
@@ -49,6 +53,45 @@ public class Images {
 
     @Inject
     ReferentielsService referentiels;
+
+    @Inject
+    LienImageRepository liens;
+
+    /**
+     * Carte d'identité de l'Image {@code imageId}, si l'enseignant courant peut la consulter
+     * ({@link VisibiliteImages#consultable}, lien compris, comme {@link FichiersImages#lire}) ; vide si elle n'existe
+     * pas ou ne lui est pas consultable. Le rôle {@code admin} n'élargit rien. Lecture seule : rien n'est écrit.
+     * L'Album d'origine, celui d'une image d'album seulement, est lu par {@code referentiels} (AD-1).
+     */
+    @Transactional
+    public Optional<CarteIdentiteImageVue> carteIdentite(UUID imageId) {
+        UUID enseignantId = enseignantCourant.id();
+        if (imageId == null || enseignantId == null) {
+            return Optional.empty();
+        }
+        return images.findByIdOptional(imageId)
+                .filter(image -> visibilite.consultable(image, enseignantId, liens.existe(image.id(), enseignantId)))
+                .map(image -> carteIdentite(image, enseignantId));
+    }
+
+    private CarteIdentiteImageVue carteIdentite(Image image, UUID enseignantId) {
+        SensVue sens = lexique.sens(image.sensId())
+                .orElseThrow(() -> new IllegalStateException("Sens introuvable de l'Image " + image.id()));
+        MotVue mot = lexique.mots(Set.of(sens.motId())).get(sens.motId());
+        if (mot == null) {
+            throw new IllegalStateException("Mot introuvable du Sens " + sens.id());
+        }
+        Licence licence = image.licence() == null ? null
+                : Licence.deValeur(image.licence())
+                        .orElseThrow(() -> new IllegalStateException("Licence inconnue de l'Image " + image.id()));
+        ImageVue vue = vue(image, enseignantId, visibilite);
+        // Seule une image d'album a un Album d'origine, même si une autre ligne porte un album_id.
+        AlbumVue album = vue.typeImage() == TypeImage.IMAGE_ALBUM
+                ? referentiels.album(image.albumId()).orElse(null)
+                : null;
+        return new CarteIdentiteImageVue(vue, mot, sens, Usages.LIBELLE_A_COMPLETER.equals(sens.libelle()), album,
+                licence, image.source(), image.auteur());
+    }
 
     /**
      * Ajoute une Image dans Mes mots de l'enseignant courant, sans aucun lien vers une Préparation (FR-13) : le Mot

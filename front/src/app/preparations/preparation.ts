@@ -1,3 +1,4 @@
+import { BreakpointObserver, Breakpoints } from '@angular/cdk/layout';
 import {
   afterNextRender,
   ChangeDetectionStrategy,
@@ -19,6 +20,7 @@ import {
   ReactiveFormsModule,
   ValidationErrors,
 } from '@angular/forms';
+import { toSignal } from '@angular/core/rxjs-interop';
 import { MatButtonModule } from '@angular/material/button';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatIconModule } from '@angular/material/icon';
@@ -49,6 +51,7 @@ import { PreparationDto } from '../api/models/preparation-dto';
 import { ThemeDto } from '../api/models/theme-dto';
 import { BandeauAnnuler } from '../commun/bandeau-annuler/bandeau-annuler';
 import { BandeauErreur } from '../commun/bandeau-erreur/bandeau-erreur';
+import { CarteIdentite } from '../commun/carte-identite/carte-identite';
 import { ChampThemes, themesParNom } from '../commun/champ-themes/champ-themes';
 import { CompteCourant } from '../commun/compte-courant';
 import { DialogueConfirmation } from '../commun/dialogue-confirmation/dialogue-confirmation';
@@ -62,6 +65,7 @@ import { RepereSection } from '../commun/repere-section/repere-section';
 import { Squelette } from '../commun/squelette/squelette';
 import { CarteMot } from './carte-mot';
 import { ChampNomModule } from './champ-nom-module';
+import { map } from 'rxjs';
 import { ouvrirDialogueCorrigerAlbum } from './corriger-album-dialogue';
 import { libelleMots } from './preparations';
 import { SaisieRapide } from './saisie-rapide';
@@ -242,6 +246,11 @@ type Source = 'module' | 'theme';
  * illustrés » suit la Grille une fois chargée. Retirer un Mot illustré ne supprime pas son Image : « Annuler » le
  * rétablit avec la même Image.
  *
+ * Carte d'identité (story 2.6, partie 1) : la vignette d'une Carte illustrée ouvre à droite, sur 400 px, le Panneau
+ * Carte d'identité de son Image, sans masquer la Grille, qui reste utilisable ; une autre vignette le remplace.
+ * « Fermer » ou Échap le ferment et rendent le focus à la vignette ; retirer le Mot le ferme aussi. Sous 600 px de
+ * large, le panneau couvre l'écran et la page dessous est inerte.
+ *
  * Le Temps passé est un champ texte en mode de saisie décimal plutôt qu'un `type="number"` : celui-ci, selon la langue
  * du navigateur, refuse la virgule sans le dire (sa valeur devient vide, comme un champ effacé).
  */
@@ -249,6 +258,7 @@ type Source = 'module' | 'theme';
   selector: 'app-preparation',
   imports: [
     BandeauErreur,
+    CarteIdentite,
     CarteMot,
     ChampNomModule,
     ChampThemes,
@@ -266,249 +276,263 @@ type Source = 'module' | 'theme';
   changeDetection: ChangeDetectionStrategy.OnPush,
   styleUrls: ['../commun/page-rubrique.scss', './preparation.scss'],
   template: `
-    <div class="page">
-      @if (erreur(); as message) {
-        <h1 class="cm-visuellement-masque">Préparation</h1>
-        <app-bandeau-erreur
-          [message]="message"
-          (reessayer)="charger(id())"
-          (fermer)="erreur.set(null)"
-        />
-      }
+    <div
+      class="disposition"
+      [class.disposition--panneau]="carteOuverte() !== null"
+      [class.disposition--plein-ecran]="pleinEcran()"
+    >
+      <div class="page" [attr.inert]="pageInerte() ? '' : null">
+        @if (erreur(); as message) {
+          <h1 class="cm-visuellement-masque">Préparation</h1>
+          <app-bandeau-erreur
+            [message]="message"
+            (reessayer)="charger(id())"
+            (fermer)="erreur.set(null)"
+          />
+        }
 
-      @if (preparation(); as courante) {
-        @if (erreurEnregistrement(); as message) {
-          <app-bandeau-erreur
-            class="erreur-enregistrement"
-            [message]="message"
-            (reessayer)="enregistrer()"
-            (fermer)="erreurEnregistrement.set(null)"
-          />
-        }
-        @if (erreurModule(); as affichee) {
-          <app-bandeau-erreur
-            class="erreur-module"
-            [message]="affichee.message"
-            (reessayer)="affichee.reessayer()"
-            (fermer)="erreurModule.set(null)"
-          />
-        }
-        @if (erreurTheme(); as affichee) {
-          <app-bandeau-erreur
-            class="erreur-theme"
-            [message]="affichee.message"
-            (reessayer)="affichee.reessayer()"
-            (fermer)="erreurTheme.set(null)"
-          />
-        }
-        @if (erreurMots(); as message) {
-          <app-bandeau-erreur
-            class="erreur-mots"
-            [message]="message"
-            (reessayer)="chargerMots(courante.id)"
-            (fermer)="erreurMots.set(null)"
-          />
-        }
-        @if (echecAjout(); as echec) {
-          <app-bandeau-erreur
-            class="erreur-ajout"
-            [message]="messageEchecAjout(echec)"
-            (reessayer)="reessayerAjouts()"
-            (fermer)="echecAjout.set(null)"
-          />
-        }
-        @if (echecRetrait(); as echec) {
-          <app-bandeau-erreur
-            class="erreur-retrait"
-            [message]="messageEchecRetrait(echec)"
-            (reessayer)="reessayerRetraits()"
-            (fermer)="echecRetrait.set(null)"
-          />
-        }
-        @if (echecRetablissement(); as echec) {
-          <app-bandeau-erreur
-            class="erreur-retablissement"
-            [message]="messageEchecRetablissement(echec)"
-            [reessayable]="echec.reessayable"
-            (reessayer)="reessayerRetablissement(echec)"
-            (fermer)="echecRetablissement.set(null)"
-          />
-        }
-        @if (erreurListes(); as message) {
-          <app-bandeau-erreur
-            class="erreur-listes"
-            [message]="message"
-            (reessayer)="chargerListes(courante.albumId)"
-            (fermer)="erreurListes.set(null)"
-          />
-        }
-        <section class="entete" aria-labelledby="entete-titre">
-          <span class="entete__couverture" aria-hidden="true">
-            <mat-icon svgIcon="livre" />
-          </span>
-          <div class="entete__corps">
-            <p class="entete__rubrique">Préparation</p>
-            <div class="entete__ligne-titre">
-              <h1 id="entete-titre" class="entete__titre">{{ courante.titreAlbum }}</h1>
-              @if (albumCorrigeable(); as corrigeable) {
-                <button
-                  #declencheurAlbum
-                  matIconButton
-                  class="entete__actions-album"
-                  type="button"
-                  aria-label="Actions de l'album"
-                  [matMenuTriggerFor]="menuAlbum"
-                >
-                  <mat-icon svgIcon="actions" aria-hidden="true" />
-                </button>
-                <mat-menu #menuAlbum="matMenu">
-                  <button mat-menu-item type="button" (click)="corrigerAlbum(corrigeable)">
-                    Corriger l'album
-                  </button>
-                </mat-menu>
-              }
-            </div>
-            <div class="entete__meta">
-              <app-repere-section [section]="courante.section" />
-              @if (saisieModule(); as saisie) {
-                <app-champ-nom-module
-                  class="entete__saisie-module"
-                  [etiquette]="saisie.module ? 'Nouveau nom du module' : 'Nom du nouveau module'"
-                  [libelleValider]="saisie.module ? 'Renommer' : 'Ajouter'"
-                  [valeurInitiale]="saisie.module?.nom ?? ''"
-                  [enCours]="saisieEnCours()"
-                  [erreur]="erreurSaisieModule()"
-                  (valider)="validerSaisieModule($event)"
-                  (annuler)="fermerSaisieModule()"
-                />
-              } @else if (listesChargees()) {
-                <mat-form-field class="entete__champ entete__module" subscriptSizing="dynamic">
-                  <mat-label>Module</mat-label>
-                  <mat-select
-                    #listeModule
-                    [value]="module()"
-                    (selectionChange)="choisirModule($event.value)"
-                  >
-                    <mat-option [value]="null">Aucun module</mat-option>
-                    @for (choix of modules(); track choix.id) {
-                      <mat-option [value]="choix.id">{{ choix.nom }}</mat-option>
-                    }
-                    <mat-option class="entete__nouveau-module" [value]="optionNouveauModule">
-                      <mat-icon svgIcon="plus" aria-hidden="true" />
-                      Nouveau module
-                    </mat-option>
-                  </mat-select>
-                </mat-form-field>
-                @if (moduleGerable(); as gere) {
+        @if (preparation(); as courante) {
+          @if (erreurEnregistrement(); as message) {
+            <app-bandeau-erreur
+              class="erreur-enregistrement"
+              [message]="message"
+              (reessayer)="enregistrer()"
+              (fermer)="erreurEnregistrement.set(null)"
+            />
+          }
+          @if (erreurModule(); as affichee) {
+            <app-bandeau-erreur
+              class="erreur-module"
+              [message]="affichee.message"
+              (reessayer)="affichee.reessayer()"
+              (fermer)="erreurModule.set(null)"
+            />
+          }
+          @if (erreurTheme(); as affichee) {
+            <app-bandeau-erreur
+              class="erreur-theme"
+              [message]="affichee.message"
+              (reessayer)="affichee.reessayer()"
+              (fermer)="erreurTheme.set(null)"
+            />
+          }
+          @if (erreurMots(); as message) {
+            <app-bandeau-erreur
+              class="erreur-mots"
+              [message]="message"
+              (reessayer)="chargerMots(courante.id)"
+              (fermer)="erreurMots.set(null)"
+            />
+          }
+          @if (echecAjout(); as echec) {
+            <app-bandeau-erreur
+              class="erreur-ajout"
+              [message]="messageEchecAjout(echec)"
+              (reessayer)="reessayerAjouts()"
+              (fermer)="echecAjout.set(null)"
+            />
+          }
+          @if (echecRetrait(); as echec) {
+            <app-bandeau-erreur
+              class="erreur-retrait"
+              [message]="messageEchecRetrait(echec)"
+              (reessayer)="reessayerRetraits()"
+              (fermer)="echecRetrait.set(null)"
+            />
+          }
+          @if (echecRetablissement(); as echec) {
+            <app-bandeau-erreur
+              class="erreur-retablissement"
+              [message]="messageEchecRetablissement(echec)"
+              [reessayable]="echec.reessayable"
+              (reessayer)="reessayerRetablissement(echec)"
+              (fermer)="echecRetablissement.set(null)"
+            />
+          }
+          @if (erreurListes(); as message) {
+            <app-bandeau-erreur
+              class="erreur-listes"
+              [message]="message"
+              (reessayer)="chargerListes(courante.albumId)"
+              (fermer)="erreurListes.set(null)"
+            />
+          }
+          <section class="entete" aria-labelledby="entete-titre">
+            <span class="entete__couverture" aria-hidden="true">
+              <mat-icon svgIcon="livre" />
+            </span>
+            <div class="entete__corps">
+              <p class="entete__rubrique">Préparation</p>
+              <div class="entete__ligne-titre">
+                <h1 id="entete-titre" class="entete__titre">{{ courante.titreAlbum }}</h1>
+                @if (albumCorrigeable(); as corrigeable) {
                   <button
+                    #declencheurAlbum
                     matIconButton
-                    class="entete__actions-module"
+                    class="entete__actions-album"
                     type="button"
-                    aria-label="Actions du module"
-                    [disabled]="suppressionEnCours()"
-                    [matMenuTriggerFor]="menuModule"
+                    aria-label="Actions de l'album"
+                    [matMenuTriggerFor]="menuAlbum"
                   >
                     <mat-icon svgIcon="actions" aria-hidden="true" />
                   </button>
-                  <mat-menu #menuModule="matMenu">
-                    <button mat-menu-item type="button" (click)="ouvrirRenommage(gere)">
-                      Renommer
-                    </button>
-                    <button mat-menu-item type="button" (click)="supprimerModule(gere)">
-                      Supprimer
+                  <mat-menu #menuAlbum="matMenu">
+                    <button mat-menu-item type="button" (click)="corrigerAlbum(corrigeable)">
+                      Corriger l'album
                     </button>
                   </mat-menu>
                 }
-              } @else if (courante.nomModule) {
-                <span class="entete__nom-module">{{ courante.nomModule }}</span>
-              }
-              @if (themeARenommer(); as aRenommer) {
-                <app-champ-nom-module
-                  class="entete__saisie-module"
-                  etiquette="Nouveau nom du thème"
-                  libelleValider="Renommer"
-                  [valeurInitiale]="aRenommer.nom"
-                  [enCours]="renommageThemeEnCours()"
-                  [erreur]="erreurRenommageTheme()"
-                  (valider)="validerRenommageTheme($event)"
-                  (annuler)="fermerRenommageTheme()"
-                />
-              } @else if (listesChargees()) {
-                <app-champ-themes
-                  class="entete__themes"
-                  etiquette="Thème par défaut"
-                  [themes]="themes()"
-                  [choisis]="themesChoisis()"
-                  [limite]="1"
-                  [gerable]="themeGerable()"
-                  [enCours]="creationThemeEnCours()"
-                  [erreur]="erreurCreationTheme()"
-                  (choisisChange)="choisirTheme($event[0] ?? null)"
-                  (creer)="creerTheme($event)"
-                  (renommer)="ouvrirRenommageTheme($event)"
-                  (supprimer)="supprimerTheme($event)"
-                />
-              } @else if (courante.nomThemeDefaut) {
-                <span class="entete__nom-theme"
-                  ><span class="cm-visuellement-masque">Thème par défaut : </span
-                  >{{ courante.nomThemeDefaut }}</span
-                >
-              }
-            </div>
-            <div class="entete__bas">
-              <p class="entete__compteur">
-                <strong>{{ libelleMots(nombreMots()) }}</strong
-                >,
-                {{ libelleIllustres(nombreIllustres(), nombreMots()) }}
-              </p>
-              <mat-form-field class="entete__champ entete__temps" subscriptSizing="dynamic">
-                <mat-label>Temps passé (facultatif)</mat-label>
-                <mat-icon matPrefix svgIcon="horloge" aria-hidden="true" />
-                <input
-                  matInput
-                  type="text"
-                  inputmode="decimal"
-                  autocomplete="off"
-                  [formControl]="tempsPasse"
-                  (blur)="quitterTempsPasse()"
-                />
-                <span matTextSuffix>h</span>
-                @if (tempsPasse.hasError('heures')) {
-                  <mat-error>{{ messageTempsInvalide }}</mat-error>
+              </div>
+              <div class="entete__meta">
+                <app-repere-section [section]="courante.section" />
+                @if (saisieModule(); as saisie) {
+                  <app-champ-nom-module
+                    class="entete__saisie-module"
+                    [etiquette]="saisie.module ? 'Nouveau nom du module' : 'Nom du nouveau module'"
+                    [libelleValider]="saisie.module ? 'Renommer' : 'Ajouter'"
+                    [valeurInitiale]="saisie.module?.nom ?? ''"
+                    [enCours]="saisieEnCours()"
+                    [erreur]="erreurSaisieModule()"
+                    (valider)="validerSaisieModule($event)"
+                    (annuler)="fermerSaisieModule()"
+                  />
+                } @else if (listesChargees()) {
+                  <mat-form-field class="entete__champ entete__module" subscriptSizing="dynamic">
+                    <mat-label>Module</mat-label>
+                    <mat-select
+                      #listeModule
+                      [value]="module()"
+                      (selectionChange)="choisirModule($event.value)"
+                    >
+                      <mat-option [value]="null">Aucun module</mat-option>
+                      @for (choix of modules(); track choix.id) {
+                        <mat-option [value]="choix.id">{{ choix.nom }}</mat-option>
+                      }
+                      <mat-option class="entete__nouveau-module" [value]="optionNouveauModule">
+                        <mat-icon svgIcon="plus" aria-hidden="true" />
+                        Nouveau module
+                      </mat-option>
+                    </mat-select>
+                  </mat-form-field>
+                  @if (moduleGerable(); as gere) {
+                    <button
+                      matIconButton
+                      class="entete__actions-module"
+                      type="button"
+                      aria-label="Actions du module"
+                      [disabled]="suppressionEnCours()"
+                      [matMenuTriggerFor]="menuModule"
+                    >
+                      <mat-icon svgIcon="actions" aria-hidden="true" />
+                    </button>
+                    <mat-menu #menuModule="matMenu">
+                      <button mat-menu-item type="button" (click)="ouvrirRenommage(gere)">
+                        Renommer
+                      </button>
+                      <button mat-menu-item type="button" (click)="supprimerModule(gere)">
+                        Supprimer
+                      </button>
+                    </mat-menu>
+                  }
+                } @else if (courante.nomModule) {
+                  <span class="entete__nom-module">{{ courante.nomModule }}</span>
                 }
-              </mat-form-field>
-            </div>
-          </div>
-        </section>
-        @if (mots(); as motsCharges) {
-          <app-saisie-rapide
-            [focusInitial]="motsCharges.length === 0"
-            (ajouter)="ajouterMot($event)"
-          />
-          @if (motsCharges.length > 0) {
-            <section class="mots" aria-labelledby="mots-titre">
-              <h2 id="mots-titre" class="mots__titre">Mots de la préparation</h2>
-              <ul class="mots__grille">
-                @for (mot of motsCharges; track mot.id) {
-                  <li class="mots__element" [class.mots__element--a-illustrer]="!mot.illustre">
-                    <app-carte-mot
-                      [mot]="mot"
-                      [theme]="nomTheme(mot)"
-                      (retirer)="retirerMot(mot)"
-                      (changerTheme)="ouvrirThemeMot(mot)"
-                      (televerser)="ouvrirTeleverser(mot)"
-                    />
-                  </li>
+                @if (themeARenommer(); as aRenommer) {
+                  <app-champ-nom-module
+                    class="entete__saisie-module"
+                    etiquette="Nouveau nom du thème"
+                    libelleValider="Renommer"
+                    [valeurInitiale]="aRenommer.nom"
+                    [enCours]="renommageThemeEnCours()"
+                    [erreur]="erreurRenommageTheme()"
+                    (valider)="validerRenommageTheme($event)"
+                    (annuler)="fermerRenommageTheme()"
+                  />
+                } @else if (listesChargees()) {
+                  <app-champ-themes
+                    class="entete__themes"
+                    etiquette="Thème par défaut"
+                    [themes]="themes()"
+                    [choisis]="themesChoisis()"
+                    [limite]="1"
+                    [gerable]="themeGerable()"
+                    [enCours]="creationThemeEnCours()"
+                    [erreur]="erreurCreationTheme()"
+                    (choisisChange)="choisirTheme($event[0] ?? null)"
+                    (creer)="creerTheme($event)"
+                    (renommer)="ouvrirRenommageTheme($event)"
+                    (supprimer)="supprimerTheme($event)"
+                  />
+                } @else if (courante.nomThemeDefaut) {
+                  <span class="entete__nom-theme"
+                    ><span class="cm-visuellement-masque">Thème par défaut : </span
+                    >{{ courante.nomThemeDefaut }}</span
+                  >
                 }
-              </ul>
-            </section>
+              </div>
+              <div class="entete__bas">
+                <p class="entete__compteur">
+                  <strong>{{ libelleMots(nombreMots()) }}</strong
+                  >,
+                  {{ libelleIllustres(nombreIllustres(), nombreMots()) }}
+                </p>
+                <mat-form-field class="entete__champ entete__temps" subscriptSizing="dynamic">
+                  <mat-label>Temps passé (facultatif)</mat-label>
+                  <mat-icon matPrefix svgIcon="horloge" aria-hidden="true" />
+                  <input
+                    matInput
+                    type="text"
+                    inputmode="decimal"
+                    autocomplete="off"
+                    [formControl]="tempsPasse"
+                    (blur)="quitterTempsPasse()"
+                  />
+                  <span matTextSuffix>h</span>
+                  @if (tempsPasse.hasError('heures')) {
+                    <mat-error>{{ messageTempsInvalide }}</mat-error>
+                  }
+                </mat-form-field>
+              </div>
+            </div>
+          </section>
+          @if (mots(); as motsCharges) {
+            <app-saisie-rapide
+              [focusInitial]="motsCharges.length === 0"
+              (ajouter)="ajouterMot($event)"
+            />
+            @if (motsCharges.length > 0) {
+              <section class="mots" aria-labelledby="mots-titre">
+                <h2 id="mots-titre" class="mots__titre">Mots de la préparation</h2>
+                <ul class="mots__grille">
+                  @for (mot of motsCharges; track mot.id) {
+                    <li class="mots__element" [class.mots__element--a-illustrer]="!mot.illustre">
+                      <app-carte-mot
+                        [mot]="mot"
+                        [theme]="nomTheme(mot)"
+                        (retirer)="retirerMot(mot)"
+                        (changerTheme)="ouvrirThemeMot(mot)"
+                        (televerser)="ouvrirTeleverser(mot)"
+                        (ouvrirCarteIdentite)="ouvrirCarteIdentite(mot)"
+                      />
+                    </li>
+                  }
+                </ul>
+              </section>
+            }
+          } @else if (!erreurMots()) {
+            <app-squelette forme="carte" [nombre]="3" />
           }
-        } @else if (!erreurMots()) {
-          <app-squelette forme="carte" [nombre]="3" />
+          <p class="cm-visuellement-masque" aria-live="polite">{{ annonce() }}</p>
+        } @else if (chargementEnCours()) {
+          <app-squelette forme="texte" [nombre]="3" />
         }
-        <p class="cm-visuellement-masque" aria-live="polite">{{ annonce() }}</p>
-      } @else if (chargementEnCours()) {
-        <app-squelette forme="texte" [nombre]="3" />
+      </div>
+      @if (carteOuverte(); as ouverte) {
+        <app-carte-identite
+          class="disposition__panneau"
+          [imageId]="ouverte.imageId"
+          (fermer)="fermerCarteIdentite()"
+        />
       }
     </div>
   `,
@@ -632,6 +656,21 @@ export class Preparation {
       : mots.filter((mot) => mot.illustre).length;
   });
   private readonly saisieRapide = viewChild(SaisieRapide);
+  /** Panneau Carte d'identité ouvert : le Mot dont la vignette l'a ouvert et son Image ; un seul à la fois. */
+  protected readonly carteOuverte = signal<{
+    readonly motId: string;
+    readonly imageId: string;
+  } | null>(null);
+  private readonly panneauCarteIdentite = viewChild(CarteIdentite);
+  /** Sous 600 px de large, le Panneau Carte d'identité couvre l'écran. */
+  protected readonly pleinEcran = toSignal(
+    inject(BreakpointObserver)
+      .observe(Breakpoints.XSmall)
+      .pipe(map((etat) => etat.matches)),
+    { initialValue: false },
+  );
+  /** Panneau ouvert en plein écran : la page dessous est inerte (ni Tab ni lecteur d'écran). */
+  protected readonly pageInerte = computed(() => this.carteOuverte() !== null && this.pleinEcran());
   private readonly cartesMots = viewChildren(CarteMot);
   protected readonly echecRetrait = signal<EchecRetrait | null>(null);
   protected readonly echecRetablissement = signal<EchecRetablissement | null>(null);
@@ -676,6 +715,7 @@ export class Preparation {
     this.echecRetrait.set(null);
     this.echecRetablissement.set(null);
     this.annonce.set('');
+    this.carteOuverte.set(null);
     this.fileAjouts = [];
     try {
       const preparation = await this.api.invoke(lirePreparation, { id });
@@ -814,6 +854,9 @@ export class Preparation {
     }
     const restants = mots.filter((autre) => autre.id !== mot.id);
     this.mots.set(restants);
+    if (this.carteOuverte()?.motId === mot.id) {
+      this.carteOuverte.set(null);
+    }
     this.focaliserApresRendu(restants[index] ?? restants[index - 1]);
     void this.envoyerRetrait(preparation.id, mot);
   }
@@ -990,6 +1033,41 @@ export class Preparation {
     );
     this.annonce.set(`Image enregistrée pour « ${illustre.forme} ».`);
     this.focaliserApresRendu(illustre);
+  }
+
+  /**
+   * Vignette d'une Carte illustrée : ouvre le Panneau Carte d'identité de son Image, ou le remplace s'il était ouvert
+   * sur une autre ; le panneau prend le focus.
+   */
+  protected ouvrirCarteIdentite(mot: MotPreparationDto): void {
+    if (!mot.image) {
+      return;
+    }
+    const dejaOuverte = this.carteOuverte()?.imageId === mot.image.id;
+    this.carteOuverte.set({ motId: mot.id, imageId: mot.image.id });
+    // Même Image : le panneau ne relit rien, il reprend seulement le focus.
+    if (dejaOuverte) {
+      this.panneauCarteIdentite()?.focus();
+    }
+  }
+
+  /** « Fermer » ou Échap : le panneau se ferme et le focus revient à la vignette qui l'a ouvert. */
+  protected fermerCarteIdentite(): void {
+    const ouverte = this.carteOuverte();
+    this.carteOuverte.set(null);
+    afterNextRender(
+      () => {
+        const vignette = this.cartesMots()
+          .find((carte) => carte.mot().id === ouverte?.motId)
+          ?.elementVignette();
+        if (vignette === undefined) {
+          this.saisieRapide()?.focus();
+        } else {
+          vignette.focus();
+        }
+      },
+      { injector: this.injecteur },
+    );
   }
 
   /** Thème créé, renommé ou supprimé depuis le Dialogue du Thème d'un Mot. */

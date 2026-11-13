@@ -1,3 +1,4 @@
+import { BreakpointObserver } from '@angular/cdk/layout';
 import { provideHttpClient } from '@angular/common/http';
 import {
   HttpTestingController,
@@ -8,6 +9,7 @@ import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { MATERIAL_ANIMATIONS } from '@angular/material/core';
 import { MatDialog } from '@angular/material/dialog';
 import { Title } from '@angular/platform-browser';
+import { of } from 'rxjs';
 import { AlbumDto } from '../api/models/album-dto';
 import { ModuleDto } from '../api/models/module-dto';
 import { MotPreparationDto } from '../api/models/mot-preparation-dto';
@@ -2640,6 +2642,240 @@ describe('Preparation (En-tête)', () => {
       );
       expect(racine.querySelector('app-bandeau-erreur.erreur-retablissement')).toBeNull();
     });
+  });
+
+  describe('Carte d’identité (story 2.6, partie 1)', () => {
+    const GALETTE = motPreparation('galette', 1);
+    const IMAGE_1 = '0190f0a0-0000-7000-8000-0000000c0011';
+    const IMAGE_2 = '0190f0a0-0000-7000-8000-0000000c0012';
+    function illustre(mot: MotPreparationDto, id: string): MotPreparationDto {
+      return {
+        ...mot,
+        illustre: true,
+        image: {
+          id,
+          proprietaireId: MOI,
+          etat: 'privee',
+          aRemplacer: null,
+          reutilisable: true,
+          typeImage: 'image_libre',
+          aCompleter: false,
+        },
+      };
+    }
+    const CITROUILLE = illustre(motPreparation('citrouille', 2), IMAGE_1);
+    const POTIRON = illustre(motPreparation('potiron', 3), IMAGE_2);
+    const original = { creer: URL.createObjectURL, revoquer: URL.revokeObjectURL };
+
+    beforeEach(() => {
+      URL.createObjectURL = vi.fn(() => 'blob:http://localhost/image');
+      URL.revokeObjectURL = vi.fn();
+      document.body.appendChild(racine);
+    });
+
+    afterEach(() => {
+      serveur.match((requete) => requete.url.endsWith('/fichier'));
+      serveur.match('/api/enseignants');
+      racine.remove();
+      URL.createObjectURL = original.creer;
+      URL.revokeObjectURL = original.revoquer;
+    });
+
+    const vignette = (forme: string) =>
+      racine.querySelector<HTMLButtonElement>(
+        `app-carte-mot button[aria-label="Carte d'identité de « ${forme} »"]`,
+      )!;
+    const panneau = () => racine.querySelector<HTMLElement>('app-carte-identite aside');
+
+    async function ouvrirGrille() {
+      await ouvrir({ ...PREPARATION, nombreMots: 3 }, MODULES, THEMES, albumDe(PREPARATION), [
+        GALETTE,
+        CITROUILLE,
+        POTIRON,
+      ]);
+    }
+
+    it('la vignette ouvre le panneau à droite, la Grille reste affichée, le focus va au panneau', async () => {
+      await ouvrirGrille();
+      expect(panneau()).toBeNull();
+
+      vignette('citrouille').click();
+      await stabiliser();
+
+      expect(racine.querySelector('.disposition')?.classList).toContain('disposition--panneau');
+      expect(panneau()).not.toBeNull();
+      expect(cartes()).toEqual(['galette', 'citrouille', 'potiron']);
+      expect(document.activeElement).toBe(panneau());
+      serveur.expectOne(`/api/images/${IMAGE_1}`);
+    });
+
+    it('une autre vignette remplace le panneau : un seul à la fois', async () => {
+      await ouvrirGrille();
+      vignette('citrouille').click();
+      await stabiliser();
+      vignette('potiron').click();
+      await stabiliser();
+
+      expect(racine.querySelectorAll('app-carte-identite')).toHaveLength(1);
+      serveur.expectOne(`/api/images/${IMAGE_1}`);
+      serveur.expectOne(`/api/images/${IMAGE_2}`);
+    });
+
+    it('Échap ferme le panneau et rend le focus à la vignette', async () => {
+      await ouvrirGrille();
+      vignette('citrouille').click();
+      await stabiliser();
+      serveur.expectOne(`/api/images/${IMAGE_1}`);
+
+      panneau()!.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+      await stabiliser();
+
+      expect(panneau()).toBeNull();
+      expect(racine.querySelector('.disposition')?.classList).not.toContain('disposition--panneau');
+      expect(document.activeElement).toBe(vignette('citrouille'));
+    });
+
+    it('« Fermer » ferme le panneau et rend le focus à la vignette', async () => {
+      await ouvrirGrille();
+      vignette('potiron').click();
+      await stabiliser();
+      serveur.expectOne(`/api/images/${IMAGE_2}`);
+
+      panneau()!.querySelector<HTMLButtonElement>('button[aria-label="Fermer"]')!.click();
+      await stabiliser();
+
+      expect(panneau()).toBeNull();
+      expect(document.activeElement).toBe(vignette('potiron'));
+    });
+
+    it('la vignette de l’Image déjà affichée rend le focus au panneau, sans relire', async () => {
+      await ouvrirGrille();
+      vignette('citrouille').click();
+      await stabiliser();
+      serveur.expectOne(`/api/images/${IMAGE_1}`);
+      vignette('citrouille').focus();
+
+      vignette('citrouille').click();
+      await stabiliser();
+
+      expect(document.activeElement).toBe(panneau());
+      serveur.expectNone(`/api/images/${IMAGE_1}`);
+    });
+
+    it('ouvrir une autre Préparation ferme le panneau', async () => {
+      await ouvrirGrille();
+      vignette('citrouille').click();
+      await stabiliser();
+      serveur.expectOne(`/api/images/${IMAGE_1}`);
+
+      fixture.componentRef.setInput('id', AUTRE_ID);
+      await stabiliser();
+
+      expect(racine.querySelector('app-carte-identite')).toBeNull();
+      serveur.expectOne(`/api/preparations/${AUTRE_ID}`);
+    });
+
+    it('panneau ouvert sur grand écran : la page reste active', async () => {
+      await ouvrirGrille();
+      vignette('citrouille').click();
+      await stabiliser();
+      serveur.expectOne(`/api/images/${IMAGE_1}`);
+
+      expect(racine.querySelector('.disposition')?.classList).not.toContain(
+        'disposition--plein-ecran',
+      );
+      expect(racine.querySelector('.page')?.hasAttribute('inert')).toBe(false);
+    });
+
+    it('retirer le Mot affiché ferme le panneau', async () => {
+      await ouvrirGrille();
+      vignette('citrouille').click();
+      await stabiliser();
+      serveur.expectOne(`/api/images/${IMAGE_1}`);
+
+      racine
+        .querySelector<HTMLButtonElement>(
+          'app-carte-mot button[aria-label="Retirer « citrouille » de la préparation"]',
+        )!
+        .click();
+      await stabiliser();
+
+      expect(panneau()).toBeNull();
+      serveur.expectOne(`${URL_MOTS}/${CITROUILLE.id}`);
+    });
+  });
+});
+
+describe('Preparation (Carte d’identité sous 600 px)', () => {
+  const IMAGE = '0190f0a0-0000-7000-8000-0000000c0021';
+  const CITROUILLE: MotPreparationDto = {
+    ...motPreparation('citrouille', 1),
+    illustre: true,
+    image: {
+      id: IMAGE,
+      proprietaireId: MOI,
+      etat: 'privee',
+      aRemplacer: null,
+      reutilisable: true,
+      typeImage: 'image_libre',
+      aCompleter: false,
+    },
+  };
+
+  async function ouvrirPanneau(matches: boolean) {
+    TestBed.configureTestingModule({
+      imports: [Preparation],
+      providers: [
+        provideHttpClient(),
+        provideHttpClientTesting(),
+        provideIcones(),
+        { provide: MATERIAL_ANIMATIONS, useValue: { animationsDisabled: true } },
+        {
+          provide: BreakpointObserver,
+          useValue: { observe: () => of({ matches, breakpoints: {} }) },
+        },
+      ],
+    });
+    const serveur = TestBed.inject(HttpTestingController);
+    const fixture = TestBed.createComponent(Preparation);
+    fixture.componentRef.setInput('id', ID);
+    const stabiliser = async () => {
+      await new Promise((fin) => setTimeout(fin));
+      await fixture.whenStable();
+    };
+    await stabiliser();
+    serveur.expectOne(`/api/preparations/${ID}`).flush(PREPARATION);
+    await stabiliser();
+    serveur.expectOne(`/api/albums/${ALBUM}`).flush(albumDe(PREPARATION));
+    serveur.expectOne(`/api/albums/${ALBUM}/modules`).flush(MODULES);
+    serveur.expectOne('/api/themes').flush(THEMES);
+    serveur.expectOne(`/api/preparations/${ID}/mots`).flush([CITROUILLE]);
+    await stabiliser();
+    const racine = fixture.nativeElement as HTMLElement;
+    racine
+      .querySelector<HTMLButtonElement>(`button[aria-label="Carte d'identité de « citrouille »"]`)!
+      .click();
+    await stabiliser();
+    serveur.match(() => true);
+    return racine;
+  }
+
+  it('sous 600 px : le panneau couvre l’écran et la page dessous est inerte', async () => {
+    const racine = await ouvrirPanneau(true);
+
+    expect(racine.querySelector('.disposition')?.classList).toContain('disposition--plein-ecran');
+    expect(racine.querySelector('app-carte-identite')).not.toBeNull();
+    expect(racine.querySelector('.page')?.hasAttribute('inert')).toBe(true);
+  });
+
+  it('au-delà : ni plein écran, ni page inerte', async () => {
+    const racine = await ouvrirPanneau(false);
+
+    expect(racine.querySelector('.disposition')?.classList).not.toContain(
+      'disposition--plein-ecran',
+    );
+    expect(racine.querySelector('app-carte-identite')).not.toBeNull();
+    expect(racine.querySelector('.page')?.hasAttribute('inert')).toBe(false);
   });
 });
 

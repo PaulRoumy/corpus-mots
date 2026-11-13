@@ -61,15 +61,24 @@
 }
 
 // Vignette de la Carte illustrée (DESIGN.md › Vignette d'Image) : carrée, l'image d'abord, entière.
+// C'est un bouton, qui ouvre le Panneau Carte d'identité (story 2.6).
 .carte-mot__image {
   display: grid;
   place-items: center;
   box-sizing: border-box;
   width: 100%;
   aspect-ratio: 1;
+  padding: 0;
   overflow: hidden;
+  border: none;
   border-radius: var(--cm-arrondi-md);
   background: var(--mat-sys-surface-container-low);
+  cursor: pointer;
+
+  &:focus-visible {
+    outline: var(--cm-anneau-focus-epaisseur) solid var(--mat-sys-primary);
+    outline-offset: var(--cm-anneau-focus-decalage);
+  }
 }
 
 .carte-mot__miniature {

@@ -33,7 +33,9 @@ import org.eclipse.microprofile.openapi.annotations.responses.APIResponse;
 import org.jboss.resteasy.reactive.ResponseStatus;
 
 /**
- * Images de l'enseignant connecté. {@code POST /images} ajoute une Image dans Mes mots, sans Préparation (FR-13).
+ * Images de l'enseignant connecté. {@code POST /images} ajoute une Image dans Mes mots, sans Préparation (FR-13) ;
+ * {@code GET /images/{id}} rend la Carte d'identité d'une Image consultable (FR-14), sinon
+ * {@code 404 ressource.introuvable}.
  *
  * <p>Fichiers des Images (AD-23) : servis uniquement par {@link FichiersImages#lire}, qui applique la visibilité (AD-2).
  * Une Image que l'enseignant connecté ne peut pas consulter répond {@code 404 ressource.introuvable}, comme une Image
@@ -79,6 +81,20 @@ public class ImagesResource {
                 ajout.fichier.size(), ajout.typeImage, ajout.licence);
         return MesMotsImageDto.de(images.ajouterDansMesMots(new AjouterImageCommande(prepare.fichier(), ajout.mot,
                 prepare.typeImage(), prepare.licence(), ajout.source, ajout.auteur, albumId)));
+    }
+
+    @GET
+    @Path("/{id}")
+    @Produces(MediaType.APPLICATION_JSON)
+    @Operation(operationId = "carteIdentiteImage",
+            summary = "Carte d'identité d'une Image que l'enseignant connecté peut consulter")
+    @APIResponse(responseCode = "200", description = "Carte d'identité de l'Image",
+            content = @Content(mediaType = MediaType.APPLICATION_JSON,
+                    schema = @Schema(implementation = CarteIdentiteImageDto.class)))
+    public CarteIdentiteImageDto carteIdentite(@PathParam("id") UUID id) {
+        return CarteIdentiteImageDto.de(images.carteIdentite(id)
+                .orElseThrow(() -> new ErreurMetier(404, "ressource.introuvable",
+                        "Aucune image consultable ne porte cet identifiant")));
     }
 
     @GET

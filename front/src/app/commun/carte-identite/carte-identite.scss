@@ -1,0 +1,133 @@
+// Panneau Carte d'identité (key-banque.html › `.cid`, `dl.ro`). Sa largeur et sa place viennent de la page hôte.
+:host {
+  display: block;
+}
+
+.carte-identite {
+  display: flex;
+  flex-direction: column;
+  box-sizing: border-box;
+  height: 100%;
+  max-height: inherit;
+  overflow-y: auto;
+  padding-bottom: var(--cm-espace-4);
+  border-radius: var(--cm-arrondi-lg);
+  background: var(--mat-sys-surface);
+  box-shadow: var(--cm-elevation-2);
+  color: var(--mat-sys-on-surface);
+
+  &:focus-visible {
+    outline: var(--cm-anneau-focus-epaisseur) solid var(--mat-sys-primary);
+    outline-offset: calc(-1 * var(--cm-anneau-focus-epaisseur));
+  }
+}
+
+.carte-identite__entete {
+  display: flex;
+  align-items: center;
+  gap: var(--cm-espace-2);
+  padding: var(--cm-espace-3) var(--cm-espace-2) var(--cm-espace-2) var(--cm-espace-4);
+}
+
+.carte-identite__titre {
+  flex: 1;
+  margin: 0;
+  font: var(--cm-typo-title);
+}
+
+.carte-identite__fermer {
+  color: var(--mat-sys-on-surface-variant);
+}
+
+.carte-identite__vignette {
+  display: grid;
+  place-items: center;
+  height: var(--cm-hauteur-vignette-carte-identite);
+  margin: 0 var(--cm-espace-4);
+  overflow: hidden;
+  border-radius: var(--cm-arrondi-md);
+  background: var(--mat-sys-surface-container-low);
+}
+
+.carte-identite__image {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+.carte-identite__repli {
+  width: var(--cm-taille-illustration);
+  height: var(--cm-taille-illustration);
+  color: var(--mat-sys-on-surface-variant);
+}
+
+.carte-identite__reperes {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--cm-espace-2);
+  margin: var(--cm-espace-2) var(--cm-espace-4) 0;
+}
+
+.carte-identite__repere {
+  font: var(--cm-typo-label-sm);
+  color: var(--mat-sys-on-surface-variant);
+}
+
+// « à compléter » : couleur, icône crayon et libellé (jamais la couleur seule).
+.carte-identite__a-completer {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--cm-espace-1);
+  height: var(--cm-hauteur-badge);
+  padding: 0 var(--cm-espace-2);
+  border-radius: var(--cm-arrondi-sm);
+  background: var(--cm-etat-a-illustrer-fond);
+  color: var(--cm-etat-a-illustrer-texte);
+  font: var(--cm-typo-label-sm);
+  white-space: nowrap;
+
+  mat-icon {
+    flex: none;
+    width: var(--cm-taille-icone-badge);
+    height: var(--cm-taille-icone-badge);
+  }
+}
+
+.carte-identite__champs {
+  display: grid;
+  grid-template-columns: var(--cm-largeur-intitule-carte-identite) minmax(0, 1fr);
+  align-items: center;
+  gap: var(--cm-espace-2) var(--cm-espace-3);
+  margin: 0;
+  padding: var(--cm-espace-3) var(--cm-espace-4) 0;
+  font: var(--cm-typo-body-sm);
+
+  dt {
+    font: var(--cm-typo-label-sm);
+    color: var(--mat-sys-on-surface-variant);
+  }
+
+  dd {
+    margin: 0;
+    overflow-wrap: anywhere;
+  }
+}
+
+.carte-identite__mot {
+  font: var(--cm-typo-word-cursive);
+}
+
+.carte-identite__album {
+  display: flex;
+  flex-direction: column;
+}
+
+.carte-identite__album-auteur {
+  color: var(--mat-sys-on-surface-variant);
+}
+
+.carte-identite__erreur,
+.carte-identite__squelette {
+  margin: var(--cm-espace-2) var(--cm-espace-4) 0;
+}

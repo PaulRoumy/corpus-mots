@@ -125,6 +125,12 @@ public class Lexique {
                 .collect(Collectors.toMap(Map.Entry::getKey, entree -> vue(entree.getValue())));
     }
 
+    /** Sens {@code sensId}, vide s'il n'existe pas. */
+    @Transactional
+    public Optional<SensVue> sens(UUID sensId) {
+        return sensId == null ? Optional.empty() : sens.findByIdOptional(sensId).map(Lexique::vue);
+    }
+
     /** Sens {@code sensId} s'il est un Sens du Mot {@code motId} ; vide s'il n'existe pas ou appartient à un autre Mot. */
     @Transactional
     public Optional<SensVue> sensDuMot(UUID motId, UUID sensId) {
