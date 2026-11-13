@@ -16,7 +16,7 @@ import {
   viewChild,
   viewChildren,
 } from '@angular/core';
-import { MatAutocompleteModule } from '@angular/material/autocomplete';
+import { MatAutocompleteModule, MatAutocompleteTrigger } from '@angular/material/autocomplete';
 import { MatChipRow, MatChipsModule } from '@angular/material/chips';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatIconModule } from '@angular/material/icon';
@@ -183,6 +183,7 @@ export class ChampThemes {
   private readonly injecteur = inject(Injector);
   private readonly champ = viewChild<ElementRef<HTMLInputElement>>('champ');
   private readonly etiquettes = viewChildren(MatChipRow);
+  private readonly declencheur = viewChild(MatAutocompleteTrigger);
   private readonly saisie = signal('');
 
   /** Vrai dès que la saisie change après un échec, jusqu'au prochain message. */
@@ -247,6 +248,11 @@ export class ChampThemes {
   /** Donne le focus au champ de saisie. */
   focus(): void {
     this.champ()?.nativeElement.focus();
+  }
+
+  /** Vrai si la liste des propositions est ouverte : Échap la ferme, pas le panneau qui contient le Champ. */
+  listeOuverte(): boolean {
+    return this.declencheur()?.panelOpen ?? false;
   }
 
   protected saisir(texte: string): void {

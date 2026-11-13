@@ -2,8 +2,11 @@ package fr.corpusmots.vocabulaire.service;
 
 import fr.corpusmots.commun.api.ErreurMetier;
 import fr.corpusmots.commun.service.EnseignantCourant;
+import fr.corpusmots.commun.service.Section;
 import fr.corpusmots.referentiels.service.AlbumVue;
+import fr.corpusmots.referentiels.service.ModuleVue;
 import fr.corpusmots.referentiels.service.ReferentielsService;
+import fr.corpusmots.referentiels.service.ThemeVue;
 import fr.corpusmots.vocabulaire.persistance.FichierLu;
 import fr.corpusmots.vocabulaire.persistance.Image;
 import fr.corpusmots.vocabulaire.persistance.ImageFichier;
@@ -13,6 +16,13 @@ import fr.corpusmots.vocabulaire.persistance.LienImageRepository;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 import jakarta.transaction.Transactional;
+import java.text.Collator;
+import java.util.Comparator;
+import java.util.EnumSet;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Locale;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
@@ -31,6 +41,8 @@ public class Images {
     static final String CODE_REQUETE_INVALIDE = "requete.invalide";
     static final String CODE_RESSOURCE_INTROUVABLE = "ressource.introuvable";
     static final String CODE_RESERVEE_AU_PROPRIETAIRE = "image.reservee_au_proprietaire";
+    static final String CODE_THEME_INTROUVABLE = "image.theme_introuvable";
+    static final String CODE_MODULE_INTROUVABLE = "image.module_introuvable";
     static final String TYPE_MEDIA_IMAGE = "image";
 
     /** Longueur maximale de la source et de l'auteur d'une Image. */
@@ -97,16 +109,7 @@ public class Images {
     @Transactional
     public CarteIdentiteImageVue modifierDescription(UUID imageId, ModifierDescriptionImageCommande commande) {
         UUID enseignantId = enseignantCourant.id();
-        Image image = (imageId == null || enseignantId == null ? Optional.<Image>empty()
-                : images.findByIdOptional(imageId))
-                .filter(trouvee -> visibilite.consultable(trouvee, enseignantId,
-                        liens.existe(trouvee.id(), enseignantId)))
-                .orElseThrow(() -> new ErreurMetier(404, CODE_RESSOURCE_INTROUVABLE,
-                        "Aucune image consultable ne porte cet identifiant"));
-        if (!image.proprietaireId().equals(enseignantId)) {
-            throw new ErreurMetier(403, CODE_RESERVEE_AU_PROPRIETAIRE,
-                    "Seul le propriétaire de l'image peut modifier sa carte d'identité");
-        }
+        Image image = imageDuProprietaire(imageId, enseignantId);
         TypeImage type = commande == null ? null : commande.typeImage();
         if (type == null) {
             throw new ErreurMetier(400, CODE_REQUETE_INVALIDE, "Le type d'image est obligatoire");
@@ -123,6 +126,65 @@ public class Images {
         image.decrire(type.valeur(), licence == null ? null : licence.valeur(), source, auteur, albumId);
         images.flush();
         return carteIdentite(image, enseignantId);
+    }
+
+    /**
+     * Remplace d'un coup les Sections, le Module et les Thèmes de l'Image {@code imageId}, par son seul propriétaire
+     * (FR-14). Les Sections sont cochées librement ; le Module, facultatif, peut être celui de n'importe quel Album,
+     * quels que soient le type et l'Album d'origine ; les Thèmes sont sans limite. Doublons ignorés. Thèmes et Module
+     * sont relus par {@code referentiels} en verrou partagé avant l'écriture : ils ne peuvent pas être supprimés
+     * pendant l'affectation (AD-15, AD-17). L'état ne change pas (AD-3) ; {@code @Version} est incrémentée si le
+     * classement change. Rien n'est modifié en cas de refus.
+     *
+     * @return la Carte d'identité à jour
+     * @throws ErreurMetier {@code 404 ressource.introuvable} si l'Image n'existe pas ou n'est pas consultable par
+     *         l'enseignant courant ; {@code 403 image.reservee_au_proprietaire} s'il n'en est pas le propriétaire,
+     *         administrateur compris ; {@code 400 requete.invalide} si les Sections ou les Thèmes manquent ou
+     *         contiennent une valeur nulle ; {@code 400 image.theme_introuvable} si un Thème n'existe pas ;
+     *         {@code 400 image.module_introuvable} si le Module n'existe pas
+     */
+    @Transactional
+    public CarteIdentiteImageVue classer(UUID imageId, ClasserImageCommande commande) {
+        UUID enseignantId = enseignantCourant.id();
+        Image image = imageDuProprietaire(imageId, enseignantId);
+        if (commande == null || commande.sections() == null || commande.themeIds() == null
+                || commande.sections().stream().anyMatch(Objects::isNull)
+                || commande.themeIds().stream().anyMatch(Objects::isNull)) {
+            throw new ErreurMetier(400, CODE_REQUETE_INVALIDE, "Les sections et les thèmes sont obligatoires");
+        }
+        Set<Section> sections = EnumSet.noneOf(Section.class);
+        sections.addAll(commande.sections());
+        Set<UUID> themeIds = new HashSet<>(commande.themeIds());
+        if (referentiels.themesVerrouilles(themeIds).size() != themeIds.size()) {
+            throw new ErreurMetier(400, CODE_THEME_INTROUVABLE, "Un des thèmes n'existe pas");
+        }
+        UUID moduleId = commande.moduleId();
+        if (moduleId != null && referentiels.moduleVerrouille(moduleId).isEmpty()) {
+            throw new ErreurMetier(400, CODE_MODULE_INTROUVABLE, "Aucun module ne porte cet identifiant");
+        }
+        image.classer(sections, moduleId, themeIds);
+        images.flush();
+        return carteIdentite(image, enseignantId);
+    }
+
+    /**
+     * Image {@code imageId}, si l'enseignant courant peut la consulter et en est le propriétaire.
+     *
+     * @throws ErreurMetier {@code 404 ressource.introuvable} si elle n'existe pas ou ne lui est pas consultable ;
+     *         {@code 403 image.reservee_au_proprietaire} s'il n'en est pas le propriétaire, administrateur compris
+     */
+    private Image imageDuProprietaire(UUID imageId, UUID enseignantId) {
+        Image image = (imageId == null || enseignantId == null ? Optional.<Image>empty()
+                : images.findByIdOptional(imageId))
+                .filter(trouvee -> visibilite.consultable(trouvee, enseignantId,
+                        liens.existe(trouvee.id(), enseignantId)))
+                .orElseThrow(() -> new ErreurMetier(404, CODE_RESSOURCE_INTROUVABLE,
+                        "Aucune image consultable ne porte cet identifiant"));
+        if (!image.proprietaireId().equals(enseignantId)) {
+            throw new ErreurMetier(403, CODE_RESERVEE_AU_PROPRIETAIRE,
+                    "Seul le propriétaire de l'image peut modifier sa carte d'identité");
+        }
+        return image;
     }
 
     /** Réduit le fichier de l'Image et sa miniature à la taille d'une image d'album. */
@@ -149,8 +211,17 @@ public class Images {
         AlbumVue album = vue.typeImage() == TypeImage.IMAGE_ALBUM
                 ? referentiels.album(image.albumId()).orElse(null)
                 : null;
+        List<Section> sections = image.sections().stream().sorted().toList();
+        ModuleVue module = image.moduleId() == null ? null
+                : referentiels.modules(Set.of(image.moduleId())).get(image.moduleId());
+        AlbumVue albumModule = module == null ? null : referentiels.album(module.albumId()).orElse(null);
+        Collator collation = Collator.getInstance(Locale.FRENCH);
+        List<ThemeVue> themes = referentiels.themes(image.themeIds()).values().stream()
+                .sorted(Comparator.comparing(ThemeVue::nom, collation).thenComparing(ThemeVue::id))
+                .toList();
         return new CarteIdentiteImageVue(vue, mot, sens, Usages.LIBELLE_A_COMPLETER.equals(sens.libelle()), album,
-                licence, image.source(), image.auteur());
+                licence, image.source(), image.auteur(), sections, albumModule == null ? null : module, albumModule,
+                themes);
     }
 
     /**

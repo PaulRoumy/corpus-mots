@@ -37,6 +37,9 @@ const CARTE: CarteIdentiteImageDto = {
   licence: 'cc0_domaine_public',
   source: 'site web',
   auteur: null,
+  sections: [],
+  module: null,
+  themes: [],
 };
 
 const ROULE_GALETTE: AlbumDto = {
@@ -46,6 +49,11 @@ const ROULE_GALETTE: AlbumDto = {
   createurId: MOI,
   nombreModules: 0,
 };
+
+const MODULE_1 = { id: '0190f0a0-0000-7000-8000-00000000b001', nom: 'Module 1' };
+const MODULE_2 = { id: '0190f0a0-0000-7000-8000-00000000b002', nom: 'Module 2' };
+const ANIMAUX = { id: '0190f0a0-0000-7000-8000-00000000f001', nom: 'animaux' };
+const FORET = { id: '0190f0a0-0000-7000-8000-00000000f002', nom: 'forêt' };
 
 describe('CarteIdentite', () => {
   let fixture: ComponentFixture<CarteIdentite>;
@@ -181,6 +189,27 @@ describe('CarteIdentite', () => {
     expect(champs()).toContain('Propriétaire : Zoé');
     expect(texte('.carte-identite__basse-resolution')).toBe('basse résolution');
     expect(texte('.carte-identite__lecture-seule')).toBe('lecture seule');
+  });
+
+  it('collègue : Sections en Repères, Module « Module 1 · Roule galette » et Thèmes en lecture', async () => {
+    await servir({
+      ...CARTE,
+      proprietaireId: ZOE,
+      reutilisable: false,
+      sections: ['ms', 'gs'],
+      module: { id: MODULE_1.id, nom: 'Module 1', albumId: ROULE_GALETTE.id, titreAlbum: 'Roule galette' },
+      themes: [
+        { id: ANIMAUX.id, nom: 'animaux' },
+        { id: FORET.id, nom: 'forêt' },
+      ],
+    });
+
+    expect(champs()).toContain('Sections : Section MS Section GS');
+    expect(racine.querySelectorAll('app-repere-section')).toHaveLength(2);
+    expect(champs()).toContain('Module : Module 1 · Roule galette');
+    expect(texte('.carte-identite__titre-album')).toBe('Roule galette');
+    expect(champs()).toContain('Thèmes : animaux, forêt');
+    expect(racine.querySelector('mat-chip-listbox, app-champ-themes, mat-form-field')).toBeNull();
   });
 
   it('propriétaire absent de l’annuaire : « un ancien membre de l’équipe »', async () => {
@@ -324,21 +353,20 @@ describe('CarteIdentite', () => {
       await stabiliser();
     }
 
-    it('type, source, licence et auteur en champs Material ; les autres champs restent en lecture', async () => {
+    it('Sections, Module, Thèmes, type, source, licence et auteur modifiables ; les autres champs en lecture', async () => {
       await servir(CARTE);
 
       expect(champs()).toEqual([
         'Mot : citrouille',
         'Sens : légume',
         'Catégorie : nom',
-        'Sections : —',
+        'Sections : Section PS Section MS Section GS',
         'Module : —',
-        'Thèmes : —',
         'Propriétaire : Claire (vous)',
       ]);
       expect(
         [...racine.querySelectorAll('mat-form-field mat-label')].map((l) => l.textContent?.trim()),
-      ).toEqual(["Type d'image", 'Source', 'Licence', 'Auteur']);
+      ).toEqual(['Album du module', 'Thèmes', "Type d'image", 'Source', 'Licence', 'Auteur']);
       expect(texte('.carte-identite__type')).toBe('image libre');
       expect(entree('Source').value).toBe('site web');
       expect(texte('.carte-identite__licence')).toBe('domaine public / CC0');
@@ -662,6 +690,248 @@ describe('CarteIdentite', () => {
       await stabiliser();
 
       expect(fermetures).toBe(0);
+    });
+
+    describe('classement', () => {
+      const URL_CLASSEMENT = `/api/images/${IMAGE}/classement`;
+      const URL_MODULES = `/api/albums/${ROULE_GALETTE.id}/modules`;
+      const puce = (section: string) =>
+        racine.querySelector<HTMLElement>(`.carte-identite__section--${section}`)!;
+      const cocher = async (section: string) => {
+        puce(section).querySelector<HTMLElement>('.mdc-evolution-chip__action--primary')!.click();
+        await stabiliser();
+      };
+      const cochee = (section: string) => puce(section).classList.contains('mat-mdc-chip-selected');
+      const saisieThemes = () =>
+        racine.querySelector<HTMLInputElement>('input.champ-themes__saisie')!;
+      const options = () =>
+        [...document.querySelectorAll<HTMLElement>('.cdk-overlay-pane mat-option')].map((o) =>
+          o.textContent?.replace(/\s+/g, ' ').trim(),
+        );
+      const choisirProposition = async (debut: string) => {
+        [...document.querySelectorAll<HTMLElement>('.cdk-overlay-pane mat-option')]
+          .find((o) => o.textContent?.replace(/\s+/g, ' ').trim().startsWith(debut))!
+          .click();
+        await stabiliser();
+      };
+
+      /** Entre dans le Champ à étiquettes (les Thèmes de l'école sont lus), puis tape `texte`. */
+      async function taperTheme(texte: string) {
+        saisieThemes().focus();
+        await stabiliser();
+        serveur.expectOne('/api/themes').flush([ANIMAUX, FORET]);
+        await stabiliser();
+        saisieThemes().value = texte;
+        saisieThemes().dispatchEvent(new Event('input'));
+        await stabiliser();
+      }
+
+      it('puce MS cochée : le classement est enregistré, la puce reste cochée, la Carte est émise', async () => {
+        await servir(CARTE);
+        const emises: CarteIdentiteImageDto[] = [];
+        fixture.componentRef.setInput('appliquer', (carte: CarteIdentiteImageDto) =>
+          emises.push(carte),
+        );
+
+        await cocher('ms');
+
+        const requete = serveur.expectOne(URL_CLASSEMENT);
+        expect(requete.request.method).toBe('PUT');
+        expect(requete.request.body).toEqual({ sections: ['ms'], moduleId: null, themeIds: [] });
+        const maj: CarteIdentiteImageDto = { ...CARTE, sections: ['ms'] };
+        requete.flush(maj);
+        await stabiliser();
+        expect(emises).toEqual([maj]);
+        expect(cochee('ms')).toBe(true);
+        expect(cochee('ps')).toBe(false);
+        serveur.expectNone(URL_DESCRIPTION);
+      });
+
+      it('échec à la puce GS : puce gardée cochée, Sections signalées, Bandeau ; « Réessayer » renvoie', async () => {
+        await servir({ ...CARTE, sections: ['ps'] });
+        expect(cochee('ps')).toBe(true);
+
+        await cocher('gs');
+        const requete = serveur.expectOne(URL_CLASSEMENT);
+        expect(requete.request.body).toEqual({
+          sections: ['ps', 'gs'],
+          moduleId: null,
+          themeIds: [],
+        });
+        requete.flush({ status: 500, code: 'erreur.interne' }, { status: 500, statusText: 'Error' });
+        await stabiliser();
+
+        expect(cochee('gs')).toBe(true);
+        expect(texte('.carte-identite__non-enregistre')).toBe('Non enregistré');
+        expect(bandeau()).toBe(MESSAGES_PAR_CODE['erreur.interne']);
+
+        [...racine.querySelectorAll<HTMLButtonElement>('app-bandeau-erreur button')]
+          .find((bouton) => bouton.textContent?.trim() === 'Réessayer')!
+          .click();
+        await stabiliser();
+        serveur.expectOne(URL_CLASSEMENT).flush({ ...CARTE, sections: ['ps', 'gs'] });
+        await stabiliser();
+        expect(racine.querySelector('.carte-identite__non-enregistre')).toBeNull();
+        expect(racine.querySelector('app-bandeau-erreur')).toBeNull();
+      });
+
+      it('Module : Album cherché, puis Module choisi, puis « Aucun module », chacun enregistré', async () => {
+        await servir(CARTE);
+        expect(champ('Module de cet album')).toBeUndefined();
+
+        const album = entree('Album du module');
+        album.focus();
+        album.value = 'roule';
+        album.dispatchEvent(new Event('input'));
+        await attendreFrappe();
+        await stabiliser();
+        serveur
+          .expectOne('/api/albums?recherche=roule&taille=20')
+          .flush({ elements: [ROULE_GALETTE], total: 1 });
+        await stabiliser();
+        document.querySelector<HTMLElement>('.cdk-overlay-pane mat-option')!.click();
+        await stabiliser();
+        serveur.expectOne(URL_MODULES).flush([
+          { ...MODULE_1, albumId: ROULE_GALETTE.id, ordre: 1 },
+          { ...MODULE_2, albumId: ROULE_GALETTE.id, ordre: 2 },
+        ]);
+        await stabiliser();
+
+        await choisirOption('Module de cet album', 'Module 2');
+        const requete = serveur.expectOne(URL_CLASSEMENT);
+        expect(requete.request.body).toEqual({
+          sections: [],
+          moduleId: MODULE_2.id,
+          themeIds: [],
+        });
+        requete.flush({
+          ...CARTE,
+          module: { ...MODULE_2, albumId: ROULE_GALETTE.id, titreAlbum: 'Roule galette' },
+        });
+        await stabiliser();
+        expect(champs()).toContain('Module : Module 2 · Roule galette');
+
+        await choisirOption('Module de cet album', 'Aucun module');
+        const retrait = serveur.expectOne(URL_CLASSEMENT);
+        expect(retrait.request.body).toEqual({ sections: [], moduleId: null, themeIds: [] });
+        retrait.flush(CARTE);
+        await stabiliser();
+        expect(champs()).toContain('Module : —');
+      });
+
+      it('image d’album sans Module : la recherche part de l’Album d’origine', async () => {
+        await servir({
+          ...CARTE,
+          typeImage: 'image_album',
+          licence: 'usage_pedagogique_album',
+          albumOrigine: { id: ROULE_GALETTE.id, titre: 'Roule galette', auteur: 'Natha Caputo' },
+        });
+
+        expect(entree('Album du module').value).toBe('Roule galette');
+        champ('Module de cet album')!
+          .querySelector<HTMLElement>('.mat-mdc-select-trigger')!
+          .click();
+        await stabiliser();
+        serveur
+          .expectOne(URL_MODULES)
+          .flush([{ ...MODULE_1, albumId: ROULE_GALETTE.id, ordre: 1 }]);
+        await stabiliser();
+        expect(options()).toEqual(['Aucun module', 'Module 1']);
+      });
+
+      it('échec de la lecture des Modules : Bandeau propre, « Réessayer » les relit et les propose', async () => {
+        await servir({
+          ...CARTE,
+          typeImage: 'image_album',
+          licence: 'usage_pedagogique_album',
+          albumOrigine: { id: ROULE_GALETTE.id, titre: 'Roule galette', auteur: 'Natha Caputo' },
+        });
+        champ('Module de cet album')!
+          .querySelector<HTMLElement>('.mat-mdc-select-trigger')!
+          .click();
+        await stabiliser();
+        serveur.expectOne(URL_MODULES).error(new ProgressEvent('error'));
+        await stabiliser();
+
+        const bandeauModules = racine.querySelector('.carte-identite__erreur-modules')!;
+        expect(bandeauModules.querySelector('[role="alert"]')?.textContent?.trim()).toBe(
+          MESSAGE_RESEAU,
+        );
+        [...bandeauModules.querySelectorAll<HTMLButtonElement>('button')]
+          .find((bouton) => bouton.textContent?.trim() === 'Réessayer')!
+          .click();
+        await stabiliser();
+        serveur
+          .expectOne(URL_MODULES)
+          .flush([{ ...MODULE_1, albumId: ROULE_GALETTE.id, ordre: 1 }]);
+        await stabiliser();
+
+        expect(racine.querySelector('.carte-identite__erreur-modules')).toBeNull();
+        champ('Module de cet album')!
+          .querySelector<HTMLElement>('.mat-mdc-select-trigger')!
+          .click();
+        await stabiliser();
+        expect(options()).toEqual(['Aucun module', 'Module 1']);
+      });
+
+      it('Échap dans la liste ouverte des Thèmes la ferme sans fermer le panneau', async () => {
+        await servir(CARTE);
+        let fermetures = 0;
+        fixture.componentInstance.fermer.subscribe(() => fermetures++);
+
+        await taperTheme('anim');
+        expect(saisieThemes().getAttribute('aria-expanded')).toBe('true');
+        saisieThemes().dispatchEvent(
+          new KeyboardEvent('keydown', { key: 'Escape', keyCode: 27, bubbles: true }),
+        );
+        await stabiliser();
+
+        expect(fermetures).toBe(0);
+      });
+
+      it('Thème choisi dans le Champ à étiquettes : enregistré aussitôt', async () => {
+        await servir({ ...CARTE, themes: [FORET] });
+
+        await taperTheme('anim');
+        expect(options()).toEqual(['animaux', 'Créer le thème « anim »']);
+        await choisirProposition('animaux');
+
+        const requete = serveur.expectOne(URL_CLASSEMENT);
+        expect(requete.request.body).toEqual({
+          sections: [],
+          moduleId: null,
+          themeIds: [FORET.id, ANIMAUX.id],
+        });
+        requete.flush({ ...CARTE, themes: [ANIMAUX, FORET] });
+        await stabiliser();
+      });
+
+      it('« Créer le thème « automne » » : le Thème est créé pour l’école puis enregistré sur l’Image', async () => {
+        await servir(CARTE);
+        const automne = { id: '0190f0a0-0000-7000-8000-00000000f003', nom: 'automne' };
+
+        await taperTheme('automne');
+        await choisirProposition('Créer le thème « automne »');
+        const creation = serveur.expectOne('/api/themes');
+        expect(creation.request.method).toBe('POST');
+        expect(creation.request.body).toEqual({ nom: 'automne' });
+        creation.flush({ ...automne, createurId: MOI });
+        await stabiliser();
+
+        const requete = serveur.expectOne(URL_CLASSEMENT);
+        expect(requete.request.body).toEqual({
+          sections: [],
+          moduleId: null,
+          themeIds: [automne.id],
+        });
+        requete.flush({ ...CARTE, themes: [automne] });
+        await stabiliser();
+        expect(
+          [...racine.querySelectorAll('mat-chip-row')].map((p) =>
+            p.querySelector('.mdc-evolution-chip__text-label')?.textContent?.trim(),
+          ),
+        ).toEqual(['automne']);
+      });
     });
   });
 });

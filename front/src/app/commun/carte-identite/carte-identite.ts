@@ -25,19 +25,26 @@ import {
 } from '@angular/forms';
 import { MatAutocompleteModule, MatAutocompleteTrigger } from '@angular/material/autocomplete';
 import { MatButtonModule } from '@angular/material/button';
+import { MatChipsModule } from '@angular/material/chips';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatIconModule } from '@angular/material/icon';
 import { MatInputModule } from '@angular/material/input';
 import { MatSelect, MatSelectModule } from '@angular/material/select';
 import { debounceTime, distinctUntilChanged, filter, from, map, of, switchMap } from 'rxjs';
 import { Api } from '../../api/api';
+import { listerModulesDeLAlbum } from '../../api/fn/albums-resource/lister-modules-de-l-album';
 import { rechercherAlbums } from '../../api/fn/albums-resource/rechercher-albums';
 import { carteIdentiteImage } from '../../api/fn/images-resource/carte-identite-image';
+import { classerImage } from '../../api/fn/images-resource/classer-image';
 import { fichierImage } from '../../api/fn/images-resource/fichier-image';
 import { modifierDescriptionImage } from '../../api/fn/images-resource/modifier-description-image';
+import { creerTheme } from '../../api/fn/themes-resource/creer-theme';
+import { listerThemes } from '../../api/fn/themes-resource/lister-themes';
 import { AlbumDto } from '../../api/models/album-dto';
 import { CarteIdentiteImageDto } from '../../api/models/carte-identite-image-dto';
+import { ClassementImageDto } from '../../api/models/classement-image-dto';
 import { DescriptionImageDto } from '../../api/models/description-image-dto';
+import { ThemeDto } from '../../api/models/theme-dto';
 import {
   DELAI_RECHERCHE_ALBUMS_MS,
   LONGUEUR_MIN_RECHERCHE,
@@ -46,6 +53,7 @@ import {
 import { Annuaire } from '../annuaire';
 import { BadgeTypeImage } from '../badge-type-image/badge-type-image';
 import { BandeauErreur } from '../bandeau-erreur/bandeau-erreur';
+import { ChampThemes, themesParNom } from '../champ-themes/champ-themes';
 import { CompteCourant } from '../compte-courant';
 import { DialogueConfirmation } from '../dialogue-confirmation/dialogue-confirmation';
 import { erreurPassagere, MESSAGES_PAR_CODE, messageErreur } from '../erreurs/message-erreur';
@@ -60,6 +68,12 @@ import {
   TYPES_IMAGE,
   TypeImage,
 } from '../libelles-images';
+import {
+  LIBELLES_SECTION,
+  RepereSection,
+  Section,
+  SECTIONS,
+} from '../repere-section/repere-section';
 import { Squelette } from '../squelette/squelette';
 
 /** Valeur affichée d'un champ vide. */
@@ -86,14 +100,98 @@ interface ErreurAffichee {
   readonly reessayable: boolean;
 }
 
-/** Champ modifiable de la Carte d'identité. */
-type Champ = 'type' | 'source' | 'licence' | 'auteur' | 'album';
+/** Choix « Aucun module » de la liste des Modules. */
+export const LIBELLE_AUCUN_MODULE = 'Aucun module';
 
-/** Album d'origine choisi : celui de la Carte, ou une suggestion de la recherche. */
+/** Champ de la description (`PUT /images/{id}/description`). */
+type ChampDescription = 'type' | 'source' | 'licence' | 'auteur' | 'album';
+/** Champ du classement (`PUT /images/{id}/classement`). */
+type ChampClassement = 'sections' | 'module' | 'themes';
+/** Champ modifiable de la Carte d'identité. */
+type Champ = ChampDescription | ChampClassement;
+
+const CHAMPS_CLASSEMENT: ReadonlySet<Champ> = new Set<Champ>(['sections', 'module', 'themes']);
+
+/** Album choisi (d'origine ou du Module) : celui de la Carte, ou une suggestion de la recherche. */
 interface AlbumChoisi {
   readonly id: string;
   readonly titre: string;
   readonly auteur?: string;
+}
+
+/** Module proposé dans la liste des Modules d'un Album. */
+interface ModuleChoix {
+  readonly id: string;
+  readonly nom: string;
+}
+
+/** Modification prête à partir : sa requête, puis la reprise de la Carte renvoyée dans les champs. */
+interface Modification {
+  readonly envoyer: () => Promise<CarteIdentiteImageDto>;
+  readonly reprendre: (maj: CarteIdentiteImageDto) => void;
+}
+
+/**
+ * Recherche d'Album par titre pendant la frappe dans `controle` (réglages de `recherche-albums.ts`) : suggestions,
+ * « Aucun album trouvé », et message d'échec propre à cette recherche. À créer dans un contexte d'injection.
+ */
+class RechercheAlbums {
+  readonly suggestions = signal<AlbumDto[]>([]);
+  /** Vrai quand la dernière recherche lancée (2 caractères au moins) n'a rien trouvé. */
+  readonly aucunAlbum = signal(false);
+  /** Message de l'échec de la dernière recherche, effacé par la recherche réussie suivante. */
+  readonly erreur = signal<string | null>(null);
+
+  constructor(
+    private readonly controle: FormControl<string | AlbumChoisi>,
+    private readonly api: Api,
+  ) {
+    controle.valueChanges
+      .pipe(
+        map((valeur) => (typeof valeur === 'string' ? valeur.trim() : null)),
+        filter((texte) => texte !== null),
+        debounceTime(DELAI_RECHERCHE_ALBUMS_MS),
+        distinctUntilChanged(),
+        switchMap((texte) =>
+          texte.length < LONGUEUR_MIN_RECHERCHE ? of(null) : from(this.chercher(texte)),
+        ),
+        takeUntilDestroyed(),
+      )
+      .subscribe((albums) => {
+        this.suggestions.set(albums ?? []);
+        this.aucunAlbum.set(albums !== null && albums.length === 0);
+      });
+  }
+
+  /** « Réessayer » du Bandeau de la recherche : relance la recherche du texte tapé et rouvre les suggestions. */
+  async relancer(declencheur: MatAutocompleteTrigger | undefined): Promise<void> {
+    const saisie = this.controle.value;
+    if (typeof saisie !== 'string' || saisie.trim().length < LONGUEUR_MIN_RECHERCHE) {
+      this.erreur.set(null);
+      return;
+    }
+    const albums = await this.chercher(saisie.trim());
+    if (albums !== null) {
+      this.suggestions.set(albums);
+      this.aucunAlbum.set(albums.length === 0);
+      declencheur?.openPanel();
+    }
+  }
+
+  /** Albums trouvés pour `texte`, ou `null` en échec (message dans `erreur`). */
+  private async chercher(texte: string): Promise<AlbumDto[] | null> {
+    try {
+      const page = await this.api.invoke(rechercherAlbums, {
+        recherche: texte,
+        taille: NOMBRE_SUGGESTIONS,
+      });
+      this.erreur.set(null);
+      return page.elements;
+    } catch (erreur) {
+      this.erreur.set(messageErreur(erreur));
+      return null;
+    }
+  }
 }
 
 /** Album choisi dans les suggestions (un texte tapé sans choix ne suffit pas). */
@@ -120,8 +218,9 @@ function texte(saisie: string): string | null {
  * en `blob`), Badge de type d'image, « basse résolution » pour une image d'album, « lecture seule » pour un
  * non-propriétaire, « à compléter » pour une image libre sans source ou sans licence ; puis les douze champs dans
  * l'ordre du Glossaire : Mot (cursive), Sens, catégorie, Sections, album d'origine (titre puis auteur), Module,
- * Thèmes, type, source, licence, auteur, propriétaire. Un champ vide affiche « — » ; Sections, Module et Thèmes
- * aussi, jusqu'à la partie 3. Un Sens « à compléter » est mis en avant par la couleur, l'icône crayon et le libellé.
+ * Thèmes, type, source, licence, auteur, propriétaire. Un champ vide affiche « — ». Les Sections s'affichent en
+ * Repères de Section, le Module en « Module 1 · *Roule galette* », les Thèmes par nom. Un Sens « à compléter » est mis
+ * en avant par la couleur, l'icône crayon et le libellé.
  *
  * Le propriétaire est lu dans l'Annuaire, suivi de « (vous) » pour l'enseignant connecté ; absent de l'annuaire
  * chargé, il devient « un ancien membre de l'équipe ».
@@ -138,21 +237,32 @@ function texte(saisie: string): string | null {
  * sans Album (« Album d'origine requis »), puis le Dialogue de confirmation demande la réduction à 400 × 400 px ;
  * « Annuler » remet le type précédent. En échec, la saisie reste, le champ est signalé et un Bandeau d'erreur s'affiche
  * dans le panneau. Chaque Carte renvoyée est passée à `appliquer`, même après la fermeture du panneau.
+ *
+ * Classement du propriétaire (story 2.6, partie 3), enregistré par `PUT /images/{id}/classement` à chaque changement :
+ * Sections en puces à cocher (Repère de Section : forme, couleur, libellé) ; Module choisi en cherchant un Album (au
+ * départ celui du Module, ou l'Album d'origine d'une image d'album sans Module), puis dans « Aucun module » et les
+ * Modules de cet Album ; Thèmes dans le Champ à étiquettes, « Créer le thème « … » » créant le Thème pour toute l'école
+ * avant de l'ajouter. Les Thèmes de l'école sont lus à la première entrée dans le Champ, les Modules d'un Album au
+ * choix de l'Album (ou à la première entrée dans la liste). Même file d'enregistrement et mêmes échecs que la
+ * description : la valeur choisie reste, le champ est signalé, Bandeau d'erreur dans le panneau.
  */
 @Component({
   selector: 'app-carte-identite',
   imports: [
     BadgeTypeImage,
     BandeauErreur,
+    ChampThemes,
     ImageSecurisee,
     MatAutocompleteModule,
     MatButtonModule,
+    MatChipsModule,
     MatFormFieldModule,
     MatIconModule,
     MatInputModule,
     MatSelectModule,
     NgTemplateOutlet,
     ReactiveFormsModule,
+    RepereSection,
     Squelette,
   ],
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -219,14 +329,41 @@ function texte(saisie: string): string | null {
           <div class="carte-identite__formulaire">
             <dl class="carte-identite__champs">
               <ng-container *ngTemplateOutlet="debutChamps; context: { $implicit: carte }" />
+              <dt id="carte-identite-sections">Sections</dt>
+              <dd>
+                <mat-chip-listbox
+                  class="carte-identite__sections-choix"
+                  aria-labelledby="carte-identite-sections"
+                  [multiple]="true"
+                  [value]="sections()"
+                  (change)="changerSections($event.value)"
+                >
+                  @for (section of toutesSections; track section) {
+                    <mat-chip-option
+                      class="carte-identite__section carte-identite__section--{{ section }}"
+                      [value]="section"
+                    >
+                      <span
+                        class="forme-section forme-section--{{ section }}"
+                        aria-hidden="true"
+                      ></span>
+                      <span class="cm-visuellement-masque">Section </span
+                      >{{ libellesSection[section] }}
+                    </mat-chip-option>
+                  }
+                </mat-chip-listbox>
+                @if (champEnErreur() === 'sections') {
+                  <span class="carte-identite__non-enregistre">{{ messageNonEnregistre }}</span>
+                }
+              </dd>
             </dl>
             @if (typeChoisi() === 'image_album') {
-              @if (erreurRecherche(); as message) {
+              @if (rechercheOrigine.erreur(); as message) {
                 <app-bandeau-erreur
                   class="carte-identite__erreur carte-identite__erreur-recherche"
                   [message]="message"
-                  (reessayer)="relancerRecherche()"
-                  (fermer)="erreurRecherche.set(null)"
+                  (reessayer)="rechercheOrigine.relancer(declencheurOrigine)"
+                  (fermer)="rechercheOrigine.erreur.set(null)"
                 />
               }
               <mat-form-field class="carte-identite__champ" subscriptSizing="dynamic">
@@ -238,6 +375,7 @@ function texte(saisie: string): string | null {
                   type="text"
                   autocomplete="off"
                   required
+                  #declencheurOrigine="matAutocompleteTrigger"
                   [formControl]="album"
                   [matAutocomplete]="suggestionsAlbums"
                   (blur)="quitterAlbum()"
@@ -256,10 +394,10 @@ function texte(saisie: string): string | null {
                   [displayWith]="titreAlbum"
                   (optionSelected)="choisirAlbum()"
                 >
-                  @for (suggestion of suggestions(); track suggestion.id) {
+                  @for (suggestion of rechercheOrigine.suggestions(); track suggestion.id) {
                     <mat-option [value]="suggestion">{{ suggestion.titre }}</mat-option>
                   }
-                  @if (aucunAlbum()) {
+                  @if (rechercheOrigine.aucunAlbum()) {
                     <mat-option disabled>{{ messageAucunAlbum }}</mat-option>
                   }
                 </mat-autocomplete>
@@ -267,10 +405,86 @@ function texte(saisie: string): string | null {
             }
             <dl class="carte-identite__champs">
               <dt>Module</dt>
-              <dd>{{ vide }}</dd>
-              <dt>Thèmes</dt>
-              <dd>{{ vide }}</dd>
+              <dd>
+                <ng-container *ngTemplateOutlet="moduleAffiche; context: { $implicit: carte }" />
+              </dd>
             </dl>
+            <div class="carte-identite__module" (focusin)="chargerModules()">
+              @if (rechercheModule.erreur(); as message) {
+                <app-bandeau-erreur
+                  class="carte-identite__erreur carte-identite__erreur-recherche-module"
+                  [message]="message"
+                  (reessayer)="rechercheModule.relancer(declencheurModule)"
+                  (fermer)="rechercheModule.erreur.set(null)"
+                />
+              }
+              @if (erreurModules(); as message) {
+                <app-bandeau-erreur
+                  class="carte-identite__erreur carte-identite__erreur-modules"
+                  [message]="message"
+                  (reessayer)="relancerModules()"
+                  (fermer)="erreurModules.set(null)"
+                />
+              }
+              <mat-form-field class="carte-identite__champ" subscriptSizing="dynamic">
+                <mat-label>Album du module</mat-label>
+                <mat-icon matPrefix svgIcon="recherche" aria-hidden="true" />
+                <input
+                  matInput
+                  class="carte-identite__album-module"
+                  type="text"
+                  autocomplete="off"
+                  #declencheurModule="matAutocompleteTrigger"
+                  [formControl]="albumModule"
+                  [matAutocomplete]="suggestionsAlbumsModule"
+                />
+                <mat-hint>Tapez au moins 2 lettres du titre</mat-hint>
+                <mat-autocomplete
+                  #suggestionsAlbumsModule="matAutocomplete"
+                  [displayWith]="titreAlbum"
+                  (optionSelected)="choisirAlbumModule()"
+                >
+                  @for (suggestion of rechercheModule.suggestions(); track suggestion.id) {
+                    <mat-option [value]="suggestion">{{ suggestion.titre }}</mat-option>
+                  }
+                  @if (rechercheModule.aucunAlbum()) {
+                    <mat-option disabled>{{ messageAucunAlbum }}</mat-option>
+                  }
+                </mat-autocomplete>
+              </mat-form-field>
+              @if (albumDuModule() !== null) {
+                <mat-form-field class="carte-identite__champ" subscriptSizing="dynamic">
+                  <mat-label>Module de cet album</mat-label>
+                  <mat-select
+                    class="carte-identite__module-choix"
+                    [formControl]="module"
+                    (selectionChange)="enregistrer('module')"
+                  >
+                    <mat-option [value]="null">{{ libelleAucunModule }}</mat-option>
+                    @for (choix of modulesAlbum(); track choix.id) {
+                      <mat-option [value]="choix.id">{{ choix.nom }}</mat-option>
+                    }
+                  </mat-select>
+                  @if (module.hasError('enregistrement')) {
+                    <mat-error>{{ messageNonEnregistre }}</mat-error>
+                  }
+                </mat-form-field>
+              }
+            </div>
+            <div class="carte-identite__champ carte-identite__themes" (focusin)="chargerThemes()">
+              <app-champ-themes
+                etiquette="Thèmes"
+                [themes]="themesProposes()"
+                [choisis]="themesChoisis()"
+                [enCours]="creationThemeEnCours()"
+                [erreur]="erreurThemes()"
+                (choisisChange)="choisirThemes($event)"
+                (creer)="creerTheme($event)"
+              />
+              @if (champEnErreur() === 'themes') {
+                <span class="carte-identite__non-enregistre">{{ messageNonEnregistre }}</span>
+              }
+            </div>
             <mat-form-field class="carte-identite__champ" subscriptSizing="dynamic">
               <mat-label>Type d'image</mat-label>
               <mat-select
@@ -355,6 +569,18 @@ function texte(saisie: string): string | null {
         } @else {
           <dl class="carte-identite__champs">
             <ng-container *ngTemplateOutlet="debutChamps; context: { $implicit: carte }" />
+            <dt>Sections</dt>
+            <dd>
+              @if (carte.sections.length > 0) {
+                <span class="carte-identite__sections">
+                  @for (section of carte.sections; track section) {
+                    <app-repere-section [section]="section" />
+                  }
+                </span>
+              } @else {
+                {{ vide }}
+              }
+            </dd>
             <dt>Album d'origine</dt>
             <dd>
               @if (carte.albumOrigine; as album) {
@@ -368,9 +594,11 @@ function texte(saisie: string): string | null {
               }
             </dd>
             <dt>Module</dt>
-            <dd>{{ vide }}</dd>
+            <dd>
+              <ng-container *ngTemplateOutlet="moduleAffiche; context: { $implicit: carte }" />
+            </dd>
             <dt>Thèmes</dt>
-            <dd>{{ vide }}</dd>
+            <dd class="carte-identite__themes-lus">{{ nomsThemes() || vide }}</dd>
             <dt>Type</dt>
             <dd>{{ libellesTypes[carte.typeImage] }}</dd>
             <dt>Source</dt>
@@ -413,8 +641,15 @@ function texte(saisie: string): string | null {
       </dd>
       <dt>Catégorie</dt>
       <dd>{{ carte.sens.categorie || vide }}</dd>
-      <dt>Sections</dt>
-      <dd>{{ vide }}</dd>
+    </ng-template>
+    <ng-template #moduleAffiche let-carte>
+      @if (carte.module; as module) {
+        <span class="carte-identite__module-lu"
+          >{{ module.nom }} · <cite class="carte-identite__titre-album">{{ module.titreAlbum }}</cite></span
+        >
+      } @else {
+        {{ vide }}
+      }
     </ng-template>
   `,
 })
@@ -457,17 +692,39 @@ export class CarteIdentite {
   });
   /** Album choisi, pour son auteur affiché sous le champ. */
   private readonly albumAffiche = signal<string | AlbumChoisi>('');
-  protected readonly suggestions = signal<AlbumDto[]>([]);
-  /** Vrai quand la dernière recherche lancée (2 caractères au moins) n'a rien trouvé. */
-  protected readonly aucunAlbum = signal(false);
+  protected readonly rechercheOrigine = new RechercheAlbums(this.album, this.api);
   protected readonly erreurEnregistrement = signal<ErreurAffichee | null>(null);
-  /** Message de l'échec de la dernière recherche d'Album, effacé par la recherche réussie suivante. */
-  protected readonly erreurRecherche = signal<string | null>(null);
   /** Champ dont le dernier enregistrement a échoué, signalé jusqu'au prochain enregistrement réussi. */
-  private champEnErreur: Champ | null = null;
+  protected readonly champEnErreur = signal<Champ | null>(null);
+
+  /** Classement du propriétaire : Sections cochées, Module choisi, Thèmes choisis. */
+  protected readonly toutesSections = SECTIONS;
+  protected readonly libellesSection = LIBELLES_SECTION;
+  protected readonly libelleAucunModule = LIBELLE_AUCUN_MODULE;
+  protected readonly sections = signal<Section[]>([]);
+  protected readonly module = new FormControl<string | null>(null);
+  /** Album dont les Modules sont proposés : texte tapé, ou l'Album choisi. */
+  protected readonly albumModule = new FormControl<string | AlbumChoisi>('', { nonNullable: true });
+  protected readonly rechercheModule = new RechercheAlbums(this.albumModule, this.api);
+  /** Album choisi dont les Modules sont proposés, `null` tant qu'aucun n'est choisi. */
+  protected readonly albumDuModule = signal<AlbumChoisi | null>(null);
+  /** Modules de `albumDuModule`, au départ le seul Module de la Carte s'il est de cet Album. */
+  protected readonly modulesAlbum = signal<readonly ModuleChoix[]>([]);
+  /** Album dont les Modules ont été demandés, pour ne pas les redemander. */
+  private modulesDemandesPour: string | null = null;
+  protected readonly themesChoisis = signal<string[]>([]);
+  /** Thèmes de l'école, lus à la première entrée dans le Champ à étiquettes. */
+  private readonly themesEcole = signal<ThemeDto[] | null>(null);
+  private lectureThemes: Promise<void> | null = null;
+  protected readonly creationThemeEnCours = signal(false);
+  /** Échec de la lecture des Thèmes de l'école ou de la création d'un Thème, sous le Champ à étiquettes. */
+  protected readonly erreurThemes = signal<string | null>(null);
+  /** Échec de la lecture des Modules de l'Album choisi, dans son propre Bandeau (« Réessayer » les relit). */
+  protected readonly erreurModules = signal<string | null>(null);
 
   private readonly selecteurs = viewChildren(MatSelect);
-  private readonly declencheurAlbum = viewChild(MatAutocompleteTrigger);
+  private readonly declencheurs = viewChildren(MatAutocompleteTrigger);
+  private readonly champThemes = viewChild(ChampThemes);
 
   protected readonly carte = signal<CarteIdentiteImageDto | null>(null);
   protected readonly erreur = signal<ErreurAffichee | null>(null);
@@ -510,6 +767,19 @@ export class CarteIdentite {
   protected readonly titreAlbum = (valeur: string | AlbumChoisi | null): string =>
     typeof valeur === 'string' ? valeur : (valeur?.titre ?? '');
 
+  /** Thèmes de la Carte, par nom, séparés par des virgules ; vide sans Thème. */
+  protected readonly nomsThemes = computed(() =>
+    (this.carte()?.themes ?? []).map((theme) => theme.nom).join(', '),
+  );
+
+  /** Thèmes proposés dans le Champ à étiquettes : ceux de l'école, et ceux de la Carte avant leur lecture. */
+  protected readonly themesProposes = computed<readonly ThemeDto[]>(() => {
+    const ecole = this.themesEcole() ?? [];
+    const connus = new Set(ecole.map((theme) => theme.id));
+    const deLaCarte = (this.carte()?.themes ?? []).filter((theme) => !connus.has(theme.id));
+    return deLaCarte.length === 0 ? ecole : themesParNom([...ecole, ...deLaCarte]);
+  });
+
   /** « lecture seule » pour un non-propriétaire, une fois le compte connu. */
   protected readonly lectureSeule = computed(() => {
     const carte = this.carte();
@@ -545,21 +815,12 @@ export class CarteIdentite {
     this.album.valueChanges.pipe(takeUntilDestroyed()).subscribe((valeur) => {
       this.albumAffiche.set(valeur);
     });
-    this.album.valueChanges
-      .pipe(
-        map((valeur) => (typeof valeur === 'string' ? valeur.trim() : null)),
-        filter((texte) => texte !== null),
-        debounceTime(DELAI_RECHERCHE_ALBUMS_MS),
-        distinctUntilChanged(),
-        switchMap((texte) =>
-          texte.length < LONGUEUR_MIN_RECHERCHE ? of(null) : from(this.chercherAlbums(texte)),
-        ),
-        takeUntilDestroyed(),
-      )
-      .subscribe((albums) => {
-        this.suggestions.set(albums ?? []);
-        this.aucunAlbum.set(albums !== null && albums.length === 0);
-      });
+    // Un nouveau texte tapé masque la liste des Modules, jusqu'au choix d'un autre Album.
+    this.albumModule.valueChanges.pipe(takeUntilDestroyed()).subscribe((valeur) => {
+      if (typeof valeur === 'string') {
+        this.albumDuModule.set(null);
+      }
+    });
     effect(() => {
       const id = this.imageId();
       untracked(() => {
@@ -594,11 +855,14 @@ export class CarteIdentite {
   protected fermerParEchap(evenement: Event): void {
     evenement.stopPropagation();
     // Échap ferme d'abord la liste ouverte d'un champ, pas le panneau.
-    if (this.selecteurs().some((selecteur) => selecteur.panelOpen)) {
+    if (
+      this.selecteurs().some((selecteur) => selecteur.panelOpen) ||
+      this.champThemes()?.listeOuverte()
+    ) {
       return;
     }
-    const declencheur = this.declencheurAlbum();
-    if (declencheur?.panelOpen) {
+    const declencheur = this.declencheurs().find((candidat) => candidat.panelOpen);
+    if (declencheur !== undefined) {
       declencheur.closePanel();
       return;
     }
@@ -631,12 +895,34 @@ export class CarteIdentite {
     this.auteur.setValue(carte.auteur ?? '');
     this.album.setValue(carte.albumOrigine ?? '', { emitEvent: false });
     this.albumAffiche.set(carte.albumOrigine ?? '');
-    for (const controle of [this.typeImage, this.licence, this.source, this.auteur, this.album]) {
+    this.sections.set([...carte.sections]);
+    this.module.setValue(carte.module?.id ?? null);
+    this.themesChoisis.set(carte.themes.map((theme) => theme.id));
+    // La recherche du Module part de l'Album du Module, sinon de l'Album d'origine d'une image d'album.
+    const albumDepart: AlbumChoisi | null = carte.module
+      ? { id: carte.module.albumId, titre: carte.module.titreAlbum }
+      : (carte.albumOrigine ?? null);
+    this.albumModule.setValue(albumDepart ?? '', { emitEvent: false });
+    this.albumDuModule.set(albumDepart);
+    this.modulesAlbum.set(carte.module ? [{ id: carte.module.id, nom: carte.module.nom }] : []);
+    this.modulesDemandesPour = null;
+    for (const controle of [
+      this.typeImage,
+      this.licence,
+      this.source,
+      this.auteur,
+      this.album,
+      this.module,
+      this.albumModule,
+    ]) {
       controle.markAsUntouched();
     }
-    this.champEnErreur = null;
+    this.champEnErreur.set(null);
     this.erreurEnregistrement.set(null);
-    this.erreurRecherche.set(null);
+    this.rechercheOrigine.erreur.set(null);
+    this.rechercheModule.erreur.set(null);
+    this.erreurModules.set(null);
+    this.erreurThemes.set(null);
   }
 
   /**
@@ -699,14 +985,114 @@ export class CarteIdentite {
     }
   }
 
-  protected reessayerEnregistrement(): void {
-    void this.enregistrer(this.champEnErreur ?? 'type');
+  /** Puce de Section cochée ou décochée : enregistrée aussitôt. */
+  protected changerSections(valeur: Section[] | Section | null): void {
+    const choisies = new Set(Array.isArray(valeur) ? valeur : valeur === null ? [] : [valeur]);
+    this.sections.set(SECTIONS.filter((section) => choisies.has(section)));
+    void this.enregistrer('sections');
+  }
+
+  /** Album choisi pour le Module : ses Modules sont proposés dans la liste. */
+  protected choisirAlbumModule(): void {
+    const album = this.albumModule.value;
+    if (typeof album !== 'object') {
+      return;
+    }
+    this.albumDuModule.set(album);
+    const carte = this.carte();
+    this.modulesAlbum.set(
+      carte?.module?.albumId === album.id ? [{ id: carte.module.id, nom: carte.module.nom }] : [],
+    );
+    this.modulesDemandesPour = null;
+    void this.chargerModules();
+  }
+
+  /** Modules de l'Album choisi pour le Module, demandés une seule fois par Album. */
+  protected async chargerModules(): Promise<void> {
+    const album = this.albumDuModule();
+    if (album === null || this.modulesDemandesPour === album.id) {
+      return;
+    }
+    this.modulesDemandesPour = album.id;
+    try {
+      const modules = await this.api.invoke(listerModulesDeLAlbum, { id: album.id });
+      if (this.albumDuModule()?.id === album.id) {
+        this.modulesAlbum.set(modules.map((module) => ({ id: module.id, nom: module.nom })));
+        this.erreurModules.set(null);
+      }
+    } catch (erreur) {
+      if (this.albumDuModule()?.id === album.id) {
+        // Redemandés par « Réessayer » ou à la prochaine entrée dans la zone du Module.
+        this.modulesDemandesPour = null;
+        this.erreurModules.set(messageErreur(erreur));
+      }
+    }
   }
 
   /**
-   * Enregistre la description si elle diffère de la Carte enregistrée ; rien n'est envoyé sinon, ni pour une image
-   * d'album sans Album choisi. En échec, la saisie reste, le champ `champ` est signalé et un Bandeau d'erreur
-   * s'affiche dans le panneau.
+   * « Réessayer » du Bandeau des Modules : les relit. L'échec a déjà oublié la demande ; si le clic, entrée dans la
+   * zone, l'a déjà relancée, aucune seconde demande ne part.
+   */
+  protected relancerModules(): void {
+    void this.chargerModules();
+  }
+
+  /** Thèmes de l'école, lus une seule fois ; un échec est affiché sous le Champ et relu à la prochaine entrée. */
+  protected chargerThemes(): void {
+    if (this.themesEcole() !== null || this.lectureThemes !== null) {
+      return;
+    }
+    this.lectureThemes = (async () => {
+      try {
+        this.themesEcole.set(themesParNom(await this.api.invoke(listerThemes)));
+      } catch (erreur) {
+        this.erreurThemes.set(messageErreur(erreur));
+      } finally {
+        this.lectureThemes = null;
+      }
+    })();
+  }
+
+  /** Thèmes ajoutés ou retirés dans le Champ à étiquettes : enregistrés aussitôt. */
+  protected choisirThemes(ids: string[]): void {
+    this.themesChoisis.set(ids);
+    void this.enregistrer('themes');
+  }
+
+  /** « Créer le thème « … » » : le Thème créé, visible de toute l'école, est ajouté à l'Image et enregistré. */
+  protected async creerTheme(nom: string): Promise<void> {
+    if (this.creationThemeEnCours()) {
+      return;
+    }
+    const numero = this.derniereLecture;
+    this.creationThemeEnCours.set(true);
+    // Un nouvel échec réaffiche son message, même identique au précédent.
+    this.erreurThemes.set(null);
+    try {
+      const cree = await this.api.invoke(creerTheme, { body: { nom } });
+      this.themesEcole.update((themes) =>
+        themes === null ? null : themesParNom([...themes, cree]),
+      );
+      if (numero === this.derniereLecture) {
+        this.choisirThemes([...this.themesChoisis(), cree.id]);
+      }
+    } catch (erreur) {
+      if (numero === this.derniereLecture) {
+        this.erreurThemes.set(messageErreur(erreur));
+      }
+    } finally {
+      this.creationThemeEnCours.set(false);
+    }
+  }
+
+  protected reessayerEnregistrement(): void {
+    void this.enregistrer(this.champEnErreur() ?? 'type');
+  }
+
+  /**
+   * Enregistre la description ou le classement, selon `champ`, s'il diffère de la Carte enregistrée ; rien n'est
+   * envoyé sinon, ni pour une description d'image d'album sans Album choisi. En échec, la saisie reste, le champ
+   * `champ` est signalé et un Bandeau d'erreur s'affiche dans le panneau.
    */
   protected enregistrer(champ: Champ): Promise<void> {
     this.fileEnregistrements = this.fileEnregistrements.then(() => this.envoyer(champ));
@@ -718,38 +1104,62 @@ export class CarteIdentite {
     if (carte === null || !this.modifiable()) {
       return;
     }
-    const description = this.description();
-    if (description === null || identique(description, carte)) {
+    const modification = CHAMPS_CLASSEMENT.has(champ)
+      ? this.modificationClassement(carte)
+      : this.modificationDescription(carte);
+    if (modification === null) {
       return;
     }
     const numero = this.derniereLecture;
     try {
-      const maj = await this.api.invoke(modifierDescriptionImage, {
-        id: carte.id,
-        body: description,
-      });
+      const maj = await modification.envoyer();
       // La page reçoit la Carte même si le panneau a été fermé ou remplacé entre-temps.
       this.appliquer()?.(maj);
       if (numero !== this.derniereLecture) {
         return;
       }
       this.carte.set(maj);
-      this.reprendre(maj, description);
+      modification.reprendre(maj);
       this.effacerErreur();
     } catch (erreur) {
       if (numero !== this.derniereLecture) {
         return;
       }
       this.effacerErreur();
-      this.champEnErreur = champ;
+      this.champEnErreur.set(champ);
       const controle = this.controle(champ);
-      controle.setErrors({ enregistrement: true });
-      controle.markAsTouched();
+      controle?.setErrors({ enregistrement: true });
+      controle?.markAsTouched();
       this.erreurEnregistrement.set({
         message: messageErreur(erreur),
         reessayable: erreurPassagere(erreur),
       });
     }
+  }
+
+  /** Description saisie à envoyer, ou `null` si elle ne change rien ou attend l'Album d'une image d'album. */
+  private modificationDescription(carte: CarteIdentiteImageDto): Modification | null {
+    const description = this.description();
+    if (description === null || identique(description, carte)) {
+      return null;
+    }
+    return {
+      envoyer: () =>
+        this.api.invoke(modifierDescriptionImage, { id: carte.id, body: description }),
+      reprendre: (maj) => this.reprendre(maj, description),
+    };
+  }
+
+  /** Classement choisi à envoyer, ou `null` s'il ne change rien. Les choix restent tels quels après l'envoi. */
+  private modificationClassement(carte: CarteIdentiteImageDto): Modification | null {
+    const classement = this.classement();
+    if (classementIdentique(classement, carte)) {
+      return null;
+    }
+    return {
+      envoyer: () => this.api.invoke(classerImage, { id: carte.id, body: classement }),
+      reprendre: () => undefined,
+    };
   }
 
   /** Description saisie, ou `null` pour une image d'album sans Album choisi (« Album d'origine requis »). */
@@ -766,6 +1176,16 @@ export class CarteIdentite {
       source: texte(this.source.value),
       auteur: texte(this.auteur.value),
       albumId: type === 'image_album' && typeof album === 'object' ? album.id : undefined,
+    };
+  }
+
+  /** Classement choisi : Sections dans l'ordre PS, MS, GS, Module, Thèmes sans doublon. */
+  private classement(): ClassementImageDto {
+    const choisies = new Set(this.sections());
+    return {
+      sections: SECTIONS.filter((section) => choisies.has(section)),
+      moduleId: this.module.value ?? null,
+      themeIds: [...new Set(this.themesChoisis())],
     };
   }
 
@@ -792,16 +1212,18 @@ export class CarteIdentite {
   }
 
   private effacerErreur(): void {
-    if (this.champEnErreur !== null) {
-      const controle = this.controle(this.champEnErreur);
-      controle.setErrors(null);
-      controle.updateValueAndValidity({ emitEvent: false });
+    const champ = this.champEnErreur();
+    if (champ !== null) {
+      const controle = this.controle(champ);
+      controle?.setErrors(null);
+      controle?.updateValueAndValidity({ emitEvent: false });
     }
-    this.champEnErreur = null;
+    this.champEnErreur.set(null);
     this.erreurEnregistrement.set(null);
   }
 
-  private controle(champ: Champ): AbstractControl {
+  /** Contrôle de formulaire du champ, `null` pour les Sections et les Thèmes (signalés par `champEnErreur`). */
+  private controle(champ: Champ): AbstractControl | null {
     switch (champ) {
       case 'type':
         return this.typeImage;
@@ -813,36 +1235,11 @@ export class CarteIdentite {
         return this.auteur;
       case 'album':
         return this.album;
-    }
-  }
-
-  /** Albums trouvés pour `texte`, ou `null` en échec (Bandeau propre à la recherche, au-dessus du champ Album). */
-  private async chercherAlbums(texte: string): Promise<AlbumDto[] | null> {
-    try {
-      const page = await this.api.invoke(rechercherAlbums, {
-        recherche: texte,
-        taille: NOMBRE_SUGGESTIONS,
-      });
-      this.erreurRecherche.set(null);
-      return page.elements;
-    } catch (erreur) {
-      this.erreurRecherche.set(messageErreur(erreur));
-      return null;
-    }
-  }
-
-  /** « Réessayer » du Bandeau de la recherche : relance la recherche du texte tapé et rouvre les suggestions. */
-  protected async relancerRecherche(): Promise<void> {
-    const saisie = this.album.value;
-    if (typeof saisie !== 'string' || saisie.trim().length < LONGUEUR_MIN_RECHERCHE) {
-      this.erreurRecherche.set(null);
-      return;
-    }
-    const albums = await this.chercherAlbums(saisie.trim());
-    if (albums !== null) {
-      this.suggestions.set(albums);
-      this.aucunAlbum.set(albums.length === 0);
-      this.declencheurAlbum()?.openPanel();
+      case 'module':
+        return this.module;
+      case 'sections':
+      case 'themes':
+        return null;
     }
   }
 }
@@ -857,5 +1254,19 @@ function identique(description: DescriptionImageDto, carte: CarteIdentiteImageDt
     (description.source ?? null) === (carte.source ?? null) &&
     (description.auteur ?? null) === (carte.auteur ?? null) &&
     (!album || description.albumId === carte.albumOrigine?.id)
+  );
+}
+
+/** Vrai si le classement ne change rien à la Carte enregistrée (Sections dans l'ordre PS, MS, GS des deux côtés). */
+function classementIdentique(
+  classement: ClassementImageDto,
+  carte: CarteIdentiteImageDto,
+): boolean {
+  const themes = new Set(carte.themes.map((theme) => theme.id));
+  return (
+    classement.sections.join(',') === carte.sections.join(',') &&
+    (classement.moduleId ?? null) === (carte.module?.id ?? null) &&
+    classement.themeIds.length === themes.size &&
+    classement.themeIds.every((id) => themes.has(id))
   );
 }

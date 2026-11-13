@@ -115,6 +115,7 @@
 - source_spec: `docs/realisation/spec-2-2-3-themes.md`
   summary: Story 2.6 : quand `vocabulaire` implémentera `UtilisationThemes`, empêcher qu'une Image reçoive un Thème en cours de suppression (verrou partagé entre la vérification `theme.utilise` et l'affectation).
   evidence: Revue de la story 2.2, partie 3, ligne 10 du journal de tri (non vérifié, gravité moyenne si confirmé) : `supprimerTheme` interroge les utilisations sans verrou ; aucune affectation n'existe encore pour le démontrer.
+  status: fait (`docs/realisation/spec-2-6-3-sections-module-et-themes.md`).
 - source_spec: none
   summary: Story 2.3, partie 2 : retirer un Mot de la Préparation sans confirmation, Bandeau « Annuler » de 8 s, Mot libéré par `Usages.libererPreparationMot`, et « Annuler » qui le rétablit avec son Sens (et sa place).
   evidence: Découpage de la story 2.3 choisi par Paul (trois objectifs livrables séparément) ; la partie 1 pose la saisie, le Lexique, `Usages` et la Grille.
@@ -191,12 +192,17 @@
 - source_spec: none
   summary: Story 2.6, partie 2 : le propriétaire modifie dans la Carte d'identité le type, la source, la licence et l'auteur de son Image (enregistrement à la sortie du champ, valeur gardée et Bandeau d'erreur en cas d'échec) ; passage en `image_album` avec Album exigé, réduction immédiate à 400 × 400 px, mention « basse résolution » et référence de l'Album ; `403` pour tout autre enseignant, administrateur compris.
   evidence: Découpage de la story 2.6 en quatre parties choisi par Paul ; la partie 1 pose le Panneau Carte d'identité en lecture.
+  status: fait (`docs/realisation/spec-2-6-2-modifier-la-carte-d-identite.md`).
 - source_spec: none
   summary: Story 2.6, partie 3 : Sections (PS, MS, GS cochées librement), Module et Thèmes d'une Image (nouvelles tables de `vocabulaire`, Champ à étiquettes) ; `vocabulaire` implémente `UtilisationThemes` (suppression d'un Thème porté par une Image refusée) et observe `ModuleSupprime` pour détacher le Module de ses Images dans la même transaction (AD-15).
   evidence: Découpage de la story 2.6 en quatre parties choisi par Paul ; l'Image n'a encore ni Sections, ni Module, ni Thèmes en base.
+  status: fait (`docs/realisation/spec-2-6-3-sections-module-et-themes.md`).
 - source_spec: none
   summary: Story 2.6, partie 4 : Sens et catégorie grammaticale dans la Carte d'identité ; changer le Sens d'une Image refusé dès qu'elle a un lien, chez quiconque, avec un message qui propose d'ajouter une nouvelle Image (AD-5) ; la Création de Sens dans le panneau arrive avec la story 2.8.
   evidence: Découpage de la story 2.6 en quatre parties choisi par Paul.
 - source_spec: `docs/realisation/spec-2-6-2-modifier-la-carte-d-identite.md`
   summary: Epic 3 (versement) : modifier la description d'une Image versée (licence non partageable, passage en photo personnelle, image d'album ou type inconnu) doit appliquer les règles du versement — refuser, ou retirer l'Image de la Banque.
   evidence: Revue de la story 2.6, partie 2, ligne 9 du journal de tri : `Images.modifierDescription` ne regarde pas l'`etat` ; sans conséquence tant que l'état `versee` n'existe pas.
+- source_spec: `docs/realisation/spec-2-6-3-sections-module-et-themes.md`
+  summary: Pré-remplir la Carte d'identité d'une Image créée depuis une Préparation (téléversement depuis la Carte « à illustrer », pictogramme ARASAAC de la story 2.4, partie 2) : Section de la Préparation, son Module et le Thème du Mot (PRD §4.4).
+  evidence: Décision de Paul pendant la planification de la story 2.6, partie 3 : reporté avec la story 2.4, partie 2, pour garder cette partie plus petite.

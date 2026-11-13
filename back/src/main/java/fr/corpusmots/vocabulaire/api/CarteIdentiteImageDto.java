@@ -1,13 +1,16 @@
 package fr.corpusmots.vocabulaire.api;
 
+import fr.corpusmots.commun.service.Section;
 import fr.corpusmots.vocabulaire.service.CarteIdentiteImageVue;
 import fr.corpusmots.vocabulaire.service.ImageVue;
+import java.util.List;
 import java.util.UUID;
+import org.eclipse.microprofile.openapi.annotations.enums.SchemaType;
 import org.eclipse.microprofile.openapi.annotations.media.Schema;
 
 /**
  * Carte d'identité d'une Image que l'enseignant connecté peut consulter (FR-14, AD-16) : l'Image, le Mot et le Sens
- * qu'elle illustre, son Album d'origine, sa licence, sa source et son auteur.
+ * qu'elle illustre, son Album d'origine, sa licence, sa source et son auteur, ses Sections, son Module et ses Thèmes.
  */
 public record CarteIdentiteImageDto(
         @Schema(required = true) UUID id,
@@ -32,7 +35,13 @@ public record CarteIdentiteImageDto(
                         "pixabay", "autre_inconnue", "droits_auteur_enseignant", "usage_pedagogique_album" })
         String licence,
         @Schema(nullable = true, description = "Source, null si elle n'est pas renseignée") String source,
-        @Schema(nullable = true, description = "Auteur, null s'il n'est pas renseigné") String auteur) {
+        @Schema(nullable = true, description = "Auteur, null s'il n'est pas renseigné") String auteur,
+        @Schema(required = true, type = SchemaType.ARRAY, implementation = SectionImageDto.class,
+                description = "Sections cochées, dans l'ordre PS, MS, GS")
+        List<String> sections,
+        @Schema(nullable = true, description = "Module de l'Image, de n'importe quel Album ; null sans Module")
+        CarteIdentiteModuleDto module,
+        @Schema(required = true, description = "Thèmes de l'Image, par nom") List<CarteIdentiteThemeDto> themes) {
 
     static CarteIdentiteImageDto de(CarteIdentiteImageVue vue) {
         ImageVue image = vue.image();
@@ -44,6 +53,11 @@ public record CarteIdentiteImageDto(
                 vue.albumOrigine() == null ? null
                         : new CarteIdentiteAlbumDto(vue.albumOrigine().id(), vue.albumOrigine().titre(),
                                 vue.albumOrigine().auteur()),
-                vue.licence() == null ? null : vue.licence().valeur(), vue.source(), vue.auteur());
+                vue.licence() == null ? null : vue.licence().valeur(), vue.source(), vue.auteur(),
+                vue.sections().stream().map(Section::valeur).toList(),
+                vue.module() == null ? null
+                        : new CarteIdentiteModuleDto(vue.module().id(), vue.module().nom(), vue.module().albumId(),
+                                vue.albumModule().titre()),
+                vue.themes().stream().map(theme -> new CarteIdentiteThemeDto(theme.id(), theme.nom())).toList());
     }
 }

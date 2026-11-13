@@ -98,6 +98,8 @@ components:
       - motId
       - forme
       - sens
+      - sections
+      - themes
       properties:
         id:
           $ref: "#/components/schemas/UUID"
@@ -173,6 +175,40 @@ components:
           - string
           - "null"
           description: "Auteur, null s'il n'est pas renseigné"
+        sections:
+          description: "Sections cochées, dans l'ordre PS, MS, GS"
+          type: array
+          items:
+            $ref: "#/components/schemas/SectionImageDto"
+        module:
+          description: "Module de l'Image, de n'importe quel Album ; null sans Module"
+          type:
+          - object
+          - "null"
+          anyOf:
+          - $ref: "#/components/schemas/CarteIdentiteModuleDto"
+          - type: "null"
+        themes:
+          type: array
+          items:
+            $ref: "#/components/schemas/CarteIdentiteThemeDto"
+          description: "Thèmes de l'Image, par nom"
+    CarteIdentiteModuleDto:
+      type: object
+      required:
+      - id
+      - nom
+      - albumId
+      - titreAlbum
+      properties:
+        id:
+          $ref: "#/components/schemas/UUID"
+        nom:
+          type: string
+        albumId:
+          $ref: "#/components/schemas/UUID"
+        titreAlbum:
+          type: string
     CarteIdentiteSensDto:
       type: object
       required:
@@ -193,6 +229,16 @@ components:
         aCompleter:
           type: boolean
           description: Vrai pour le Sens par défaut « à compléter »
+    CarteIdentiteThemeDto:
+      type: object
+      required:
+      - id
+      - nom
+      properties:
+        id:
+          $ref: "#/components/schemas/UUID"
+        nom:
+          type: string
     CartePreparationDto:
       type: object
       required:
@@ -233,6 +279,32 @@ components:
         creeLe:
           type: string
           $ref: "#/components/schemas/OffsetDateTime"
+    ClassementImageDto:
+      type: object
+      required:
+      - sections
+      - themeIds
+      properties:
+        sections:
+          description: "Sections cochées, aucune, une ou plusieurs"
+          type: array
+          items:
+            $ref: "#/components/schemas/SectionImageDto"
+        moduleId:
+          description: "Module, de n'importe quel Album ; null pour aucun"
+          type:
+          - string
+          - "null"
+          anyOf:
+          - $ref: "#/components/schemas/UUID"
+          - type: "null"
+        themeIds:
+          type: array
+          items:
+            type: string
+            format: uuid
+            pattern: "[a-fA-F0-9]{8}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{12}"
+          description: "Thèmes de l'Image, sans limite"
     CompteDto:
       type: object
       required:
@@ -782,6 +854,13 @@ components:
       properties:
         administrateur:
           type: boolean
+    SectionImageDto:
+      description: "Section de maternelle : ps, ms ou gs"
+      type: string
+      enum:
+      - ps
+      - ms
+      - gs
     SensPreparationDto:
       type: object
       required:
@@ -1249,6 +1328,34 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/CarteIdentiteImageDto"
+      tags:
+      - Images Resource
+  /api/images/{id}/classement:
+    put:
+      summary: "Modifier les Sections, le Module et les Thèmes d'une Image (son seul\
+        \ propriétaire)"
+      operationId: classerImage
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          $ref: "#/components/schemas/UUID"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ClassementImageDto"
+      responses:
+        "200":
+          description: Carte d'identité à jour de l'Image
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CarteIdentiteImageDto"
+        "400":
+          description: Bad Request
       tags:
       - Images Resource
   /api/images/{id}/description:

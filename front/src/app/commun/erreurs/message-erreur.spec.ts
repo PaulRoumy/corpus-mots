@@ -59,6 +59,12 @@ describe('messageErreur', () => {
       'image.reservee_au_proprietaire',
       "Seul le propriétaire de l'image peut modifier sa carte d'identité.",
     ],
+    [
+      400,
+      'image.theme_introuvable',
+      "Un de ces thèmes n'existe plus. Retirez-le, puis réessayez.",
+    ],
+    [400, 'image.module_introuvable', "Ce module n'existe plus. Choisissez-en un autre."],
     // vocabulaire.service.SuggestionsArasaac
     [503, 'arasaac.indisponible', "ARASAAC ne répond pas pour l'instant."],
     // referentiels.service.ReferentielsService

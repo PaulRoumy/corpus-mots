@@ -2,7 +2,9 @@ package fr.corpusmots.vocabulaire.api;
 
 import fr.corpusmots.commun.api.ErreurMetier;
 import fr.corpusmots.commun.service.EnseignantCourant;
+import fr.corpusmots.commun.service.Section;
 import fr.corpusmots.vocabulaire.service.AjouterImageCommande;
+import fr.corpusmots.vocabulaire.service.ClasserImageCommande;
 import fr.corpusmots.vocabulaire.service.FichierImageVue;
 import fr.corpusmots.vocabulaire.service.FichierTeleverseVue;
 import fr.corpusmots.vocabulaire.service.FichiersImages;
@@ -27,6 +29,7 @@ import jakarta.ws.rs.core.HttpHeaders;
 import jakarta.ws.rs.core.MediaType;
 import jakarta.ws.rs.core.Request;
 import jakarta.ws.rs.core.Response;
+import java.util.List;
 import java.util.UUID;
 import org.eclipse.microprofile.openapi.annotations.Operation;
 import org.eclipse.microprofile.openapi.annotations.enums.SchemaType;
@@ -41,7 +44,8 @@ import org.jboss.resteasy.reactive.ResponseStatus;
  * Images de l'enseignant connecté. {@code POST /images} ajoute une Image dans Mes mots, sans Préparation (FR-13) ;
  * {@code GET /images/{id}} rend la Carte d'identité d'une Image consultable (FR-14), sinon
  * {@code 404 ressource.introuvable} ; {@code PUT /images/{id}/description} en modifie le type, la licence, la source,
- * l'auteur et l'Album d'origine, par le seul propriétaire ({@code 403 image.reservee_au_proprietaire} pour les autres).
+ * l'auteur et l'Album d'origine, par le seul propriétaire ({@code 403 image.reservee_au_proprietaire} pour les autres) ;
+ * {@code PUT /images/{id}/classement} en remplace les Sections, le Module et les Thèmes, avec les mêmes refus.
  *
  * <p>Fichiers des Images (AD-23) : servis uniquement par {@link FichiersImages#lire}, qui applique la visibilité (AD-2).
  * Une Image que l'enseignant connecté ne peut pas consulter répond {@code 404 ressource.introuvable}, comme une Image
@@ -125,6 +129,28 @@ public class ImagesResource {
                         .orElseThrow(() -> new ErreurMetier(400, "requete.invalide", "Licence inconnue"));
         return CarteIdentiteImageDto.de(images.modifierDescription(id, new ModifierDescriptionImageCommande(type,
                 licence, description.source(), description.auteur(), description.albumId())));
+    }
+
+    @PUT
+    @Path("/{id}/classement")
+    @Consumes(MediaType.APPLICATION_JSON)
+    @Produces(MediaType.APPLICATION_JSON)
+    @Operation(operationId = "classerImage",
+            summary = "Modifier les Sections, le Module et les Thèmes d'une Image (son seul propriétaire)")
+    @APIResponse(responseCode = "200", description = "Carte d'identité à jour de l'Image",
+            content = @Content(mediaType = MediaType.APPLICATION_JSON,
+                    schema = @Schema(implementation = CarteIdentiteImageDto.class)))
+    public CarteIdentiteImageDto classer(@PathParam("id") UUID id,
+            @RequestBody(required = true) ClassementImageDto classement) {
+        if (classement == null || classement.sections() == null || classement.themeIds() == null) {
+            throw new ErreurMetier(400, "requete.invalide", "Les sections et les thèmes sont obligatoires");
+        }
+        List<Section> sections = classement.sections().stream()
+                .map(valeur -> Section.deValeur(valeur)
+                        .orElseThrow(() -> new ErreurMetier(400, "requete.invalide", "Section absente ou inconnue")))
+                .toList();
+        return CarteIdentiteImageDto.de(images.classer(id,
+                new ClasserImageCommande(sections, classement.moduleId(), classement.themeIds())));
     }
 
     @GET

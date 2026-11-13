@@ -74,7 +74,7 @@ public class ReferentielsService {
     @Inject
     Event<ThemeSupprime> themeSupprime;
 
-    /** Modules aval qui utilisent des Thèmes (AD-15) ; aucun avant la story 2.6. */
+    /** Modules aval qui utilisent des Thèmes (AD-15) : {@code vocabulaire} pour les Images. */
     @Inject
     Instance<UtilisationThemes> utilisationsThemes;
 
@@ -256,14 +256,16 @@ public class ReferentielsService {
 
     /**
      * Supprime le Module {@code id}. {@link ModuleSupprime} est d'abord émis, de façon synchrone, pour que les modules
-     * aval le retirent dans cette même transaction (AD-15) : les Préparations qui l'avaient n'ont plus de Module.
+     * aval le retirent dans cette même transaction (AD-15) : les Préparations et les Images qui l'avaient n'ont plus
+     * de Module. Le Module est verrouillé d'abord : une affectation en cours, qui le lit par
+     * {@link #moduleVerrouille}, se termine avant, et aucune ne commence pendant la suppression.
      *
      * @throws ErreurMetier {@code 404 ressource.introuvable} si le Module n'existe pas ;
      *         {@code 403 module.reserve_au_createur} si l'enseignant courant n'est ni son créateur ni administrateur
      */
     @Transactional
     public void supprimerModule(UUID id) {
-        Module module = moduleGerable(id);
+        Module module = moduleGerable(id == null ? Optional.empty() : modules.verrouiller(id));
         moduleSupprime.fire(new ModuleSupprime(module.id(), module.albumId()));
         modules.delete(module);
         modules.flush();
@@ -274,7 +276,11 @@ public class ReferentielsService {
      * n'est géré que par l'administrateur.
      */
     private Module moduleGerable(UUID id) {
-        Module module = (id == null ? Optional.<Module>empty() : modules.findByIdOptional(id))
+        return moduleGerable(id == null ? Optional.empty() : modules.findByIdOptional(id));
+    }
+
+    private Module moduleGerable(Optional<Module> trouve) {
+        Module module = trouve
                 .orElseThrow(() -> new ErreurMetier(404, CODE_INTROUVABLE, "Aucun module ne porte cet identifiant"));
         boolean createur = module.createurId() != null && module.createurId().equals(enseignantCourant.id());
         if (!createur && !enseignantCourant.administrateur()) {
@@ -356,7 +362,9 @@ public class ReferentielsService {
      * Supprime le Thème {@code id}, s'il n'est utilisé par aucun module aval ({@link UtilisationThemes}).
      * {@link ThemeSupprime} est d'abord émis, de façon synchrone, pour que les modules aval le retirent dans cette même
      * transaction (AD-15) : les Préparations qui l'avaient pour Thème par défaut n'en ont plus, ni les Mots de
-     * Préparation qui le portaient.
+     * Préparation qui le portaient. Le Thème est verrouillé avant la vérification : une affectation en cours, qui le
+     * lit par {@link #themesVerrouilles}, se termine avant (et compte alors comme une utilisation), et aucune ne
+     * commence pendant la suppression.
      *
      * @throws ErreurMetier {@code 404 ressource.introuvable} si le Thème n'existe pas ;
      *         {@code 403 theme.reserve_au_createur} si l'enseignant courant n'est ni son créateur ni administrateur ;
@@ -364,7 +372,7 @@ public class ReferentielsService {
      */
     @Transactional
     public void supprimerTheme(UUID id) {
-        Theme theme = themeGerable(id);
+        Theme theme = themeGerable(id == null ? Optional.empty() : themes.verrouiller(id));
         for (UtilisationThemes utilisation : utilisationsThemes) {
             if (utilisation.utilise(theme.id())) {
                 throw new ErreurMetier(409, CODE_THEME_UTILISE,
@@ -381,7 +389,11 @@ public class ReferentielsService {
      * géré que par l'administrateur.
      */
     private Theme themeGerable(UUID id) {
-        Theme theme = (id == null ? Optional.<Theme>empty() : themes.findByIdOptional(id))
+        return themeGerable(id == null ? Optional.empty() : themes.findByIdOptional(id));
+    }
+
+    private Theme themeGerable(Optional<Theme> trouve) {
+        Theme theme = trouve
                 .orElseThrow(() -> new ErreurMetier(404, CODE_INTROUVABLE, "Aucun thème ne porte cet identifiant"));
         boolean createur = theme.createurId() != null && theme.createurId().equals(enseignantCourant.id());
         if (!createur && !enseignantCourant.administrateur()) {
@@ -441,10 +453,40 @@ public class ReferentielsService {
                 .collect(Collectors.toMap(ModuleVue::id, Function.identity()));
     }
 
+    /**
+     * Le Module {@code id}, lu en verrou partagé jusqu'à la fin de la transaction de l'appelant, qui va l'affecter :
+     * il ne peut pas être supprimé avant (AD-17) ; une suppression en cours se termine d'abord, et le Module est alors
+     * absent. Vide s'il n'existe pas.
+     */
+    @Transactional(Transactional.TxType.MANDATORY)
+    public Optional<ModuleVue> moduleVerrouille(UUID id) {
+        return id == null ? Optional.empty() : modules.lirePartage(id).map(ReferentielsService::vue);
+    }
+
     /** Le Thème {@code id}, vide s'il n'existe pas. */
     @Transactional
     public Optional<ThemeVue> theme(UUID id) {
         return id == null ? Optional.empty() : themes.findByIdOptional(id).map(ReferentielsService::vue);
+    }
+
+    /** Thèmes de ces identifiants, par identifiant ; un identifiant inconnu est absent de la réponse. */
+    @Transactional
+    public Map<UUID, ThemeVue> themes(Collection<UUID> ids) {
+        return themes.lire(Set.copyOf(ids)).stream()
+                .map(ReferentielsService::vue)
+                .collect(Collectors.toMap(ThemeVue::id, Function.identity()));
+    }
+
+    /**
+     * Thèmes de ces identifiants, par identifiant, lus en verrou partagé jusqu'à la fin de la transaction de
+     * l'appelant, qui va les affecter : ils ne peuvent pas être supprimés avant (AD-17) ; une suppression en cours se
+     * termine d'abord, et le Thème est alors absent. Un identifiant inconnu est absent de la réponse.
+     */
+    @Transactional(Transactional.TxType.MANDATORY)
+    public Map<UUID, ThemeVue> themesVerrouilles(Collection<UUID> ids) {
+        return themes.lirePartage(Set.copyOf(ids)).stream()
+                .map(ReferentielsService::vue)
+                .collect(Collectors.toMap(ThemeVue::id, Function.identity()));
     }
 
     private static AlbumVue vue(AlbumTrouve album) {

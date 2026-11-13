@@ -4,6 +4,7 @@ import io.quarkus.narayana.jta.QuarkusTransaction;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 import jakarta.persistence.EntityManager;
+import java.util.List;
 import java.util.UUID;
 
 /**
@@ -143,6 +144,64 @@ public class ImagesDeTest {
                     .getSingleResult();
             return ligne[0] + "|" + ligne[1] + "|" + ligne[2] + "|" + ligne[3];
         });
+    }
+
+    /** Donne à l'Image ce Module ({@code null} : aucun), ces Thèmes et ces Sections ({@code ps}, {@code ms}, {@code gs}). */
+    public void classer(UUID imageId, UUID moduleId, List<UUID> themeIds, List<String> sections) {
+        QuarkusTransaction.requiringNew().run(() -> {
+            // Une valeur absente est écrite en NULL littéral : aucun paramètre nul à typer.
+            var module = entityManager.createNativeQuery("update image set module_id = "
+                    + (moduleId == null ? "null" : ":module") + " where id = :id")
+                    .setParameter("id", imageId);
+            if (moduleId != null) {
+                module.setParameter("module", moduleId);
+            }
+            module.executeUpdate();
+            for (UUID themeId : themeIds) {
+                entityManager.createNativeQuery("insert into image_theme (image_id, theme_id) values (:id, :theme)")
+                        .setParameter("id", imageId)
+                        .setParameter("theme", themeId)
+                        .executeUpdate();
+            }
+            for (String section : sections) {
+                entityManager.createNativeQuery("insert into image_section (image_id, section) values (:id, :section)")
+                        .setParameter("id", imageId)
+                        .setParameter("section", section)
+                        .executeUpdate();
+            }
+        });
+    }
+
+    /**
+     * Classement enregistré de l'Image : « sections triées|module_id|thèmes triés » ({@code null} sans Module), par
+     * exemple {@code gs,ms|null|}.
+     */
+    public String classement(UUID imageId) {
+        return QuarkusTransaction.requiringNew().call(() -> {
+            @SuppressWarnings("unchecked")
+            List<String> sections = entityManager.createNativeQuery(
+                    "select section from image_section where image_id = :id order by section")
+                    .setParameter("id", imageId)
+                    .getResultList();
+            Object module = entityManager.createNativeQuery("select module_id from image where id = :id")
+                    .setParameter("id", imageId)
+                    .getSingleResult();
+            @SuppressWarnings("unchecked")
+            List<Object> themes = entityManager.createNativeQuery(
+                    "select theme_id from image_theme where image_id = :id order by theme_id")
+                    .setParameter("id", imageId)
+                    .getResultList();
+            return String.join(",", sections) + "|" + module + "|"
+                    + String.join(",", themes.stream().map(String::valueOf).toList());
+        });
+    }
+
+    /** Version enregistrée de l'Image. */
+    public long version(UUID imageId) {
+        return QuarkusTransaction.requiringNew().call(() -> ((Number) entityManager.createNativeQuery(
+                "select version from image where id = :id")
+                .setParameter("id", imageId)
+                .getSingleResult()).longValue());
     }
 
     /** Passe la version de l'Image à {@code version}. */

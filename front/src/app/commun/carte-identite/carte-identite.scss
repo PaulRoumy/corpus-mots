@@ -1,3 +1,6 @@
+@use '@angular/material' as mat;
+@use '../repere-section/formes-section';
+
 // Panneau Carte d'identité (key-banque.html › `.cid`, `dl.ro`). Sa largeur et sa place viennent de la page hôte.
 :host {
   display: block;
@@ -150,4 +153,59 @@
 
 .carte-identite__non-partageable {
   color: var(--mat-sys-on-surface-variant);
+}
+
+// Sections lues : Repères de Section côte à côte.
+.carte-identite__sections {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: var(--cm-espace-1);
+}
+
+// Sections du propriétaire : puces à cocher bordées de la couleur de la Section, avec sa forme et son libellé
+// (jamais la couleur seule).
+.carte-identite__section {
+  font: var(--cm-typo-label-sm);
+
+  .forme-section {
+    margin-right: var(--cm-espace-1);
+  }
+}
+
+.carte-identite__section--ps {
+  @include mat.chips-overrides((outline-color: var(--cm-section-ps)));
+}
+
+.carte-identite__section--ms {
+  @include mat.chips-overrides((outline-color: var(--cm-section-ms)));
+}
+
+.carte-identite__section--gs {
+  @include mat.chips-overrides((outline-color: var(--cm-section-gs)));
+}
+
+@include formes-section.formes;
+
+.carte-identite__module {
+  display: flex;
+  flex-direction: column;
+  gap: var(--cm-espace-2);
+}
+
+.carte-identite__titre-album {
+  font-style: italic;
+}
+
+.carte-identite__themes {
+  display: flex;
+  flex-direction: column;
+  gap: var(--cm-espace-1);
+}
+
+// « Non enregistré » sous les Sections ou les Thèmes ; le message traduit est dans le Bandeau d'erreur.
+.carte-identite__non-enregistre {
+  display: block;
+  margin-top: var(--cm-espace-1);
+  font: var(--cm-typo-label-sm);
+  color: var(--mat-sys-error);
 }

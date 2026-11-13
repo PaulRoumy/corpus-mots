@@ -1,18 +1,27 @@
 package fr.corpusmots.vocabulaire.persistance;
 
+import fr.corpusmots.commun.service.Section;
+import jakarta.persistence.CollectionTable;
 import jakarta.persistence.Column;
+import jakarta.persistence.Convert;
+import jakarta.persistence.ElementCollection;
 import jakarta.persistence.Entity;
 import jakarta.persistence.Id;
+import jakarta.persistence.JoinColumn;
 import jakarta.persistence.Table;
 import jakarta.persistence.Version;
 import java.time.OffsetDateTime;
+import java.util.Collection;
+import java.util.HashSet;
+import java.util.Set;
 import java.util.UUID;
 import org.hibernate.annotations.Generated;
 
 /**
  * Image (AD-3, AD-4), écrite uniquement par {@code vocabulaire.service}. Type d'image, licence et état sont gardés sous
  * leur valeur en base ({@code image_libre}, {@code privee}…) et convertis par la couche service, qui seule connaît les
- * énumérations. Propriétaire et Album d'origine appartiennent à d'autres modules et sont référencés par UUID (AD-1).
+ * énumérations. Propriétaire, Album d'origine, Module et Thèmes appartiennent à d'autres modules et sont référencés
+ * par UUID (AD-1) ; Sections et Thèmes sont dans {@code image_section} et {@code image_theme}.
  * Les octets sont dans {@link ImageFichier}, pour que les listes ne les chargent jamais.
  */
 @Entity
@@ -45,6 +54,22 @@ public class Image {
 
     @Column(nullable = false)
     private String etat;
+
+    /** Module facultatif, de n'importe quel Album, référencé par UUID (AD-1). */
+    @Column(name = "module_id")
+    private UUID moduleId;
+
+    @ElementCollection
+    @CollectionTable(name = "image_section", joinColumns = @JoinColumn(name = "image_id"))
+    @Column(name = "section", nullable = false)
+    @Convert(converter = SectionConverter.class)
+    private Set<Section> sections = new HashSet<>();
+
+    /** Thèmes de {@code referentiels}, référencés par UUID (AD-1). */
+    @ElementCollection
+    @CollectionTable(name = "image_theme", joinColumns = @JoinColumn(name = "image_id"))
+    @Column(name = "theme_id", nullable = false)
+    private Set<UUID> themeIds = new HashSet<>();
 
     @Version
     private long version;
@@ -89,6 +114,19 @@ public class Image {
         this.albumId = albumId;
     }
 
+    /**
+     * Remplace d'un coup les Sections, le Module et les Thèmes, déjà validés par {@code vocabulaire.service.Images} ;
+     * l'état ne change pas (AD-3). La version est incrémentée si le classement change, même si seules les collections
+     * changent ; elle reste la même pour un classement identique.
+     */
+    public void classer(Collection<Section> sections, UUID moduleId, Collection<UUID> themeIds) {
+        this.sections.retainAll(sections);
+        this.sections.addAll(sections);
+        this.moduleId = moduleId;
+        this.themeIds.retainAll(themeIds);
+        this.themeIds.addAll(themeIds);
+    }
+
     public UUID id() {
         return id;
     }
@@ -131,6 +169,21 @@ public class Image {
 
     public String etat() {
         return etat;
+    }
+
+    /** Module, {@code null} s'il n'y en a pas. */
+    public UUID moduleId() {
+        return moduleId;
+    }
+
+    /** Sections cochées, non modifiables. */
+    public Set<Section> sections() {
+        return Set.copyOf(sections);
+    }
+
+    /** Identifiants des Thèmes, non modifiables. */
+    public Set<UUID> themeIds() {
+        return Set.copyOf(themeIds);
     }
 
     public long version() {

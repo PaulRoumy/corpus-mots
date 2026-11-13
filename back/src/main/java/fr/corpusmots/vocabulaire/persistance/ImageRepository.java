@@ -18,4 +18,20 @@ public class ImageRepository implements PanacheRepositoryBase<Image, UUID> {
     public Optional<Image> verrouillee(UUID id) {
         return find("id", id).withLock(LockModeType.PESSIMISTIC_WRITE).firstResultOptional();
     }
+
+    /** Vrai si au moins une Image, de n'importe quel enseignant et à n'importe quel état, porte le Thème. */
+    public boolean porteTheme(UUID themeId) {
+        return (Boolean) getEntityManager()
+                .createNativeQuery("select exists (select 1 from image_theme where theme_id = :theme)")
+                .setParameter("theme", themeId)
+                .getSingleResult();
+    }
+
+    /**
+     * Retire le Module {@code moduleId} de toutes les Images qui l'avaient, de tous les enseignants, en incrémentant
+     * leur version : une écriture concurrente de l'Image, lue avant, échoue au lieu de remettre l'ancien Module.
+     */
+    public void retirerModule(UUID moduleId) {
+        update("moduleId = null, version = version + 1 where moduleId = ?1", moduleId);
+    }
 }

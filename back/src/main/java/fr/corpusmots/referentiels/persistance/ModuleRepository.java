@@ -2,8 +2,10 @@ package fr.corpusmots.referentiels.persistance;
 
 import io.quarkus.hibernate.orm.panache.PanacheRepositoryBase;
 import jakarta.enterprise.context.ApplicationScoped;
+import jakarta.persistence.LockModeType;
 import java.util.Collection;
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 
 @ApplicationScoped
@@ -28,6 +30,22 @@ public class ModuleRepository implements PanacheRepositoryBase<Module, UUID> {
                 .createQuery("select coalesce(max(m.ordre), 0) from Module m where m.albumId = :album")
                 .setParameter("album", albumId)
                 .getSingleResult()).intValue();
+    }
+
+    /**
+     * Module {@code id} verrouillé jusqu'à la fin de la transaction ({@code SELECT … FOR UPDATE}) : sa suppression
+     * attend les affectations en cours, qui le lisent par {@link #lirePartage}. Vide s'il n'existe pas.
+     */
+    public Optional<Module> verrouiller(UUID id) {
+        return findByIdOptional(id, LockModeType.PESSIMISTIC_WRITE);
+    }
+
+    /**
+     * Module {@code id} lu en verrou partagé ({@code SELECT … FOR SHARE}) jusqu'à la fin de la transaction : il ne
+     * peut pas être supprimé tant qu'elle dure. Vide s'il n'existe pas.
+     */
+    public Optional<Module> lirePartage(UUID id) {
+        return findByIdOptional(id, LockModeType.PESSIMISTIC_READ);
     }
 
     /** Modules de ces identifiants ; les identifiants inconnus sont ignorés. */
