@@ -10,6 +10,7 @@ import jakarta.inject.Inject;
 import jakarta.transaction.Transactional;
 import java.text.Normalizer;
 import java.util.Collection;
+import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
@@ -138,6 +139,15 @@ public class Lexique {
             return Optional.empty();
         }
         return sens.findByIdOptional(sensId).filter(trouve -> trouve.motId().equals(motId)).map(Lexique::vue);
+    }
+
+    /**
+     * Tous les Sens du Mot {@code motId}, de tous les enseignants : l'appelant ne révèle que ceux qui sont visibles de
+     * l'enseignant courant (AD-2).
+     */
+    @Transactional
+    public List<SensVue> sensDe(UUID motId) {
+        return motId == null ? List.of() : sens.duMot(motId).stream().map(Lexique::vue).toList();
     }
 
     private static MotVue vue(Mot mot) {

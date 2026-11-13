@@ -45,7 +45,9 @@ import org.jboss.resteasy.reactive.ResponseStatus;
  * {@code GET /images/{id}} rend la Carte d'identité d'une Image consultable (FR-14), sinon
  * {@code 404 ressource.introuvable} ; {@code PUT /images/{id}/description} en modifie le type, la licence, la source,
  * l'auteur et l'Album d'origine, par le seul propriétaire ({@code 403 image.reservee_au_proprietaire} pour les autres) ;
- * {@code PUT /images/{id}/classement} en remplace les Sections, le Module et les Thèmes, avec les mêmes refus.
+ * {@code PUT /images/{id}/classement} en remplace les Sections, le Module et les Thèmes, avec les mêmes refus ;
+ * {@code GET /images/{id}/sens} liste au propriétaire les Sens qu'il peut lui donner et {@code PUT /images/{id}/sens}
+ * en change le Sens, refusé en {@code 409 image.sens_non_modifiable} dès que l'Image a un lien.
  *
  * <p>Fichiers des Images (AD-23) : servis uniquement par {@link FichiersImages#lire}, qui applique la visibilité (AD-2).
  * Une Image que l'enseignant connecté ne peut pas consulter répond {@code 404 ressource.introuvable}, comme une Image
@@ -151,6 +153,37 @@ public class ImagesResource {
                 .toList();
         return CarteIdentiteImageDto.de(images.classer(id,
                 new ClasserImageCommande(sections, classement.moduleId(), classement.themeIds())));
+    }
+
+    @GET
+    @Path("/{id}/sens")
+    @Produces(MediaType.APPLICATION_JSON)
+    @Operation(operationId = "listerSensImage",
+            summary = "Sens que le propriétaire peut donner à son Image : ceux de son Mot qui lui sont visibles, le Sens"
+                    + " actuel compris")
+    @APIResponse(responseCode = "200", description = "Sens proposés, « à compléter » d'abord puis par libellé",
+            content = @Content(mediaType = MediaType.APPLICATION_JSON,
+                    schema = @Schema(type = SchemaType.ARRAY, implementation = SensProposeImageDto.class)))
+    public List<SensProposeImageDto> sensProposes(@PathParam("id") UUID id) {
+        return images.sensProposes(id).stream().map(SensProposeImageDto::de).toList();
+    }
+
+    @PUT
+    @Path("/{id}/sens")
+    @Consumes(MediaType.APPLICATION_JSON)
+    @Produces(MediaType.APPLICATION_JSON)
+    @Operation(operationId = "changerSensImage",
+            summary = "Changer le Sens d'une Image pour un autre Sens de son Mot (son seul propriétaire), tant qu'elle"
+                    + " n'est liée dans aucune Préparation")
+    @APIResponse(responseCode = "200", description = "Carte d'identité à jour de l'Image",
+            content = @Content(mediaType = MediaType.APPLICATION_JSON,
+                    schema = @Schema(implementation = CarteIdentiteImageDto.class)))
+    public CarteIdentiteImageDto changerSens(@PathParam("id") UUID id,
+            @RequestBody(required = true) SensImageDto sens) {
+        if (sens == null || sens.sensId() == null) {
+            throw new ErreurMetier(400, "requete.invalide", "Le sens est obligatoire");
+        }
+        return CarteIdentiteImageDto.de(images.changerSens(id, sens.sensId()));
     }
 
     @GET

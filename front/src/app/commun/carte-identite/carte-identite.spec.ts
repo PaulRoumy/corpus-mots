@@ -9,7 +9,7 @@ import { CompteCourant } from '../compte-courant';
 import { DialogueConfirmation } from '../dialogue-confirmation/dialogue-confirmation';
 import { MESSAGE_RESEAU, MESSAGES_PAR_CODE } from '../erreurs/message-erreur';
 import { provideIcones } from '../icones';
-import { CarteIdentite, CONFIRMATION_IMAGE_ALBUM } from './carte-identite';
+import { CarteIdentite, CONFIRMATION_IMAGE_ALBUM, MESSAGE_SENS_FIGE } from './carte-identite';
 
 const MOI = '0190f0a0-0000-7000-8000-00000000e001';
 const ZOE = '0190f0a0-0000-7000-8000-00000000e002';
@@ -40,6 +40,7 @@ const CARTE: CarteIdentiteImageDto = {
   sections: [],
   module: null,
   themes: [],
+  sensModifiable: true,
 };
 
 const ROULE_GALETTE: AlbumDto = {
@@ -353,12 +354,11 @@ describe('CarteIdentite', () => {
       await stabiliser();
     }
 
-    it('Sections, Module, Thèmes, type, source, licence et auteur modifiables ; les autres champs en lecture', async () => {
+    it('Sens, Sections, Module, Thèmes, type, source, licence et auteur modifiables ; les autres champs en lecture', async () => {
       await servir(CARTE);
 
       expect(champs()).toEqual([
         'Mot : citrouille',
-        'Sens : légume',
         'Catégorie : nom',
         'Sections : Section PS Section MS Section GS',
         'Module : —',
@@ -366,7 +366,8 @@ describe('CarteIdentite', () => {
       ]);
       expect(
         [...racine.querySelectorAll('mat-form-field mat-label')].map((l) => l.textContent?.trim()),
-      ).toEqual(['Album du module', 'Thèmes', "Type d'image", 'Source', 'Licence', 'Auteur']);
+      ).toEqual(['Sens', 'Album du module', 'Thèmes', "Type d'image", 'Source', 'Licence', 'Auteur']);
+      expect(texte('.carte-identite__sens-choix')).toBe('légume');
       expect(texte('.carte-identite__type')).toBe('image libre');
       expect(entree('Source').value).toBe('site web');
       expect(texte('.carte-identite__licence')).toBe('domaine public / CC0');
@@ -690,6 +691,179 @@ describe('CarteIdentite', () => {
       await stabiliser();
 
       expect(fermetures).toBe(0);
+    });
+
+    describe('sens', () => {
+      const URL_SENS = `/api/images/${IMAGE}/sens`;
+      const A_COMPLETER = {
+        id: CARTE.sens.id,
+        libelle: 'à compléter',
+        categorie: null,
+        aCompleter: true,
+      };
+      const ANIMAL = {
+        id: '0190f0a0-0000-7000-8000-0000000d0002',
+        libelle: 'animal',
+        categorie: 'nom',
+        aCompleter: false,
+      };
+      const CARTE_A_COMPLETER: CarteIdentiteImageDto = {
+        ...CARTE,
+        forme: 'loup',
+        sens: { id: A_COMPLETER.id, libelle: 'à compléter', categorie: null, aCompleter: true },
+      };
+      const CARTE_ANIMAL: CarteIdentiteImageDto = {
+        ...CARTE_A_COMPLETER,
+        sens: { id: ANIMAL.id, libelle: 'animal', categorie: 'nom', aCompleter: false },
+      };
+      const options = () =>
+        [...document.querySelectorAll<HTMLElement>('.cdk-overlay-pane mat-option')].map((o) =>
+          o.textContent?.replace(/\s+/g, ' ').trim(),
+        );
+
+      /** Ouvre la liste des Sens : les Sens du Mot sont lus à l'entrée dans le champ. */
+      async function ouvrirSens(lus = [A_COMPLETER, ANIMAL]) {
+        const declencheur = champ('Sens')!.querySelector<HTMLElement>('.mat-mdc-select-trigger')!;
+        champ('Sens')!.querySelector<HTMLElement>('mat-select')!.focus();
+        declencheur.click();
+        await stabiliser();
+        serveur.expectOne(URL_SENS).flush(lus);
+        await stabiliser();
+      }
+
+      it('« à compléter » mis en avant dans le champ ; « animal » choisi : catégorie « nom », mise en avant retirée', async () => {
+        await servir(CARTE_A_COMPLETER);
+        const emises: CarteIdentiteImageDto[] = [];
+        fixture.componentRef.setInput('appliquer', (carte: CarteIdentiteImageDto) =>
+          emises.push(carte),
+        );
+        const enAvant = racine.querySelector('.carte-identite__sens-choix .carte-identite__sens-a-completer')!;
+        expect(enAvant.textContent?.trim()).toBe('à compléter');
+        expect(enAvant.querySelector('mat-icon')?.getAttribute('svgicon')).toBe('crayon');
+        expect(champs()).toContain('Catégorie : —');
+
+        await ouvrirSens();
+        expect(options()).toEqual(['à compléter', 'animal · nom']);
+        [...document.querySelectorAll<HTMLElement>('.cdk-overlay-pane mat-option')][1].click();
+        await stabiliser();
+
+        const requete = serveur.expectOne(URL_SENS);
+        expect(requete.request.method).toBe('PUT');
+        expect(requete.request.body).toEqual({ sensId: ANIMAL.id });
+        requete.flush(CARTE_ANIMAL);
+        await stabiliser();
+        expect(emises).toEqual([CARTE_ANIMAL]);
+        expect(champs()).toContain('Catégorie : nom');
+        expect(texte('.carte-identite__sens-choix')).toBe('animal');
+        expect(racine.querySelector('.carte-identite__sens-a-completer')).toBeNull();
+        serveur.expectNone(URL_DESCRIPTION);
+
+        // Les Sens proposés dépendent du Sens actuel : relus à la prochaine ouverture.
+        champ('Sens')!.querySelector<HTMLElement>('.mat-mdc-select-trigger')!.click();
+        await stabiliser();
+        serveur.expectOne(URL_SENS).flush([ANIMAL]);
+        await stabiliser();
+        expect(options()).toEqual(['animal · nom']);
+      });
+
+      it('le même Sens choisi n’envoie rien ; les Sens ne sont lus qu’une fois', async () => {
+        await servir(CARTE_A_COMPLETER);
+
+        await ouvrirSens();
+        [...document.querySelectorAll<HTMLElement>('.cdk-overlay-pane mat-option')][0].click();
+        await stabiliser();
+        champ('Sens')!.querySelector<HTMLElement>('.mat-mdc-select-trigger')!.click();
+        await stabiliser();
+
+        serveur.expectNone(URL_SENS);
+      });
+
+      it('Image déjà liée : Sens en lecture, explication dessous, aucune lecture des Sens', async () => {
+        await servir({ ...CARTE, sensModifiable: false });
+
+        expect(champ('Sens')).toBeUndefined();
+        expect(champs().slice(0, 3)).toEqual(['Mot : citrouille', 'Sens : légume', 'Catégorie : nom']);
+        expect(texte('.carte-identite__sens-fige')).toBe(MESSAGE_SENS_FIGE);
+        racine.querySelector<HTMLElement>('.carte-identite__formulaire')!.dispatchEvent(
+          new FocusEvent('focusin', { bubbles: true }),
+        );
+        await stabiliser();
+        serveur.expectNone(URL_SENS);
+      });
+
+      it('collègue : Sens et catégorie en lecture, aucune lecture des Sens', async () => {
+        await servir({ ...CARTE, proprietaireId: ZOE, reutilisable: false, sensModifiable: false });
+
+        expect(champs().slice(0, 3)).toEqual(['Mot : citrouille', 'Sens : légume', 'Catégorie : nom']);
+        expect(racine.querySelector('mat-select, .carte-identite__sens-fige')).toBeNull();
+        serveur.expectNone(URL_SENS);
+      });
+
+      it('409 : lien créé entre l’ouverture et le choix, Sens précédent remis en lecture, explication, Bandeau', async () => {
+        await servir(CARTE_A_COMPLETER);
+
+        await ouvrirSens();
+        [...document.querySelectorAll<HTMLElement>('.cdk-overlay-pane mat-option')][1].click();
+        await stabiliser();
+        serveur
+          .expectOne(URL_SENS)
+          .flush(
+            { status: 409, code: 'image.sens_non_modifiable' },
+            { status: 409, statusText: 'Conflict' },
+          );
+        await stabiliser();
+
+        expect(champ('Sens')).toBeUndefined();
+        expect(racine.querySelector('.carte-identite__sens-choix')).toBeNull();
+        expect(champs()).toContain('Sens : à compléter');
+        expect(texte('.carte-identite__sens-fige')).toBe(MESSAGE_SENS_FIGE);
+        expect(bandeau()).toBe(MESSAGES_PAR_CODE['image.sens_non_modifiable']);
+        expect(champs()).toContain('Catégorie : —');
+      });
+
+      it('400 image.sens_invalide : Sens enregistré remis, champ signalé, Sens relus à la prochaine ouverture', async () => {
+        await servir(CARTE_A_COMPLETER);
+
+        await ouvrirSens();
+        [...document.querySelectorAll<HTMLElement>('.cdk-overlay-pane mat-option')][1].click();
+        await stabiliser();
+        serveur
+          .expectOne(URL_SENS)
+          .flush(
+            { status: 400, code: 'image.sens_invalide' },
+            { status: 400, statusText: 'Bad Request' },
+          );
+        await stabiliser();
+
+        expect(texte('.carte-identite__sens-choix')).toBe('à compléter');
+        expect(champ('Sens')!.classList).toContain('mat-form-field-invalid');
+        expect(texte('mat-error')).toBe('Non enregistré');
+        expect(bandeau()).toBe(MESSAGES_PAR_CODE['image.sens_invalide']);
+
+        champ('Sens')!.querySelector<HTMLElement>('.mat-mdc-select-trigger')!.click();
+        await stabiliser();
+        serveur.expectOne(URL_SENS).flush([A_COMPLETER]);
+        await stabiliser();
+        expect(options()).toEqual(['à compléter']);
+      });
+
+      it('échec de la lecture des Sens : Bandeau propre, « Réessayer » les relit', async () => {
+        await servir(CARTE_A_COMPLETER);
+
+        champ('Sens')!.querySelector<HTMLElement>('mat-select')!.focus();
+        await stabiliser();
+        serveur.expectOne(URL_SENS).error(new ProgressEvent('error'));
+        await stabiliser();
+        expect(texte('.carte-identite__erreur-sens [role="alert"]')).toBe(MESSAGE_RESEAU);
+
+        [...racine.querySelectorAll<HTMLButtonElement>('.carte-identite__erreur-sens button')]
+          .find((bouton) => bouton.textContent?.trim() === 'Réessayer')!
+          .click();
+        await stabiliser();
+        serveur.expectOne(URL_SENS).flush([A_COMPLETER, ANIMAL]);
+        await stabiliser();
+        expect(racine.querySelector('.carte-identite__erreur-sens')).toBeNull();
+      });
     });
 
     describe('classement', () => {

@@ -27,6 +27,11 @@ public class LienImageRepository implements PanacheRepositoryBase<LienImage, UUI
         return count("imageId = ?1 and enseignantId = ?2", imageId, enseignantId) > 0;
     }
 
+    /** Vrai si au moins un enseignant, propriétaire compris, a un lien vers cette Image (AD-5). */
+    public boolean existePourImage(UUID imageId) {
+        return count("imageId", imageId) > 0;
+    }
+
     /** Image liée à chacun de ces Mots de Préparation ; ceux qui n'en ont pas sont absents. */
     public Map<UUID, Image> imagesDe(Collection<UUID> preparationMotIds) {
         if (preparationMotIds.isEmpty()) {

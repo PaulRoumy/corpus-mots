@@ -200,9 +200,13 @@
 - source_spec: none
   summary: Story 2.6, partie 4 : Sens et catégorie grammaticale dans la Carte d'identité ; changer le Sens d'une Image refusé dès qu'elle a un lien, chez quiconque, avec un message qui propose d'ajouter une nouvelle Image (AD-5) ; la Création de Sens dans le panneau arrive avec la story 2.8.
   evidence: Découpage de la story 2.6 en quatre parties choisi par Paul.
+  status: fait (`docs/realisation/spec-2-6-4-sens-de-l-image.md`).
 - source_spec: `docs/realisation/spec-2-6-2-modifier-la-carte-d-identite.md`
   summary: Epic 3 (versement) : modifier la description d'une Image versée (licence non partageable, passage en photo personnelle, image d'album ou type inconnu) doit appliquer les règles du versement — refuser, ou retirer l'Image de la Banque.
   evidence: Revue de la story 2.6, partie 2, ligne 9 du journal de tri : `Images.modifierDescription` ne regarde pas l'`etat` ; sans conséquence tant que l'état `versee` n'existe pas.
 - source_spec: `docs/realisation/spec-2-6-3-sections-module-et-themes.md`
   summary: Pré-remplir la Carte d'identité d'une Image créée depuis une Préparation (téléversement depuis la Carte « à illustrer », pictogramme ARASAAC de la story 2.4, partie 2) : Section de la Préparation, son Module et le Thème du Mot (PRD §4.4).
   evidence: Décision de Paul pendant la planification de la story 2.6, partie 3 : reporté avec la story 2.4, partie 2, pour garder cette partie plus petite.
+- source_spec: `docs/realisation/spec-2-6-4-sens-de-l-image.md`
+  summary: `Images.sensVisibles` charge toutes les Images des Sens du Mot (tous enseignants, tous états) pour décider des Sens proposés ; lire une projection (`proprietaire_id`, `etat`, `sens_id`) toujours filtrée par `VisibiliteImages.proposable`.
+  evidence: Revue de la story 2.6, partie 4, ligne 5 du journal de tri (maybe-false, medium si confirmé) : à mesurer sur un Mot courant quand la Banque partagée de l'Epic 3 contiendra beaucoup d'Images ; la lecture se fait aussi sous le verrou de l'Image dans `PUT /images/{id}/sens`.

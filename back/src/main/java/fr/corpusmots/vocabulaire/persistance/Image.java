@@ -127,6 +127,14 @@ public class Image {
         this.themeIds.addAll(themeIds);
     }
 
+    /**
+     * Remplace le Sens illustré par un autre Sens du même Mot, déjà validé par {@code vocabulaire.service.Images},
+     * qui a vérifié sous verrou que l'Image n'a aucun lien (AD-5) ; l'état ne change pas (AD-3).
+     */
+    public void changerSens(UUID sensId) {
+        this.sensId = sensId;
+    }
+
     public UUID id() {
         return id;
     }

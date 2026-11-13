@@ -11,9 +11,9 @@ import java.util.List;
  * qu'elle illustre, {@code sensACompleter} vrai pour le Sens par défaut « à compléter », l'Album d'origine
  * ({@code null} hors image d'album), la licence, la source et l'auteur ({@code null} s'ils ne sont pas renseignés) ;
  * ses Sections (ordre PS, MS, GS), son Module et l'Album de ce Module ({@code null} sans Module), et ses Thèmes, par
- * nom.
+ * nom ; {@code sensModifiable} vrai seulement pour le propriétaire d'une Image sans aucun lien (AD-5).
  */
 public record CarteIdentiteImageVue(ImageVue image, MotVue mot, SensVue sens, boolean sensACompleter,
         AlbumVue albumOrigine, Licence licence, String source, String auteur, List<Section> sections,
-        ModuleVue module, AlbumVue albumModule, List<ThemeVue> themes) {
+        ModuleVue module, AlbumVue albumModule, List<ThemeVue> themes, boolean sensModifiable) {
 }

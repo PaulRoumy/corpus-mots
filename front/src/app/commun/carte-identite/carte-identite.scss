@@ -209,3 +209,17 @@
   font: var(--cm-typo-label-sm);
   color: var(--mat-sys-error);
 }
+
+// Sens du propriétaire : liste des Sens du Mot, avec son Bandeau d'échec de lecture.
+.carte-identite__sens {
+  display: flex;
+  flex-direction: column;
+  gap: var(--cm-espace-2);
+}
+
+// Sens d'une Image déjà liée : en lecture, expliqué d'emblée sous le champ.
+.carte-identite__sens-fige {
+  margin: 0 var(--cm-espace-4);
+  font: var(--cm-typo-body-sm);
+  color: var(--mat-sys-on-surface-variant);
+}

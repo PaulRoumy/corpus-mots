@@ -35,8 +35,10 @@ import { Api } from '../../api/api';
 import { listerModulesDeLAlbum } from '../../api/fn/albums-resource/lister-modules-de-l-album';
 import { rechercherAlbums } from '../../api/fn/albums-resource/rechercher-albums';
 import { carteIdentiteImage } from '../../api/fn/images-resource/carte-identite-image';
+import { changerSensImage } from '../../api/fn/images-resource/changer-sens-image';
 import { classerImage } from '../../api/fn/images-resource/classer-image';
 import { fichierImage } from '../../api/fn/images-resource/fichier-image';
+import { listerSensImage } from '../../api/fn/images-resource/lister-sens-image';
 import { modifierDescriptionImage } from '../../api/fn/images-resource/modifier-description-image';
 import { creerTheme } from '../../api/fn/themes-resource/creer-theme';
 import { listerThemes } from '../../api/fn/themes-resource/lister-themes';
@@ -44,6 +46,7 @@ import { AlbumDto } from '../../api/models/album-dto';
 import { CarteIdentiteImageDto } from '../../api/models/carte-identite-image-dto';
 import { ClassementImageDto } from '../../api/models/classement-image-dto';
 import { DescriptionImageDto } from '../../api/models/description-image-dto';
+import { SensProposeImageDto } from '../../api/models/sens-propose-image-dto';
 import { ThemeDto } from '../../api/models/theme-dto';
 import {
   DELAI_RECHERCHE_ALBUMS_MS,
@@ -56,7 +59,12 @@ import { BandeauErreur } from '../bandeau-erreur/bandeau-erreur';
 import { ChampThemes, themesParNom } from '../champ-themes/champ-themes';
 import { CompteCourant } from '../compte-courant';
 import { DialogueConfirmation } from '../dialogue-confirmation/dialogue-confirmation';
-import { erreurPassagere, MESSAGES_PAR_CODE, messageErreur } from '../erreurs/message-erreur';
+import {
+  codeErreur,
+  erreurPassagere,
+  MESSAGES_PAR_CODE,
+  messageErreur,
+} from '../erreurs/message-erreur';
 import { ChargementImage, ImageSecurisee } from '../image-securisee/image-securisee';
 import {
   Licence,
@@ -92,6 +100,16 @@ export const CONFIRMATION_IMAGE_ALBUM = {
 /** Sous un champ dont l'enregistrement a échoué ; le message traduit est dans le Bandeau d'erreur. */
 export const MESSAGE_NON_ENREGISTRE = 'Non enregistré';
 
+/** Sous le Sens d'une Image déjà liée, dans le panneau du propriétaire. */
+export const MESSAGE_SENS_FIGE =
+  'Cette image est utilisée dans une préparation : son sens ne peut plus changer. Pour un autre sens, ajoutez une nouvelle image.';
+
+/** Refus du changement de Sens d'une Image liée entre l'ouverture du panneau et le choix. */
+const CODE_SENS_NON_MODIFIABLE = 'image.sens_non_modifiable';
+
+/** Refus d'un Sens qui n'est plus proposé (liste lue périmée). */
+const CODE_SENS_INVALIDE = 'image.sens_invalide';
+
 /** Nombre de suggestions d'Albums demandées. */
 const NOMBRE_SUGGESTIONS = 20;
 
@@ -107,8 +125,8 @@ export const LIBELLE_AUCUN_MODULE = 'Aucun module';
 type ChampDescription = 'type' | 'source' | 'licence' | 'auteur' | 'album';
 /** Champ du classement (`PUT /images/{id}/classement`). */
 type ChampClassement = 'sections' | 'module' | 'themes';
-/** Champ modifiable de la Carte d'identité. */
-type Champ = ChampDescription | ChampClassement;
+/** Champ modifiable de la Carte d'identité ; `sens` part par `PUT /images/{id}/sens`. */
+type Champ = ChampDescription | ChampClassement | 'sens';
 
 const CHAMPS_CLASSEMENT: ReadonlySet<Champ> = new Set<Champ>(['sections', 'module', 'themes']);
 
@@ -201,6 +219,16 @@ function albumChoisi(controle: AbstractControl<string | AlbumChoisi>): Validatio
     : { albumRequis: true };
 }
 
+/** Sens proposé tiré du Sens de la Carte, avant la lecture des Sens du Mot. */
+function sensDeLaCarte(carte: CarteIdentiteImageDto): SensProposeImageDto {
+  return {
+    id: carte.sens.id,
+    libelle: carte.sens.libelle,
+    categorie: carte.sens.categorie ?? null,
+    aCompleter: carte.sens.aCompleter,
+  };
+}
+
 /** Licence de la Carte, si elle se choisit dans le Sélecteur ; `null` sinon. */
 function licenceChoisie(licence: Licence | null | undefined): LicenceChoisie | null {
   return LICENCES_CHOISIES.find((choix) => choix.valeur === licence)?.valeur ?? null;
@@ -245,6 +273,13 @@ function texte(saisie: string): string | null {
  * avant de l'ajouter. Les Thèmes de l'école sont lus à la première entrée dans le Champ, les Modules d'un Album au
  * choix de l'Album (ou à la première entrée dans la liste). Même file d'enregistrement et mêmes échecs que la
  * description : la valeur choisie reste, le champ est signalé, Bandeau d'erreur dans le panneau.
+ *
+ * Sens du propriétaire (story 2.6, partie 4) : tant que l'Image n'a aucun lien (`sensModifiable`), le Sens est choisi
+ * dans la liste des Sens du Mot qui lui sont visibles (« libellé · catégorie », « à compléter » mis en avant), lue par
+ * `GET /images/{id}/sens` à la première entrée dans le champ, et enregistré aussitôt par `PUT /images/{id}/sens`, dans
+ * la même file. La catégorie appartient au Sens : elle suit le Sens enregistré et reste en lecture. Image déjà liée :
+ * Sens en lecture, avec l'explication dessous, sans aucune lecture des Sens. Un refus `409` (lien créé entre
+ * l'ouverture et le choix) remet le Sens précédent, signale le champ et affiche le message dans le Bandeau.
  */
 @Component({
   selector: 'app-carte-identite',
@@ -328,7 +363,68 @@ function texte(saisie: string): string | null {
           }
           <div class="carte-identite__formulaire">
             <dl class="carte-identite__champs">
-              <ng-container *ngTemplateOutlet="debutChamps; context: { $implicit: carte }" />
+              <ng-container *ngTemplateOutlet="motAffiche; context: { $implicit: carte }" />
+              @if (!carte.sensModifiable) {
+                <ng-container *ngTemplateOutlet="sensAffiche; context: { $implicit: carte }" />
+              }
+            </dl>
+            @if (carte.sensModifiable) {
+              <div class="carte-identite__sens">
+                @if (erreurSens(); as message) {
+                  <app-bandeau-erreur
+                    class="carte-identite__erreur carte-identite__erreur-sens"
+                    [message]="message"
+                    (reessayer)="chargerSens()"
+                    (fermer)="erreurSens.set(null)"
+                  />
+                }
+                <mat-form-field
+                  class="carte-identite__champ"
+                  subscriptSizing="dynamic"
+                  (focusin)="chargerSens()"
+                >
+                  <mat-label>Sens</mat-label>
+                  <mat-select
+                    class="carte-identite__sens-choix"
+                    [formControl]="sens"
+                    (selectionChange)="choisirSens($event.value)"
+                    (openedChange)="$event && chargerSens()"
+                  >
+                    <mat-select-trigger>
+                      @if (sensChoisi(); as choisi) {
+                        @if (choisi.aCompleter) {
+                          <span class="carte-identite__a-completer carte-identite__sens-a-completer">
+                            <mat-icon svgIcon="crayon" aria-hidden="true" />
+                            à compléter
+                          </span>
+                        } @else {
+                          {{ choisi.libelle }}
+                        }
+                      }
+                    </mat-select-trigger>
+                    @for (choix of sensProposes(); track choix.id) {
+                      <mat-option [value]="choix.id">
+                        @if (choix.aCompleter) {
+                          <span class="carte-identite__a-completer">
+                            <mat-icon svgIcon="crayon" aria-hidden="true" />
+                            à compléter
+                          </span>
+                        } @else {
+                          {{ libelleSens(choix) }}
+                        }
+                      </mat-option>
+                    }
+                  </mat-select>
+                  @if (sens.hasError('enregistrement')) {
+                    <mat-error>{{ messageNonEnregistre }}</mat-error>
+                  }
+                </mat-form-field>
+              </div>
+            } @else {
+              <p class="carte-identite__sens-fige">{{ messageSensFige }}</p>
+            }
+            <dl class="carte-identite__champs">
+              <ng-container *ngTemplateOutlet="categorieAffichee; context: { $implicit: carte }" />
               <dt id="carte-identite-sections">Sections</dt>
               <dd>
                 <mat-chip-listbox
@@ -624,10 +720,17 @@ function texte(saisie: string): string | null {
       }
     </aside>
     <ng-template #debutChamps let-carte>
+      <ng-container *ngTemplateOutlet="motAffiche; context: { $implicit: carte }" />
+      <ng-container *ngTemplateOutlet="sensAffiche; context: { $implicit: carte }" />
+      <ng-container *ngTemplateOutlet="categorieAffichee; context: { $implicit: carte }" />
+    </ng-template>
+    <ng-template #motAffiche let-carte>
       <dt>Mot</dt>
       <dd>
         <span class="carte-identite__mot">{{ carte.forme }}</span>
       </dd>
+    </ng-template>
+    <ng-template #sensAffiche let-carte>
       <dt>Sens</dt>
       <dd>
         @if (carte.sens.aCompleter) {
@@ -639,8 +742,10 @@ function texte(saisie: string): string | null {
           {{ carte.sens.libelle }}
         }
       </dd>
+    </ng-template>
+    <ng-template #categorieAffichee let-carte>
       <dt>Catégorie</dt>
-      <dd>{{ carte.sens.categorie || vide }}</dd>
+      <dd class="carte-identite__categorie">{{ carte.sens.categorie || vide }}</dd>
     </ng-template>
     <ng-template #moduleAffiche let-carte>
       @if (carte.module; as module) {
@@ -677,6 +782,7 @@ export class CarteIdentite {
   protected readonly messageAlbumRequis = MESSAGES_PAR_CODE['image.album_requis'];
   protected readonly messageAucunAlbum = MESSAGE_AUCUN_ALBUM;
   protected readonly messageNonEnregistre = MESSAGE_NON_ENREGISTRE;
+  protected readonly messageSensFige = MESSAGE_SENS_FIGE;
 
   /** Vue du propriétaire : type, Album d'origine, source, licence et auteur modifiables. */
   protected readonly typeImage = new FormControl<TypeImage>('inconnu', { nonNullable: true });
@@ -721,6 +827,16 @@ export class CarteIdentite {
   protected readonly erreurThemes = signal<string | null>(null);
   /** Échec de la lecture des Modules de l'Album choisi, dans son propre Bandeau (« Réessayer » les relit). */
   protected readonly erreurModules = signal<string | null>(null);
+
+  /** Sens du propriétaire : identifiant du Sens choisi, en contrôle de formulaire et en signal pour l'affichage. */
+  protected readonly sens = new FormControl<string | null>(null);
+  private readonly sensChoisiId = signal<string | null>(null);
+  /** Sens du Mot visibles du propriétaire, lus à la première entrée dans le champ ; `null` avant. */
+  private readonly sensDuMot = signal<readonly SensProposeImageDto[] | null>(null);
+  /** Image dont les Sens ont été demandés, pour ne pas les redemander. */
+  private sensDemandesPour: string | null = null;
+  /** Échec de la lecture des Sens du Mot, dans son propre Bandeau (« Réessayer » les relit). */
+  protected readonly erreurSens = signal<string | null>(null);
 
   private readonly selecteurs = viewChildren(MatSelect);
   private readonly declencheurs = viewChildren(MatAutocompleteTrigger);
@@ -779,6 +895,26 @@ export class CarteIdentite {
     const deLaCarte = (this.carte()?.themes ?? []).filter((theme) => !connus.has(theme.id));
     return deLaCarte.length === 0 ? ecole : themesParNom([...ecole, ...deLaCarte]);
   });
+
+  /** Sens proposés : ceux du Mot une fois lus, sinon le seul Sens de la Carte ; le Sens de la Carte toujours compris. */
+  protected readonly sensProposes = computed<readonly SensProposeImageDto[]>(() => {
+    const carte = this.carte();
+    const lus = this.sensDuMot() ?? [];
+    if (carte === null || lus.some((choix) => choix.id === carte.sens.id)) {
+      return lus;
+    }
+    return [sensDeLaCarte(carte), ...lus];
+  });
+
+  /** Sens choisi dans le champ, pour le déclencheur de la liste (« à compléter » mis en avant). */
+  protected readonly sensChoisi = computed(() => {
+    const id = this.sensChoisiId();
+    return this.sensProposes().find((choix) => choix.id === id) ?? null;
+  });
+
+  /** « libellé · catégorie », le libellé seul sans catégorie. */
+  protected readonly libelleSens = (choix: SensProposeImageDto): string =>
+    choix.categorie ? `${choix.libelle} · ${choix.categorie}` : choix.libelle;
 
   /** « lecture seule » pour un non-propriétaire, une fois le compte connu. */
   protected readonly lectureSeule = computed(() => {
@@ -898,6 +1034,9 @@ export class CarteIdentite {
     this.sections.set([...carte.sections]);
     this.module.setValue(carte.module?.id ?? null);
     this.themesChoisis.set(carte.themes.map((theme) => theme.id));
+    this.sens.setValue(carte.sens.id);
+    this.sensChoisiId.set(carte.sens.id);
+    this.oublierSensLus();
     // La recherche du Module part de l'Album du Module, sinon de l'Album d'origine d'une image d'album.
     const albumDepart: AlbumChoisi | null = carte.module
       ? { id: carte.module.albumId, titre: carte.module.titreAlbum }
@@ -914,6 +1053,7 @@ export class CarteIdentite {
       this.album,
       this.module,
       this.albumModule,
+      this.sens,
     ]) {
       controle.markAsUntouched();
     }
@@ -923,6 +1063,7 @@ export class CarteIdentite {
     this.rechercheModule.erreur.set(null);
     this.erreurModules.set(null);
     this.erreurThemes.set(null);
+    this.erreurSens.set(null);
   }
 
   /**
@@ -1037,6 +1178,37 @@ export class CarteIdentite {
     void this.chargerModules();
   }
 
+  /**
+   * Sens du Mot visibles du propriétaire, demandés une seule fois par Image, jamais pour une Image liée ; un échec est
+   * affiché dans le Bandeau du Sens et relu par « Réessayer » ou à la prochaine entrée dans le champ.
+   */
+  protected async chargerSens(): Promise<void> {
+    const carte = this.carte();
+    if (carte === null || !carte.sensModifiable || this.sensDemandesPour === carte.id) {
+      return;
+    }
+    const numero = this.derniereLecture;
+    this.sensDemandesPour = carte.id;
+    try {
+      const lus = await this.api.invoke(listerSensImage, { id: carte.id });
+      if (numero === this.derniereLecture) {
+        this.sensDuMot.set(lus);
+        this.erreurSens.set(null);
+      }
+    } catch (erreur) {
+      if (numero === this.derniereLecture) {
+        this.sensDemandesPour = null;
+        this.erreurSens.set(messageErreur(erreur));
+      }
+    }
+  }
+
+  /** Sens choisi dans la liste : enregistré aussitôt. */
+  protected choisirSens(id: string): void {
+    this.sensChoisiId.set(id);
+    void this.enregistrer('sens');
+  }
+
   /** Thèmes de l'école, lus une seule fois ; un échec est affiché sous le Champ et relu à la prochaine entrée. */
   protected chargerThemes(): void {
     if (this.themesEcole() !== null || this.lectureThemes !== null) {
@@ -1104,9 +1276,12 @@ export class CarteIdentite {
     if (carte === null || !this.modifiable()) {
       return;
     }
-    const modification = CHAMPS_CLASSEMENT.has(champ)
-      ? this.modificationClassement(carte)
-      : this.modificationDescription(carte);
+    const modification =
+      champ === 'sens'
+        ? this.modificationSens(carte)
+        : CHAMPS_CLASSEMENT.has(champ)
+          ? this.modificationClassement(carte)
+          : this.modificationDescription(carte);
     if (modification === null) {
       return;
     }
@@ -1126,6 +1301,18 @@ export class CarteIdentite {
         return;
       }
       this.effacerErreur();
+      const code = champ === 'sens' ? codeErreur(erreur) : null;
+      if (code === CODE_SENS_NON_MODIFIABLE || code === CODE_SENS_INVALIDE) {
+        // Le Sens enregistré est remis.
+        this.sens.setValue(carte.sens.id);
+        this.sensChoisiId.set(carte.sens.id);
+      }
+      if (code === CODE_SENS_NON_MODIFIABLE) {
+        // Lien créé depuis l'ouverture du panneau : le Sens passe en lecture, avec son explication.
+        this.carte.update((actuelle) => actuelle && { ...actuelle, sensModifiable: false });
+      } else if (code === CODE_SENS_INVALIDE) {
+        this.oublierSensLus();
+      }
       this.champEnErreur.set(champ);
       const controle = this.controle(champ);
       controle?.setErrors({ enregistrement: true });
@@ -1160,6 +1347,25 @@ export class CarteIdentite {
       envoyer: () => this.api.invoke(classerImage, { id: carte.id, body: classement }),
       reprendre: () => undefined,
     };
+  }
+
+  /** Sens choisi à envoyer, ou `null` s'il est celui de la Carte. */
+  private modificationSens(carte: CarteIdentiteImageDto): Modification | null {
+    const sensId = this.sens.value;
+    if (sensId === null || sensId === carte.sens.id) {
+      return null;
+    }
+    return {
+      envoyer: () => this.api.invoke(changerSensImage, { id: carte.id, body: { sensId } }),
+      // Les Sens proposés dépendent du Sens actuel : relus à la prochaine entrée dans le champ.
+      reprendre: () => this.oublierSensLus(),
+    };
+  }
+
+  /** Oublie les Sens du Mot lus, pour qu'ils soient relus à la prochaine entrée dans le champ. */
+  private oublierSensLus(): void {
+    this.sensDuMot.set(null);
+    this.sensDemandesPour = null;
   }
 
   /** Description saisie, ou `null` pour une image d'album sans Album choisi (« Album d'origine requis »). */
@@ -1237,6 +1443,8 @@ export class CarteIdentite {
         return this.album;
       case 'module':
         return this.module;
+      case 'sens':
+        return this.sens;
       case 'sections':
       case 'themes':
         return null;

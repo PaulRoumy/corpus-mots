@@ -7,6 +7,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 
 @ApplicationScoped
@@ -27,6 +28,16 @@ public class SensRetenuRepository implements PanacheRepositoryBase<SensRetenu, U
                 .setMaxResults(1)
                 .getResultStream()
                 .findFirst();
+    }
+
+    /** Identifiants des Sens de ce Mot que l'enseignant a retenus, dans l'une quelconque de ses Préparations. */
+    public Set<UUID> sensRetenusDuMot(UUID enseignantId, UUID motId) {
+        return Set.copyOf(getEntityManager().createQuery(
+                "select distinct s.id from SensRetenu r, Sens s where s.id = r.sensId and r.enseignantId = :enseignant"
+                        + " and s.motId = :mot", UUID.class)
+                .setParameter("enseignant", enseignantId)
+                .setParameter("mot", motId)
+                .getResultList());
     }
 
     /** Sens retenu de chacun de ces Mots de Préparation ; ceux qui n'en ont pas sont absents. */

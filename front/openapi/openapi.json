@@ -84,7 +84,7 @@
       },
       "CarteIdentiteImageDto" : {
         "type" : "object",
-        "required" : [ "id", "proprietaireId", "etat", "reutilisable", "typeImage", "aCompleter", "motId", "forme", "sens", "sections", "themes" ],
+        "required" : [ "id", "proprietaireId", "etat", "reutilisable", "typeImage", "aCompleter", "motId", "forme", "sens", "sections", "themes", "sensModifiable" ],
         "properties" : {
           "id" : {
             "$ref" : "#/components/schemas/UUID"
@@ -169,6 +169,10 @@
               "$ref" : "#/components/schemas/CarteIdentiteThemeDto"
             },
             "description" : "Thèmes de l'Image, par nom"
+          },
+          "sensModifiable" : {
+            "type" : "boolean",
+            "description" : "Vrai seulement pour le propriétaire d'une Image sans aucun lien, dans aucune Préparation"
           }
         }
       },
@@ -850,6 +854,17 @@
         "type" : "string",
         "enum" : [ "ps", "ms", "gs" ]
       },
+      "SensImageDto" : {
+        "type" : "object",
+        "required" : [ "sensId" ],
+        "properties" : {
+          "sensId" : {
+            "description" : "Sens du Mot de l'Image, parmi ceux de GET /images/{id}/sens",
+            "type" : "string",
+            "$ref" : "#/components/schemas/UUID"
+          }
+        }
+      },
       "SensPreparationDto" : {
         "type" : "object",
         "required" : [ "id", "libelle" ],
@@ -864,6 +879,27 @@
           "categorie" : {
             "type" : "string",
             "description" : "Catégorie grammaticale, absente si elle reste à compléter"
+          }
+        }
+      },
+      "SensProposeImageDto" : {
+        "type" : "object",
+        "required" : [ "id", "libelle", "aCompleter" ],
+        "properties" : {
+          "id" : {
+            "$ref" : "#/components/schemas/UUID"
+          },
+          "libelle" : {
+            "type" : "string",
+            "description" : "« à compléter » pour le Sens par défaut"
+          },
+          "categorie" : {
+            "type" : [ "string", "null" ],
+            "description" : "Catégorie grammaticale, null si elle reste à compléter"
+          },
+          "aCompleter" : {
+            "type" : "boolean",
+            "description" : "Vrai pour le Sens par défaut « à compléter »"
           }
         }
       },
@@ -1579,6 +1615,74 @@
                 }
               }
             }
+          }
+        },
+        "tags" : [ "Images Resource" ]
+      }
+    },
+    "/api/images/{id}/sens" : {
+      "get" : {
+        "summary" : "Sens que le propriétaire peut donner à son Image : ceux de son Mot qui lui sont visibles, le Sens actuel compris",
+        "operationId" : "listerSensImage",
+        "parameters" : [ {
+          "name" : "id",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "$ref" : "#/components/schemas/UUID"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "description" : "Sens proposés, « à compléter » d'abord puis par libellé",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "type" : "array",
+                  "items" : {
+                    "$ref" : "#/components/schemas/SensProposeImageDto"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "tags" : [ "Images Resource" ]
+      },
+      "put" : {
+        "summary" : "Changer le Sens d'une Image pour un autre Sens de son Mot (son seul propriétaire), tant qu'elle n'est liée dans aucune Préparation",
+        "operationId" : "changerSensImage",
+        "parameters" : [ {
+          "name" : "id",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "$ref" : "#/components/schemas/UUID"
+          }
+        } ],
+        "requestBody" : {
+          "required" : true,
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/SensImageDto"
+              }
+            }
+          }
+        },
+        "responses" : {
+          "200" : {
+            "description" : "Carte d'identité à jour de l'Image",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/CarteIdentiteImageDto"
+                }
+              }
+            }
+          },
+          "400" : {
+            "description" : "Bad Request"
           }
         },
         "tags" : [ "Images Resource" ]

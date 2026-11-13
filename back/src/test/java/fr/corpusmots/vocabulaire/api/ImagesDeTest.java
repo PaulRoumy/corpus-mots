@@ -94,6 +94,31 @@ public class ImagesDeTest {
                 .executeUpdate());
     }
 
+    /** Efface tous les Sens retenus. */
+    public void effacerSensRetenus() {
+        QuarkusTransaction.requiringNew().run(
+                () -> entityManager.createNativeQuery("delete from sens_retenu").executeUpdate());
+    }
+
+    /** Insère un Sens retenu par cet enseignant, pour un Mot de Préparation (identifiants quelconques). */
+    public void sensRetenu(UUID sensId, UUID enseignant, UUID albumId) {
+        QuarkusTransaction.requiringNew().run(() -> entityManager.createNativeQuery(
+                "insert into sens_retenu (preparation_id, preparation_mot_id, sens_id, enseignant_id, album_id,"
+                        + " section) values (uuidv7(), uuidv7(), :sens, :enseignant, :album, 'ms')")
+                .setParameter("sens", sensId)
+                .setParameter("enseignant", enseignant)
+                .setParameter("album", albumId)
+                .executeUpdate());
+    }
+
+    /** Sens enregistré de l'Image. */
+    public UUID sensId(UUID imageId) {
+        return QuarkusTransaction.requiringNew().call(() -> (UUID) entityManager.createNativeQuery(
+                "select sens_id from image where id = :id")
+                .setParameter("id", imageId)
+                .getSingleResult());
+    }
+
     /** Remplace le fichier de l'Image par ces octets (et cette miniature), de {@code largeur} × {@code hauteur} px. */
     public void fichier(UUID imageId, byte[] octets, byte[] miniature, String typeMime, int largeur, int hauteur) {
         QuarkusTransaction.requiringNew().run(() -> entityManager.createNativeQuery(

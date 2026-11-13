@@ -43,6 +43,8 @@ public class Images {
     static final String CODE_RESERVEE_AU_PROPRIETAIRE = "image.reservee_au_proprietaire";
     static final String CODE_THEME_INTROUVABLE = "image.theme_introuvable";
     static final String CODE_MODULE_INTROUVABLE = "image.module_introuvable";
+    static final String CODE_SENS_INVALIDE = "image.sens_invalide";
+    static final String CODE_SENS_NON_MODIFIABLE = "image.sens_non_modifiable";
     static final String TYPE_MEDIA_IMAGE = "image";
 
     /** Longueur maximale de la source et de l'auteur d'une Image. */
@@ -168,14 +170,96 @@ public class Images {
     }
 
     /**
+     * Sens que le propriétaire peut donner à l'Image {@code imageId} (FR-14) : les Sens de son Mot qui lui sont visibles,
+     * c'est-à-dire qui portent une Image qui lui est {@link VisibiliteImages#proposable proposable} ou qu'il a retenus
+     * dans l'une de ses Préparations (AD-2), plus le Sens actuel de l'Image ; « à compléter » d'abord, puis par libellé.
+     * Lecture seule.
+     *
+     * @throws ErreurMetier {@code 404 ressource.introuvable} si l'Image n'existe pas ou n'est pas consultable par
+     *         l'enseignant courant ; {@code 403 image.reservee_au_proprietaire} s'il n'en est pas le propriétaire,
+     *         administrateur compris
+     */
+    @Transactional
+    public List<SensProposeVue> sensProposes(UUID imageId) {
+        UUID enseignantId = enseignantCourant.id();
+        Image image = imageDuProprietaire(imageId, enseignantId, false);
+        Collator collation = Collator.getInstance(Locale.FRENCH);
+        return sensVisibles(image, enseignantId).stream()
+                .map(sens -> new SensProposeVue(sens, Usages.aCompleter(sens)))
+                .sorted(Comparator.comparing((SensProposeVue propose) -> !propose.aCompleter())
+                        .thenComparing(propose -> propose.sens().libelle(), collation)
+                        .thenComparing(propose -> propose.sens().id()))
+                .toList();
+    }
+
+    /**
+     * Remplace le Sens de l'Image {@code imageId}, par son seul propriétaire (FR-14), par un autre Sens du même Mot
+     * parmi ceux de {@link #sensProposes}. Le Mot et le Sens ne sont jamais modifiés (AD-19) : la catégorie suit le Sens
+     * choisi. L'Image est verrouillée ({@code SELECT … FOR UPDATE}, comme {@link Usages#lierImage}) avant de vérifier
+     * qu'aucun enseignant, propriétaire compris, n'a de lien vers elle : aucun lien ne peut être créé entre-temps, et
+     * l'invariant Sens de l'Image = Sens retenu tient (AD-5, AD-17). Le même Sens ne change rien. L'état ne change pas
+     * (AD-3). Rien n'est modifié en cas de refus.
+     *
+     * @return la Carte d'identité à jour
+     * @throws ErreurMetier {@code 404 ressource.introuvable} si l'Image n'existe pas ou n'est pas consultable par
+     *         l'enseignant courant ; {@code 403 image.reservee_au_proprietaire} s'il n'en est pas le propriétaire,
+     *         administrateur compris ; {@code 409 image.sens_non_modifiable} si l'Image a au moins un lien ;
+     *         {@code 400 image.sens_invalide} si le Sens n'existe pas, est d'un autre Mot ou ne lui est pas visible
+     */
+    @Transactional
+    public CarteIdentiteImageVue changerSens(UUID imageId, UUID sensId) {
+        UUID enseignantId = enseignantCourant.id();
+        Image image = imageDuProprietaire(imageId, enseignantId, true);
+        if (image.sensId().equals(sensId)) {
+            return carteIdentite(image, enseignantId);
+        }
+        if (liens.existePourImage(image.id())) {
+            throw new ErreurMetier(409, CODE_SENS_NON_MODIFIABLE,
+                    "Cette image est utilisée dans une préparation : son sens ne peut plus changer");
+        }
+        boolean visible = sensId != null
+                && sensVisibles(image, enseignantId).stream().anyMatch(sens -> sens.id().equals(sensId));
+        if (!visible) {
+            throw new ErreurMetier(400, CODE_SENS_INVALIDE, "Ce sens n'est pas un sens proposé pour le mot de l'image");
+        }
+        image.changerSens(sensId);
+        images.flush();
+        return carteIdentite(image, enseignantId);
+    }
+
+    /**
+     * Sens du Mot de l'Image visibles de l'enseignant (AD-2) : ceux qui portent une Image qui lui est proposable, ceux
+     * qu'il a retenus, et le Sens actuel de l'Image.
+     */
+    private List<SensVue> sensVisibles(Image image, UUID enseignantId) {
+        SensVue actuel = lexique.sens(image.sensId())
+                .orElseThrow(() -> new IllegalStateException("Sens introuvable de l'Image " + image.id()));
+        List<SensVue> duMot = lexique.sensDe(actuel.motId());
+        Set<UUID> visibles = new HashSet<>(usages.sensRetenusDuMot(actuel.motId()));
+        visibles.add(actuel.id());
+        images.deSens(duMot.stream().map(SensVue::id).toList()).stream()
+                .filter(illustration -> visibilite.proposable(illustration, enseignantId))
+                .forEach(illustration -> visibles.add(illustration.sensId()));
+        return duMot.stream().filter(sens -> visibles.contains(sens.id())).toList();
+    }
+
+    /**
      * Image {@code imageId}, si l'enseignant courant peut la consulter et en est le propriétaire.
      *
      * @throws ErreurMetier {@code 404 ressource.introuvable} si elle n'existe pas ou ne lui est pas consultable ;
      *         {@code 403 image.reservee_au_proprietaire} s'il n'en est pas le propriétaire, administrateur compris
      */
     private Image imageDuProprietaire(UUID imageId, UUID enseignantId) {
+        return imageDuProprietaire(imageId, enseignantId, false);
+    }
+
+    /**
+     * Image {@code imageId}, si l'enseignant courant peut la consulter et en est le propriétaire ; verrouillée
+     * ({@code SELECT … FOR UPDATE}) jusqu'à la fin de la transaction si {@code verrouiller}, avant toute vérification.
+     */
+    private Image imageDuProprietaire(UUID imageId, UUID enseignantId, boolean verrouiller) {
         Image image = (imageId == null || enseignantId == null ? Optional.<Image>empty()
-                : images.findByIdOptional(imageId))
+                : verrouiller ? images.verrouillee(imageId) : images.findByIdOptional(imageId))
                 .filter(trouvee -> visibilite.consultable(trouvee, enseignantId,
                         liens.existe(trouvee.id(), enseignantId)))
                 .orElseThrow(() -> new ErreurMetier(404, CODE_RESSOURCE_INTROUVABLE,
@@ -219,9 +303,9 @@ public class Images {
         List<ThemeVue> themes = referentiels.themes(image.themeIds()).values().stream()
                 .sorted(Comparator.comparing(ThemeVue::nom, collation).thenComparing(ThemeVue::id))
                 .toList();
-        return new CarteIdentiteImageVue(vue, mot, sens, Usages.LIBELLE_A_COMPLETER.equals(sens.libelle()), album,
-                licence, image.source(), image.auteur(), sections, albumModule == null ? null : module, albumModule,
-                themes);
+        boolean sensModifiable = image.proprietaireId().equals(enseignantId) && !liens.existePourImage(image.id());
+        return new CarteIdentiteImageVue(vue, mot, sens, Usages.aCompleter(sens), album, licence, image.source(),
+                image.auteur(), sections, albumModule == null ? null : module, albumModule, themes, sensModifiable);
     }
 
     /**

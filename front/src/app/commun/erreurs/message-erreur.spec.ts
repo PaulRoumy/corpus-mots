@@ -65,6 +65,12 @@ describe('messageErreur', () => {
       "Un de ces thèmes n'existe plus. Retirez-le, puis réessayez.",
     ],
     [400, 'image.module_introuvable', "Ce module n'existe plus. Choisissez-en un autre."],
+    [400, 'image.sens_invalide', "Ce sens n'est plus proposé pour ce mot. Choisissez-en un autre."],
+    [
+      409,
+      'image.sens_non_modifiable',
+      'Cette image est déjà utilisée dans une préparation : son sens ne peut plus changer. Pour un autre sens, ajoutez une nouvelle image.',
+    ],
     // vocabulaire.service.SuggestionsArasaac
     [503, 'arasaac.indisponible', "ARASAAC ne répond pas pour l'instant."],
     // referentiels.service.ReferentielsService

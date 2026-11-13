@@ -45,6 +45,9 @@ export const MESSAGES_PAR_CODE: Readonly<Record<string, string>> = {
     "Seul le propriétaire de l'image peut modifier sa carte d'identité.",
   'image.theme_introuvable': "Un de ces thèmes n'existe plus. Retirez-le, puis réessayez.",
   'image.module_introuvable': "Ce module n'existe plus. Choisissez-en un autre.",
+  'image.sens_invalide': "Ce sens n'est plus proposé pour ce mot. Choisissez-en un autre.",
+  'image.sens_non_modifiable':
+    'Cette image est déjà utilisée dans une préparation : son sens ne peut plus changer. Pour un autre sens, ajoutez une nouvelle image.',
   'album.titre_invalide': 'Saisissez un titre de 1 à 200 caractères.',
   'album.auteur_invalide': 'Saisissez un auteur de 1 à 200 caractères.',
   'album.editeur_invalide': 'Saisissez un éditeur de 200 caractères au plus.',

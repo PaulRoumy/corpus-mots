@@ -10,7 +10,8 @@ import org.eclipse.microprofile.openapi.annotations.media.Schema;
 
 /**
  * Carte d'identité d'une Image que l'enseignant connecté peut consulter (FR-14, AD-16) : l'Image, le Mot et le Sens
- * qu'elle illustre, son Album d'origine, sa licence, sa source et son auteur, ses Sections, son Module et ses Thèmes.
+ * qu'elle illustre, son Album d'origine, sa licence, sa source et son auteur, ses Sections, son Module et ses Thèmes,
+ * et si l'enseignant connecté peut changer son Sens.
  */
 public record CarteIdentiteImageDto(
         @Schema(required = true) UUID id,
@@ -41,7 +42,10 @@ public record CarteIdentiteImageDto(
         List<String> sections,
         @Schema(nullable = true, description = "Module de l'Image, de n'importe quel Album ; null sans Module")
         CarteIdentiteModuleDto module,
-        @Schema(required = true, description = "Thèmes de l'Image, par nom") List<CarteIdentiteThemeDto> themes) {
+        @Schema(required = true, description = "Thèmes de l'Image, par nom") List<CarteIdentiteThemeDto> themes,
+        @Schema(required = true, description = "Vrai seulement pour le propriétaire d'une Image sans aucun lien,"
+                + " dans aucune Préparation")
+        boolean sensModifiable) {
 
     static CarteIdentiteImageDto de(CarteIdentiteImageVue vue) {
         ImageVue image = vue.image();
@@ -58,6 +62,7 @@ public record CarteIdentiteImageDto(
                 vue.module() == null ? null
                         : new CarteIdentiteModuleDto(vue.module().id(), vue.module().nom(), vue.module().albumId(),
                                 vue.albumModule().titre()),
-                vue.themes().stream().map(theme -> new CarteIdentiteThemeDto(theme.id(), theme.nom())).toList());
+                vue.themes().stream().map(theme -> new CarteIdentiteThemeDto(theme.id(), theme.nom())).toList(),
+                vue.sensModifiable());
     }
 }

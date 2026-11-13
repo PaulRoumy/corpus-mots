@@ -14,6 +14,7 @@ import jakarta.transaction.Transactional;
 import java.util.Collection;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
@@ -82,6 +83,18 @@ public class Usages {
         return sensRetenus.dernierRetenu(enseignantCourant.id(), motId)
                 .map(Lexique::vue)
                 .orElseGet(() -> lexique.obtenirOuCreerSens(motId, LIBELLE_A_COMPLETER, null));
+    }
+
+    /** Identifiants des Sens du Mot {@code motId} que l'enseignant courant a retenus dans l'une de ses Préparations. */
+    @Transactional
+    public Set<UUID> sensRetenusDuMot(UUID motId) {
+        UUID enseignant = enseignantCourant.id();
+        return enseignant == null || motId == null ? Set.of() : sensRetenus.sensRetenusDuMot(enseignant, motId);
+    }
+
+    /** Vrai pour le Sens par défaut « à compléter » d'un Mot. */
+    static boolean aCompleter(SensVue sens) {
+        return LIBELLE_A_COMPLETER.equals(sens.libelle());
     }
 
     /**

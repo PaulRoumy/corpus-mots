@@ -3,6 +3,8 @@ package fr.corpusmots.vocabulaire.persistance;
 import io.quarkus.hibernate.orm.panache.PanacheRepositoryBase;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.persistence.LockModeType;
+import java.util.Collection;
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -17,6 +19,14 @@ public class ImageRepository implements PanacheRepositoryBase<Image, UUID> {
     /** Image {@code id}, verrouillée ({@code SELECT … FOR UPDATE}) jusqu'à la fin de la transaction (AD-17). */
     public Optional<Image> verrouillee(UUID id) {
         return find("id", id).withLock(LockModeType.PESSIMISTIC_WRITE).firstResultOptional();
+    }
+
+    /**
+     * Images qui illustrent l'un de ces Sens, de tous les enseignants et à tous les états : l'appelant les filtre par
+     * {@code VisibiliteImages} (AD-2).
+     */
+    public List<Image> deSens(Collection<UUID> sensIds) {
+        return sensIds.isEmpty() ? List.of() : list("sensId in ?1", sensIds);
     }
 
     /** Vrai si au moins une Image, de n'importe quel enseignant et à n'importe quel état, porte le Thème. */
