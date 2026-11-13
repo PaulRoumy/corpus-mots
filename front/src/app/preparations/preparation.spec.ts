@@ -2748,6 +2748,124 @@ describe('Preparation (En-tête)', () => {
       expect(document.activeElement).toBe(vignette('potiron'));
     });
 
+    it('le propriétaire passe l’image libre en photo personnelle : le Badge de la Carte de Mot change aussi', async () => {
+      TestBed.inject(CompteCourant).mettreAJour({
+        id: MOI,
+        administrateur: false,
+        email: 'moi@ecole.fr',
+        nomAffiche: 'Moi',
+      });
+      await ouvrirGrille();
+      vignette('citrouille').click();
+      await stabiliser();
+      const carte = {
+        id: IMAGE_1,
+        proprietaireId: MOI,
+        etat: 'privee' as const,
+        aRemplacer: null,
+        reutilisable: true,
+        typeImage: 'image_libre' as const,
+        aCompleter: false,
+        motId: CITROUILLE.motId,
+        forme: 'citrouille',
+        sens: { id: CITROUILLE.motId, libelle: 'légume', categorie: 'nom', aCompleter: false },
+        albumOrigine: null,
+        licence: 'cc0_domaine_public' as const,
+        source: 'site web',
+        auteur: null,
+      };
+      serveur.expectOne(`/api/images/${IMAGE_1}`).flush(carte);
+      await stabiliser();
+      const badge = (forme: string) =>
+        [...racine.querySelectorAll('app-carte-mot')]
+          .find((element) => element.textContent?.includes(forme))!
+          .querySelector('app-badge-type-image')
+          ?.textContent?.replace(/\s+/g, ' ')
+          .trim();
+      expect(badge('citrouille')).toBe('Type : image libre');
+
+      panneau()!
+        .querySelector<HTMLElement>('.carte-identite__type .mat-mdc-select-trigger')!
+        .click();
+      await stabiliser();
+      [...document.querySelectorAll<HTMLElement>('.cdk-overlay-pane mat-option')]
+        .find((option) => option.textContent?.trim() === 'photo personnelle')!
+        .click();
+      await stabiliser();
+      serveur
+        .expectOne(`/api/images/${IMAGE_1}/description`)
+        .flush({ ...carte, typeImage: 'photo_personnelle', licence: 'droits_auteur_enseignant' });
+      await stabiliser();
+
+      expect(badge('citrouille')).toBe('Type : photo personnelle');
+      expect(badge('potiron')).toBe('Type : image libre');
+      document
+        .querySelectorAll('.cdk-overlay-container')
+        .forEach((surcouche) => surcouche.remove());
+    });
+
+    it('panneau fermé pendant l’enregistrement : la réponse change quand même le Badge de la Carte de Mot', async () => {
+      TestBed.inject(CompteCourant).mettreAJour({
+        id: MOI,
+        administrateur: false,
+        email: 'moi@ecole.fr',
+        nomAffiche: 'Moi',
+      });
+      await ouvrirGrille();
+      vignette('citrouille').click();
+      await stabiliser();
+      const carte = {
+        id: IMAGE_1,
+        proprietaireId: MOI,
+        etat: 'privee' as const,
+        aRemplacer: null,
+        reutilisable: true,
+        typeImage: 'image_libre' as const,
+        aCompleter: false,
+        motId: CITROUILLE.motId,
+        forme: 'citrouille',
+        sens: { id: CITROUILLE.motId, libelle: 'légume', categorie: 'nom', aCompleter: false },
+        albumOrigine: null,
+        licence: 'cc0_domaine_public' as const,
+        source: 'site web',
+        auteur: null,
+      };
+      serveur.expectOne(`/api/images/${IMAGE_1}`).flush(carte);
+      await stabiliser();
+      const badge = (forme: string) =>
+        [...racine.querySelectorAll('app-carte-mot')]
+          .find((element) => element.textContent?.includes(forme))!
+          .querySelector('app-badge-type-image')
+          ?.textContent?.replace(/\s+/g, ' ')
+          .trim();
+      expect(badge('citrouille')).toBe('Type : image libre');
+
+      panneau()!
+        .querySelector<HTMLElement>('.carte-identite__type .mat-mdc-select-trigger')!
+        .click();
+      await stabiliser();
+      [...document.querySelectorAll<HTMLElement>('.cdk-overlay-pane mat-option')]
+        .find((option) => option.textContent?.trim() === 'photo personnelle')!
+        .click();
+      await stabiliser();
+      const requete = serveur.expectOne(`/api/images/${IMAGE_1}/description`);
+      panneau()!.querySelector<HTMLButtonElement>('button[aria-label="Fermer"]')!.click();
+      await stabiliser();
+      expect(panneau()).toBeNull();
+      requete.flush({
+        ...carte,
+        typeImage: 'photo_personnelle',
+        licence: 'droits_auteur_enseignant',
+      });
+      await stabiliser();
+
+      expect(badge('citrouille')).toBe('Type : photo personnelle');
+      expect(badge('potiron')).toBe('Type : image libre');
+      document
+        .querySelectorAll('.cdk-overlay-container')
+        .forEach((surcouche) => surcouche.remove());
+    });
+
     it('la vignette de l’Image déjà affichée rend le focus au panneau, sans relire', async () => {
       await ouvrirGrille();
       vignette('citrouille').click();

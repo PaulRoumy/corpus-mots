@@ -93,6 +93,58 @@ public class ImagesDeTest {
                 .executeUpdate());
     }
 
+    /** Remplace le fichier de l'Image par ces octets (et cette miniature), de {@code largeur} × {@code hauteur} px. */
+    public void fichier(UUID imageId, byte[] octets, byte[] miniature, String typeMime, int largeur, int hauteur) {
+        QuarkusTransaction.requiringNew().run(() -> entityManager.createNativeQuery(
+                "update image_fichier set octets = :octets, miniature = :miniature, type_mime = :type,"
+                        + " largeur = :largeur, hauteur = :hauteur where image_id = :id")
+                .setParameter("octets", octets)
+                .setParameter("miniature", miniature)
+                .setParameter("type", typeMime)
+                .setParameter("largeur", largeur)
+                .setParameter("hauteur", hauteur)
+                .setParameter("id", imageId)
+                .executeUpdate());
+    }
+
+    /** Image réduite enregistrée de l'Image. */
+    public byte[] octets(UUID imageId) {
+        return QuarkusTransaction.requiringNew().call(() -> (byte[]) entityManager.createNativeQuery(
+                "select octets from image_fichier where image_id = :id")
+                .setParameter("id", imageId)
+                .getSingleResult());
+    }
+
+    /** Miniature enregistrée de l'Image. */
+    public byte[] miniature(UUID imageId) {
+        return QuarkusTransaction.requiringNew().call(() -> (byte[]) entityManager.createNativeQuery(
+                "select miniature from image_fichier where image_id = :id")
+                .setParameter("id", imageId)
+                .getSingleResult());
+    }
+
+    /** Largeur et hauteur enregistrées du fichier de l'Image. */
+    public int[] dimensions(UUID imageId) {
+        return QuarkusTransaction.requiringNew().call(() -> {
+            Object[] ligne = (Object[]) entityManager.createNativeQuery(
+                    "select largeur, hauteur from image_fichier where image_id = :id")
+                    .setParameter("id", imageId)
+                    .getSingleResult();
+            return new int[] { ((Number) ligne[0]).intValue(), ((Number) ligne[1]).intValue() };
+        });
+    }
+
+    /** Type, licence, source et Album d'origine de l'Image, séparés par {@code |} ({@code null} pour une absence). */
+    public String description(UUID imageId) {
+        return QuarkusTransaction.requiringNew().call(() -> {
+            Object[] ligne = (Object[]) entityManager.createNativeQuery(
+                    "select type_image, licence, source, album_id from image where id = :id")
+                    .setParameter("id", imageId)
+                    .getSingleResult();
+            return ligne[0] + "|" + ligne[1] + "|" + ligne[2] + "|" + ligne[3];
+        });
+    }
+
     /** Passe la version de l'Image à {@code version}. */
     public void version(UUID imageId, long version) {
         QuarkusTransaction.requiringNew().run(() -> entityManager.createNativeQuery(

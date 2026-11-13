@@ -54,6 +54,11 @@ describe('messageErreur', () => {
     [400, 'image.album_introuvable', "Cet album n'existe plus. Choisissez-en un autre."],
     [400, 'image.mot_invalide', 'Saisissez un mot de 1 à 100 caractères.'],
     [400, 'image.sens_different', 'Cette image illustre un autre sens que celui du mot.'],
+    [
+      403,
+      'image.reservee_au_proprietaire',
+      "Seul le propriétaire de l'image peut modifier sa carte d'identité.",
+    ],
     // vocabulaire.service.SuggestionsArasaac
     [503, 'arasaac.indisponible', "ARASAAC ne répond pas pour l'instant."],
     // referentiels.service.ReferentielsService

@@ -288,6 +288,48 @@ components:
           - ps
           - ms
           - gs
+    DescriptionImageDto:
+      type: object
+      required:
+      - typeImage
+      properties:
+        typeImage:
+          type: string
+          enum:
+          - image_album
+          - image_libre
+          - photo_personnelle
+          - inconnu
+        licence:
+          type:
+          - string
+          - "null"
+          description: "Licence, facultative ; ignorée pour une photo personnelle\
+            \ ou une image d'album, qui reçoivent la leur"
+          enum:
+          - arasaac_cc_by_nc_sa
+          - sclera_cc_by_nc
+          - mulberry_cc_by_sa
+          - cc0_domaine_public
+          - pixabay
+          - autre_inconnue
+        source:
+          type:
+          - string
+          - "null"
+          maxLength: 500
+          description: "Source de l'image (site, ouvrage…), facultative"
+        auteur:
+          type:
+          - string
+          - "null"
+          maxLength: 500
+          description: "Auteur de l'image, facultatif"
+        albumId:
+          description: "Album d'origine, obligatoire pour une image d'album et ignoré\
+            \ sinon"
+          type: string
+          $ref: "#/components/schemas/UUID"
     EnseignantDto:
       type: object
       required:
@@ -1207,6 +1249,35 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/CarteIdentiteImageDto"
+      tags:
+      - Images Resource
+  /api/images/{id}/description:
+    put:
+      summary: "Modifier le type, la licence, la source, l'auteur et l'Album d'origine\
+        \ d'une Image (son seul propriétaire) ; passer en image d'album réduit l'Image\
+        \ à 400 × 400 px"
+      operationId: modifierDescriptionImage
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          $ref: "#/components/schemas/UUID"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/DescriptionImageDto"
+      responses:
+        "200":
+          description: Carte d'identité à jour de l'Image
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CarteIdentiteImageDto"
+        "400":
+          description: Bad Request
       tags:
       - Images Resource
   /api/images/{id}/fichier:

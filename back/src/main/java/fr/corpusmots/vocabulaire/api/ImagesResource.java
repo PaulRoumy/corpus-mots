@@ -7,12 +7,16 @@ import fr.corpusmots.vocabulaire.service.FichierImageVue;
 import fr.corpusmots.vocabulaire.service.FichierTeleverseVue;
 import fr.corpusmots.vocabulaire.service.FichiersImages;
 import fr.corpusmots.vocabulaire.service.Images;
+import fr.corpusmots.vocabulaire.service.Licence;
+import fr.corpusmots.vocabulaire.service.ModifierDescriptionImageCommande;
 import fr.corpusmots.vocabulaire.service.ReductionImages;
+import fr.corpusmots.vocabulaire.service.TypeImage;
 import fr.corpusmots.vocabulaire.service.UsageFichierImage;
 import jakarta.inject.Inject;
 import jakarta.ws.rs.Consumes;
 import jakarta.ws.rs.GET;
 import jakarta.ws.rs.POST;
+import jakarta.ws.rs.PUT;
 import jakarta.ws.rs.Path;
 import jakarta.ws.rs.PathParam;
 import jakarta.ws.rs.Produces;
@@ -29,13 +33,15 @@ import org.eclipse.microprofile.openapi.annotations.enums.SchemaType;
 import org.eclipse.microprofile.openapi.annotations.media.Content;
 import org.eclipse.microprofile.openapi.annotations.media.Schema;
 import org.eclipse.microprofile.openapi.annotations.parameters.Parameter;
+import org.eclipse.microprofile.openapi.annotations.parameters.RequestBody;
 import org.eclipse.microprofile.openapi.annotations.responses.APIResponse;
 import org.jboss.resteasy.reactive.ResponseStatus;
 
 /**
  * Images de l'enseignant connecté. {@code POST /images} ajoute une Image dans Mes mots, sans Préparation (FR-13) ;
  * {@code GET /images/{id}} rend la Carte d'identité d'une Image consultable (FR-14), sinon
- * {@code 404 ressource.introuvable}.
+ * {@code 404 ressource.introuvable} ; {@code PUT /images/{id}/description} en modifie le type, la licence, la source,
+ * l'auteur et l'Album d'origine, par le seul propriétaire ({@code 403 image.reservee_au_proprietaire} pour les autres).
  *
  * <p>Fichiers des Images (AD-23) : servis uniquement par {@link FichiersImages#lire}, qui applique la visibilité (AD-2).
  * Une Image que l'enseignant connecté ne peut pas consulter répond {@code 404 ressource.introuvable}, comme une Image
@@ -95,6 +101,30 @@ public class ImagesResource {
         return CarteIdentiteImageDto.de(images.carteIdentite(id)
                 .orElseThrow(() -> new ErreurMetier(404, "ressource.introuvable",
                         "Aucune image consultable ne porte cet identifiant")));
+    }
+
+    @PUT
+    @Path("/{id}/description")
+    @Consumes(MediaType.APPLICATION_JSON)
+    @Produces(MediaType.APPLICATION_JSON)
+    @Operation(operationId = "modifierDescriptionImage",
+            summary = "Modifier le type, la licence, la source, l'auteur et l'Album d'origine d'une Image (son seul"
+                    + " propriétaire) ; passer en image d'album réduit l'Image à 400 × 400 px")
+    @APIResponse(responseCode = "200", description = "Carte d'identité à jour de l'Image",
+            content = @Content(mediaType = MediaType.APPLICATION_JSON,
+                    schema = @Schema(implementation = CarteIdentiteImageDto.class)))
+    public CarteIdentiteImageDto modifierDescription(@PathParam("id") UUID id,
+            @RequestBody(required = true) DescriptionImageDto description) {
+        if (description == null) {
+            throw new ErreurMetier(400, "requete.invalide", "Le corps de la requête est obligatoire");
+        }
+        TypeImage type = TypeImage.deValeur(description.typeImage())
+                .orElseThrow(() -> new ErreurMetier(400, "requete.invalide", "Type d'image absent ou inconnu"));
+        Licence licence = description.licence() == null || description.licence().isBlank() ? null
+                : Licence.deValeur(description.licence())
+                        .orElseThrow(() -> new ErreurMetier(400, "requete.invalide", "Licence inconnue"));
+        return CarteIdentiteImageDto.de(images.modifierDescription(id, new ModifierDescriptionImageCommande(type,
+                licence, description.source(), description.auteur(), description.albumId())));
     }
 
     @GET

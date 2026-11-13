@@ -45,6 +45,7 @@ import { listerThemes } from '../api/fn/themes-resource/lister-themes';
 import { renommerTheme } from '../api/fn/themes-resource/renommer-theme';
 import { supprimerTheme } from '../api/fn/themes-resource/supprimer-theme';
 import { AlbumDto } from '../api/models/album-dto';
+import { CarteIdentiteImageDto } from '../api/models/carte-identite-image-dto';
 import { ModuleDto } from '../api/models/module-dto';
 import { MotPreparationDto } from '../api/models/mot-preparation-dto';
 import { PreparationDto } from '../api/models/preparation-dto';
@@ -532,6 +533,7 @@ type Source = 'module' | 'theme';
           class="disposition__panneau"
           [imageId]="ouverte.imageId"
           (fermer)="fermerCarteIdentite()"
+          [appliquer]="appliquerCarteIdentite"
         />
       }
     </div>
@@ -1069,6 +1071,25 @@ export class Preparation {
       { injector: this.injecteur },
     );
   }
+
+  /**
+   * Carte d'identité modifiée dans le panneau : le type et le repère « à compléter » de l'Image sont reportés sur
+   * chaque Carte de Mot qui l'affiche (Badge de type).
+   */
+  protected readonly appliquerCarteIdentite = (carte: CarteIdentiteImageDto): void => {
+    this.mots.update((mots) =>
+      mots === null
+        ? mots
+        : mots.map((mot) =>
+            mot.image?.id === carte.id
+              ? {
+                  ...mot,
+                  image: { ...mot.image, typeImage: carte.typeImage, aCompleter: carte.aCompleter },
+                }
+              : mot,
+          ),
+    );
+  };
 
   /** Thème créé, renommé ou supprimé depuis le Dialogue du Thème d'un Mot. */
   private appliquerChangementTheme({ type, theme }: ChangementTheme): void {

@@ -4,6 +4,7 @@ import fr.corpusmots.commun.api.ErreurMetier;
 import fr.corpusmots.commun.service.EnseignantCourant;
 import fr.corpusmots.referentiels.service.AlbumVue;
 import fr.corpusmots.referentiels.service.ReferentielsService;
+import fr.corpusmots.vocabulaire.persistance.FichierLu;
 import fr.corpusmots.vocabulaire.persistance.Image;
 import fr.corpusmots.vocabulaire.persistance.ImageFichier;
 import fr.corpusmots.vocabulaire.persistance.ImageFichierRepository;
@@ -28,6 +29,8 @@ public class Images {
     static final String CODE_ALBUM_INTROUVABLE = "image.album_introuvable";
     static final String CODE_MOT_INVALIDE = "image.mot_invalide";
     static final String CODE_REQUETE_INVALIDE = "requete.invalide";
+    static final String CODE_RESSOURCE_INTROUVABLE = "ressource.introuvable";
+    static final String CODE_RESERVEE_AU_PROPRIETAIRE = "image.reservee_au_proprietaire";
     static final String TYPE_MEDIA_IMAGE = "image";
 
     /** Longueur maximale de la source et de l'auteur d'une Image. */
@@ -57,6 +60,9 @@ public class Images {
     @Inject
     LienImageRepository liens;
 
+    @Inject
+    ReductionImages reduction;
+
     /**
      * Carte d'identité de l'Image {@code imageId}, si l'enseignant courant peut la consulter
      * ({@link VisibiliteImages#consultable}, lien compris, comme {@link FichiersImages#lire}) ; vide si elle n'existe
@@ -72,6 +78,60 @@ public class Images {
         return images.findByIdOptional(imageId)
                 .filter(image -> visibilite.consultable(image, enseignantId, liens.existe(image.id(), enseignantId)))
                 .map(image -> carteIdentite(image, enseignantId));
+    }
+
+    /**
+     * Remplace d'un coup le type, la licence, la source, l'auteur et l'Album d'origine de l'Image {@code imageId}, par
+     * son seul propriétaire (FR-14), avec les règles de {@link #televerser} : licence imposée par le type ou choisie
+     * dans le Sélecteur, Album d'origine pour une image d'album seulement. Passer d'une licence imposée à une image
+     * libre ou inconnue laisse la licence vide si aucune n'est choisie ; quitter l'image d'album efface l'Album
+     * d'origine, le fichier restant en basse résolution. Passer en image d'album réduit aussitôt le fichier et sa
+     * miniature à {@value ReductionImages#COTE_MAX_ALBUM} px au plus, dans la même transaction. L'état ne change pas
+     * (AD-3) ; {@code @Version} protège contre deux écritures concurrentes. Rien n'est modifié en cas de refus.
+     *
+     * @return la Carte d'identité à jour
+     * @throws ErreurMetier {@code 404 ressource.introuvable} si l'Image n'existe pas ou n'est pas consultable par
+     *         l'enseignant courant ; {@code 403 image.reservee_au_proprietaire} s'il n'en est pas le propriétaire,
+     *         administrateur compris ; et les refus de {@link #televerser} (type, licence, textes, Album d'origine)
+     */
+    @Transactional
+    public CarteIdentiteImageVue modifierDescription(UUID imageId, ModifierDescriptionImageCommande commande) {
+        UUID enseignantId = enseignantCourant.id();
+        Image image = (imageId == null || enseignantId == null ? Optional.<Image>empty()
+                : images.findByIdOptional(imageId))
+                .filter(trouvee -> visibilite.consultable(trouvee, enseignantId,
+                        liens.existe(trouvee.id(), enseignantId)))
+                .orElseThrow(() -> new ErreurMetier(404, CODE_RESSOURCE_INTROUVABLE,
+                        "Aucune image consultable ne porte cet identifiant"));
+        if (!image.proprietaireId().equals(enseignantId)) {
+            throw new ErreurMetier(403, CODE_RESERVEE_AU_PROPRIETAIRE,
+                    "Seul le propriétaire de l'image peut modifier sa carte d'identité");
+        }
+        TypeImage type = commande == null ? null : commande.typeImage();
+        if (type == null) {
+            throw new ErreurMetier(400, CODE_REQUETE_INVALIDE, "Le type d'image est obligatoire");
+        }
+        UUID albumId = albumDOrigine(type, commande.albumId());
+        Licence licence = licence(type, commande.licence());
+        String source = texte(commande.source(), "source");
+        String auteur = texte(commande.auteur(), "auteur");
+        boolean devientImageAlbum = type == TypeImage.IMAGE_ALBUM
+                && !TypeImage.IMAGE_ALBUM.valeur().equals(image.typeImage());
+        if (devientImageAlbum) {
+            reduireEnImageAlbum(image.id());
+        }
+        image.decrire(type.valeur(), licence == null ? null : licence.valeur(), source, auteur, albumId);
+        images.flush();
+        return carteIdentite(image, enseignantId);
+    }
+
+    /** Réduit le fichier de l'Image et sa miniature à la taille d'une image d'album. */
+    private void reduireEnImageAlbum(UUID imageId) {
+        FichierLu actuel = fichiers.octets(imageId)
+                .orElseThrow(() -> new IllegalStateException("Fichier introuvable de l'Image " + imageId));
+        ImageReduiteVue reduit = reduction.reduire(actuel.octets(), TypeImage.IMAGE_ALBUM);
+        fichiers.remplacer(imageId, reduit.octets(), reduit.miniature(), reduit.typeMime(), reduit.largeur(),
+                reduit.hauteur());
     }
 
     private CarteIdentiteImageVue carteIdentite(Image image, UUID enseignantId) {

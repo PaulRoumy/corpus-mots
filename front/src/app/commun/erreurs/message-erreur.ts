@@ -41,6 +41,8 @@ export const MESSAGES_PAR_CODE: Readonly<Record<string, string>> = {
   'image.album_introuvable': "Cet album n'existe plus. Choisissez-en un autre.",
   'image.mot_invalide': 'Saisissez un mot de 1 à 100 caractères.',
   'image.sens_different': 'Cette image illustre un autre sens que celui du mot.',
+  'image.reservee_au_proprietaire':
+    "Seul le propriétaire de l'image peut modifier sa carte d'identité.",
   'album.titre_invalide': 'Saisissez un titre de 1 à 200 caractères.',
   'album.auteur_invalide': 'Saisissez un auteur de 1 à 200 caractères.',
   'album.editeur_invalide': 'Saisissez un éditeur de 200 caractères au plus.',

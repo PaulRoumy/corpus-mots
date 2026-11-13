@@ -18,6 +18,17 @@ public class ImageFichierRepository implements PanacheRepositoryBase<ImageFichie
         return lire("f.miniature", imageId);
     }
 
+    /**
+     * Remplace le fichier de l'Image {@code imageId} (image réduite, miniature, type MIME et dimensions), sans le
+     * charger.
+     *
+     * @return nombre de lignes modifiées (0 si l'Image n'a pas de fichier)
+     */
+    public int remplacer(UUID imageId, byte[] octets, byte[] miniature, String typeMime, int largeur, int hauteur) {
+        return update("octets = ?1, miniature = ?2, typeMime = ?3, largeur = ?4, hauteur = ?5 where imageId = ?6",
+                octets, miniature, typeMime, largeur, hauteur, imageId);
+    }
+
     private Optional<FichierLu> lire(String colonne, UUID imageId) {
         return getEntityManager().createQuery("select new " + FichierLu.class.getName() + "(" + colonne
                 + ", f.typeMime) from ImageFichier f where f.imageId = :image", FichierLu.class)

@@ -77,6 +77,18 @@ public class Image {
         return image;
     }
 
+    /**
+     * Remplace d'un coup le type, la licence, la source, l'auteur et l'Album d'origine, déjà validés par
+     * {@code vocabulaire.service.Images} ; l'état ne change pas (AD-3).
+     */
+    public void decrire(String typeImage, String licence, String source, String auteur, UUID albumId) {
+        this.typeImage = typeImage;
+        this.licence = licence;
+        this.source = source;
+        this.auteur = auteur;
+        this.albumId = albumId;
+    }
+
     public UUID id() {
         return id;
     }

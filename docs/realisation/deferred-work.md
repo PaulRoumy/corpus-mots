@@ -197,3 +197,6 @@
 - source_spec: none
   summary: Story 2.6, partie 4 : Sens et catégorie grammaticale dans la Carte d'identité ; changer le Sens d'une Image refusé dès qu'elle a un lien, chez quiconque, avec un message qui propose d'ajouter une nouvelle Image (AD-5) ; la Création de Sens dans le panneau arrive avec la story 2.8.
   evidence: Découpage de la story 2.6 en quatre parties choisi par Paul.
+- source_spec: `docs/realisation/spec-2-6-2-modifier-la-carte-d-identite.md`
+  summary: Epic 3 (versement) : modifier la description d'une Image versée (licence non partageable, passage en photo personnelle, image d'album ou type inconnu) doit appliquer les règles du versement — refuser, ou retirer l'Image de la Banque.
+  evidence: Revue de la story 2.6, partie 2, ligne 9 du journal de tri : `Images.modifierDescription` ne regarde pas l'`etat` ; sans conséquence tant que l'état `versee` n'existe pas.
