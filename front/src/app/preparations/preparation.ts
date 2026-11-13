@@ -52,7 +52,12 @@ import { BandeauErreur } from '../commun/bandeau-erreur/bandeau-erreur';
 import { ChampThemes, themesParNom } from '../commun/champ-themes/champ-themes';
 import { CompteCourant } from '../commun/compte-courant';
 import { DialogueConfirmation } from '../commun/dialogue-confirmation/dialogue-confirmation';
-import { codeErreur, MESSAGES_PAR_CODE, messageErreur } from '../commun/erreurs/message-erreur';
+import {
+  codeErreur,
+  erreurPassagere,
+  MESSAGES_PAR_CODE,
+  messageErreur,
+} from '../commun/erreurs/message-erreur';
 import { RepereSection } from '../commun/repere-section/repere-section';
 import { Squelette } from '../commun/squelette/squelette';
 import { CarteMot } from './carte-mot';
@@ -160,7 +165,7 @@ export function messageEchecRetrait(echec: EchecRetrait): string {
   return `${mots} ${verbe}. ${echec.message}`;
 }
 
-/** Rétablissement d'un Mot retiré qui a échoué ; `reessayable` est faux si le Mot est revenu entre-temps (409). */
+/** Rétablissement d'un Mot retiré qui a échoué ; `reessayable` n'est vrai que pour une erreur réseau ou 5xx. */
 interface EchecRetablissement {
   readonly preparationId: string;
   readonly mot: MotPreparationDto;
@@ -880,7 +885,12 @@ export class Preparation {
       });
       if (numero === this.dernierChargement) {
         this.mots.update((mots) => (mots === null ? mots : inserer(mots, retabli)));
-        this.annonce.set(`« ${retabli.forme} » rétabli.`);
+        // L'Image retirée qui n'est plus proposable ou a changé de Sens n'est pas reliée : le Mot revient « à illustrer ».
+        this.annonce.set(
+          retire.image && !retabli.image
+            ? `« ${retabli.forme} » rétabli, sans son image, qui n'est plus disponible.`
+            : `« ${retabli.forme} » rétabli.`,
+        );
         this.focaliserApresRendu(retabli);
       }
     } catch (erreur) {
@@ -891,7 +901,9 @@ export class Preparation {
         preparationId,
         mot: retire,
         message: messageErreur(erreur),
-        reessayable: codeErreur(erreur) !== 'preparation.mot_deja_present',
+        // Un refus du back (Mot revenu entre-temps, Sens disparu…) se répéterait : seuls le réseau et les 5xx se
+        // réessaient.
+        reessayable: erreurPassagere(erreur),
       });
       // Le Bandeau « Annuler » ou « Réessayer », qui avait le focus, a disparu : le focus revient au Champ de saisie.
       if (

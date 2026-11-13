@@ -5,10 +5,8 @@ import fr.corpusmots.commun.service.Pagination;
 import fr.corpusmots.commun.service.Section;
 import fr.corpusmots.preparations.service.PreparationsService;
 import fr.corpusmots.preparations.service.TeleverserImageMotCommande;
-import fr.corpusmots.vocabulaire.service.Licence;
-import fr.corpusmots.vocabulaire.service.ImageReduiteVue;
+import fr.corpusmots.vocabulaire.service.FichierTeleverseVue;
 import fr.corpusmots.vocabulaire.service.ReductionImages;
-import fr.corpusmots.vocabulaire.service.TypeImage;
 import jakarta.inject.Inject;
 import jakarta.ws.rs.Consumes;
 import jakarta.ws.rs.DELETE;
@@ -20,9 +18,6 @@ import jakarta.ws.rs.PathParam;
 import jakarta.ws.rs.Produces;
 import jakarta.ws.rs.QueryParam;
 import jakarta.ws.rs.core.MediaType;
-import java.io.IOException;
-import java.io.UncheckedIOException;
-import java.nio.file.Files;
 import java.util.List;
 import java.util.UUID;
 import org.eclipse.microprofile.openapi.annotations.Operation;
@@ -158,23 +153,12 @@ public class PreparationsResource {
         if (televersement == null || televersement.fichier == null) {
             throw new ErreurMetier(400, "requete.invalide", "Le fichier est obligatoire");
         }
-        TypeImage type = TypeImage.deValeur(televersement.typeImage)
-                .orElseThrow(() -> new ErreurMetier(400, "requete.invalide", "Type d'image absent ou inconnu"));
-        Licence licence = televersement.licence == null || televersement.licence.isBlank() ? null
-                : Licence.deValeur(televersement.licence)
-                        .orElseThrow(() -> new ErreurMetier(400, "requete.invalide", "Licence inconnue"));
-        // 413 avant de lire le fichier en mémoire : reduire() ne prend que des octets déjà lus.
-        reduction.verifierTaille(televersement.fichier.size());
-        byte[] octets;
-        try {
-            octets = Files.readAllBytes(televersement.fichier.uploadedFile());
-        } catch (IOException erreur) {
-            throw new UncheckedIOException(erreur);
-        }
-        // Réduction coûteuse hors transaction : aucune connexion tenue pendant le décodage.
-        ImageReduiteVue fichier = reduction.reduire(octets, type);
+        // Lecture et réduction coûteuses hors transaction : aucune connexion tenue pendant le décodage.
+        FichierTeleverseVue prepare = reduction.preparerTeleversement(televersement.fichier.uploadedFile(),
+                televersement.fichier.size(), televersement.typeImage, televersement.licence);
         return MotPreparationDto.de(preparations.televerserImage(id, motPreparationId,
-                new TeleverserImageMotCommande(fichier, type, licence, televersement.source, televersement.auteur)));
+                new TeleverserImageMotCommande(prepare.fichier(), prepare.typeImage(), prepare.licence(),
+                        televersement.source, televersement.auteur)));
     }
 
     @PUT

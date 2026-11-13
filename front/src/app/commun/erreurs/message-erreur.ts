@@ -94,6 +94,14 @@ export function codeErreur(erreur: unknown): string | null {
 }
 
 /**
+ * Vrai si l'erreur est passagère et mérite « Réessayer » : la requête n'a pas atteint le serveur (statut `0`) ou le
+ * serveur a échoué (statut 5xx). Un refus du back (4xx) ou une erreur qui ne vient pas de HttpClient ne se réessaie pas.
+ */
+export function erreurPassagere(erreur: unknown): boolean {
+  return erreur instanceof HttpErrorResponse && (erreur.status === 0 || erreur.status >= 500);
+}
+
+/**
  * Les opérations sans corps de réponse (`204`) sont générées en `responseType: 'text'` : leur erreur RFC 9457 arrive
  * alors en texte JSON, à relire.
  */

@@ -112,6 +112,18 @@ class MesMotsImagesResourceTest {
     }
 
     @Test
+    void unDoubleArticleNEnPerdQuUnCommeEnPreparation() {
+        String motId = ajouter(FichiersDeTest.png(10, 10), "a.png",
+                champs("le l'ours", "inconnu", null, null, null, null))
+                .statusCode(201).body("forme", equalTo("l'ours")).extract().path("motId");
+        // Même saisie, même Mot : « l'ours » est la forme que donne aussi la Préparation (MotsPreparationResourceTest).
+        ajouter(FichiersDeTest.png(10, 10), "b.png", champs("Le l'ours", "inconnu", null, null, null, null))
+                .statusCode(201).body("motId", equalTo(motId)).body("forme", equalTo("l'ours"));
+
+        assertEquals(List.of("l'ours"), formesDesMots());
+    }
+
+    @Test
     void unMotDejaRetenuPrendLeSensRetenuLePlusRecemment() {
         UUID citrouille = mot("citrouille");
         UUID legume = sens(citrouille, "légume", "nom");

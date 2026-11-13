@@ -1,5 +1,5 @@
 import { HttpErrorResponse } from '@angular/common/http';
-import { codeErreur, MESSAGE_RESEAU, messageErreur } from './message-erreur';
+import { codeErreur, erreurPassagere, MESSAGE_RESEAU, messageErreur } from './message-erreur';
 
 const SERVICE_INDISPONIBLE = 'Le service ne répond pas comme prévu. Réessayez dans un instant.';
 
@@ -164,5 +164,20 @@ describe('codeErreur', () => {
     expect(codeErreur(new HttpErrorResponse({ status: 400, error: { code: 42 } }))).toBeNull();
     expect(codeErreur(new HttpErrorResponse({ status: 400, error: 'texte' }))).toBeNull();
     expect(codeErreur(new Error('x'))).toBeNull();
+  });
+});
+
+describe('erreurPassagere', () => {
+  it('vrai pour une erreur réseau (statut 0) ou une erreur 5xx', () => {
+    expect(erreurPassagere(new HttpErrorResponse({ status: 0 }))).toBe(true);
+    expect(erreurPassagere(reponse(500, 'erreur.interne'))).toBe(true);
+    expect(erreurPassagere(new HttpErrorResponse({ status: 503 }))).toBe(true);
+  });
+
+  it('faux pour un refus du back (4xx) ou une erreur hors HttpClient', () => {
+    expect(erreurPassagere(reponse(409, 'preparation.mot_deja_present'))).toBe(false);
+    expect(erreurPassagere(reponse(404, 'ressource.introuvable'))).toBe(false);
+    expect(erreurPassagere(reponse(400, 'preparation.sens_invalide'))).toBe(false);
+    expect(erreurPassagere(new Error('x'))).toBe(false);
   });
 });

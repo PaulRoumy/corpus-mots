@@ -62,6 +62,7 @@ class LexiqueTest {
             "l' âne|âne",
             "le|le",
             "l'|l'",
+            "le l'ours|l'ours",
             "lexique|lexique",
             "laine|laine",
             "lesquels|lesquels",
@@ -102,6 +103,14 @@ class LexiqueTest {
         assertEquals("cote", formeRecherche("côte"));
         assertEquals("cote", formeRecherche("côté"));
         assertEquals(1L, nombre("select count(*) from mot where forme_cle = 'lapin'"));
+    }
+
+    @Test
+    void obtenirOuCreerNeRetireQuUnArticle() {
+        MotVue ours = enTransaction("le l'ours");
+
+        assertEquals("l'ours", ours.forme());
+        assertEquals(ours.id(), enTransaction("Le l’ours").id());
     }
 
     @Test

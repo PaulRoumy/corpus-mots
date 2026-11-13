@@ -11,6 +11,8 @@ import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.UncheckedIOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.Iterator;
 import java.util.Locale;
 import java.util.Set;
@@ -74,6 +76,37 @@ public class ReductionImages {
             throw new ErreurMetier(413, CODE_TROP_VOLUMINEUX,
                     "Le fichier dépasse " + tailleMaximale.asLongValue() + " octets");
         }
+    }
+
+    /**
+     * Prépare un fichier téléversé, hors transaction, pour {@link Images#televerser} : lit le type d'Image et la licence
+     * saisis, refuse un fichier trop lourd avant de le lire en mémoire, puis le lit et le réduit pour ce type. Seul
+     * point d'entrée des ressources de téléversement, qui ne passent que le chemin du fichier reçu et sa taille.
+     *
+     * @param chemin fichier reçu, déjà écrit sur disque par le serveur
+     * @param taille taille annoncée de ce fichier, en octets
+     * @param typeImage valeur du type d'Image saisie
+     * @param licence valeur de la licence saisie ; vide ou {@code null} : non renseignée
+     * @throws ErreurMetier {@code 400 requete.invalide} si le type est absent ou inconnu, ou si la licence est inconnue ;
+     *         {@code 413 requete.trop_volumineuse} si le fichier dépasse la taille maximale ;
+     *         {@code 415 format.non_supporte} s'il est vide, illisible, d'un format non accepté ou trop grand
+     */
+    public FichierTeleverseVue preparerTeleversement(Path chemin, long taille, String typeImage, String licence) {
+        TypeImage type = TypeImage.deValeur(typeImage)
+                .orElseThrow(() -> new ErreurMetier(400, Images.CODE_REQUETE_INVALIDE,
+                        "Type d'image absent ou inconnu"));
+        Licence licenceLue = licence == null || licence.isBlank() ? null
+                : Licence.deValeur(licence)
+                        .orElseThrow(() -> new ErreurMetier(400, Images.CODE_REQUETE_INVALIDE, "Licence inconnue"));
+        // 413 avant de lire le fichier en mémoire : reduire() ne prend que des octets déjà lus.
+        verifierTaille(taille);
+        byte[] octets;
+        try {
+            octets = Files.readAllBytes(chemin);
+        } catch (IOException erreur) {
+            throw new UncheckedIOException(erreur);
+        }
+        return new FichierTeleverseVue(type, licenceLue, reduire(octets, type));
     }
 
     /** Plus grand côté d'une Image de ce type, une fois réduite. */

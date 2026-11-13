@@ -52,15 +52,14 @@ public class Images {
 
     /**
      * Ajoute une Image dans Mes mots de l'enseignant courant, sans aucun lien vers une Préparation (FR-13) : le Mot
-     * saisi est obtenu ou créé par {@link Lexique#obtenirOuCreerMot}, l'Image illustre son
-     * {@link Usages#sensParDefaut Sens par défaut} et elle est créée par {@link #televerser}. Seule une image d'album
-     * reçoit un Album d'origine, qui doit exister ; l'Album envoyé pour un autre type est ignoré. Aucun Sens retenu ni
-     * lien d'Image n'est écrit. Rien n'est enregistré en cas de refus.
+     * saisi est obtenu ou créé par {@link Lexique#obtenirOuCreerMot}, qui le normalise (une seule fois, comme en
+     * Préparation), l'Image illustre son {@link Usages#sensParDefaut Sens par défaut} et elle est créée par
+     * {@link #televerser}, qui applique la règle de l'Album d'origine. Aucun Sens retenu ni lien d'Image n'est écrit.
+     * Rien n'est enregistré en cas de refus.
      *
      * @throws ErreurMetier {@code 400 image.mot_invalide} si la saisie normalisée par {@link Lexique#normaliser} est
      *         vide ou dépasse {@value Lexique#LONGUEUR_MAX_FORME} caractères (comme en Préparation : un article seul
-     *         est un Mot) ; {@code 400 image.album_requis} pour une image d'album sans Album ;
-     *         {@code 400 image.album_introuvable} si cet Album n'existe pas ; et les refus de {@link #televerser}
+     *         est un Mot) ; et les refus de {@link #televerser}, dont ceux de l'Album d'origine
      */
     @Transactional
     public ImageMesMotsVue ajouterDansMesMots(AjouterImageCommande commande) {
@@ -73,20 +72,10 @@ public class Images {
             throw new ErreurMetier(400, CODE_MOT_INVALIDE,
                     "Le mot doit compter de 1 à " + Lexique.LONGUEUR_MAX_FORME + " caractères");
         }
-        UUID albumId = null;
-        if (type == TypeImage.IMAGE_ALBUM) {
-            if (commande.albumId() == null) {
-                throw new ErreurMetier(400, CODE_ALBUM_REQUIS, "Une image d'album exige son Album d'origine");
-            }
-            albumId = referentiels.album(commande.albumId())
-                    .orElseThrow(() -> new ErreurMetier(400, CODE_ALBUM_INTROUVABLE,
-                            "Aucun album ne porte cet identifiant"))
-                    .id();
-        }
-        MotVue mot = lexique.obtenirOuCreerMot(forme);
+        MotVue mot = lexique.obtenirOuCreerMot(commande.mot());
         SensVue sens = usages.sensParDefaut(mot.id());
         ImageVue image = televerser(new TeleverserImageCommande(commande.fichier(), sens.id(), type,
-                commande.licence(), commande.source(), commande.auteur(), albumId));
+                commande.licence(), commande.source(), commande.auteur(), commande.albumId()));
         return new ImageMesMotsVue(image, mot, sens);
     }
 
@@ -94,11 +83,13 @@ public class Images {
      * Crée l'Image téléversée et son fichier, déjà réduit. La licence suit le type : {@code droits_auteur_enseignant}
      * pour une photo personnelle, {@code usage_pedagogique_album} pour une image d'album ; pour une image libre ou de
      * type inconnu, celle de la commande, facultative, parmi les six du Sélecteur de licence. Une image libre sans
-     * source ou sans licence est enregistrée, marquée {@code aCompleter}.
+     * source ou sans licence est enregistrée, marquée {@code aCompleter}. Seule une image d'album reçoit un Album
+     * d'origine, qui doit exister ({@code referentiels}) ; l'Album de la commande est ignoré pour un autre type.
      *
      * @throws ErreurMetier {@code 400 requete.invalide} si le type manque, si la licence ne peut pas être choisie pour
      *         ce type, ou si la source ou l'auteur dépassent {@value #LONGUEUR_MAX_TEXTE} caractères ;
-     *         {@code 400 image.album_requis} pour une image d'album sans Album d'origine
+     *         {@code 400 image.album_requis} pour une image d'album sans Album d'origine ;
+     *         {@code 400 image.album_introuvable} si cet Album n'existe pas
      * @throws IllegalArgumentException si le fichier manque ou n'a pas été réduit pour ce type
      */
     @Transactional
@@ -111,21 +102,39 @@ public class Images {
         if (fichier == null || Math.max(fichier.largeur(), fichier.hauteur()) > ReductionImages.coteMaximal(type)) {
             throw new IllegalArgumentException("Fichier absent ou non réduit par ReductionImages pour le type " + type);
         }
-        if (type == TypeImage.IMAGE_ALBUM && commande.albumId() == null) {
-            throw new ErreurMetier(400, CODE_ALBUM_REQUIS, "Une image d'album exige son Album d'origine");
-        }
+        UUID albumId = albumDOrigine(type, commande.albumId());
         Licence licence = licence(type, commande.licence());
         String source = texte(commande.source(), "source");
         String auteur = texte(commande.auteur(), "auteur");
         UUID proprietaire = enseignantCourant.id();
         Image image = Image.nouvelle(images.nouvelIdentifiant(), proprietaire, commande.sensId(), TYPE_MEDIA_IMAGE,
-                type.valeur(), licence == null ? null : licence.valeur(), source, auteur, commande.albumId(),
+                type.valeur(), licence == null ? null : licence.valeur(), source, auteur, albumId,
                 EtatImage.PRIVEE.valeur());
         images.persist(image);
         fichiers.persist(ImageFichier.nouveau(image.id(), fichier.octets(), fichier.miniature(), fichier.typeMime(),
                 fichier.largeur(), fichier.hauteur()));
         images.flush();
         return vue(image, proprietaire, visibilite);
+    }
+
+    /**
+     * Album d'origine d'une Image de ce type : celui demandé pour une image d'album, après vérification de son
+     * existence ; {@code null} pour tout autre type, quel que soit l'Album demandé.
+     *
+     * @throws ErreurMetier {@code 400 image.album_requis} pour une image d'album sans Album ;
+     *         {@code 400 image.album_introuvable} si cet Album n'existe pas
+     */
+    private UUID albumDOrigine(TypeImage type, UUID albumId) {
+        if (type != TypeImage.IMAGE_ALBUM) {
+            return null;
+        }
+        if (albumId == null) {
+            throw new ErreurMetier(400, CODE_ALBUM_REQUIS, "Une image d'album exige son Album d'origine");
+        }
+        return referentiels.album(albumId)
+                .orElseThrow(() -> new ErreurMetier(400, CODE_ALBUM_INTROUVABLE,
+                        "Aucun album ne porte cet identifiant"))
+                .id();
     }
 
     /** Licence d'une Image de ce type : imposée par le type, ou choisie dans le Sélecteur de licence. */

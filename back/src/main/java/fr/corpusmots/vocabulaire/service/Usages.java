@@ -98,17 +98,51 @@ public class Usages {
     @Transactional
     public ImageVue lierImage(LierImageCommande commande) {
         UUID enseignant = enseignantCourant.id();
-        Image image = (commande.imageId() == null ? Optional.<Image>empty()
-                : images.verrouillee(commande.imageId()))
-                .filter(trouvee -> visibilite.proposable(trouvee, enseignant))
+        Image image = imageProposable(commande.imageId(), enseignant)
                 .orElseThrow(() -> new ErreurMetier(404, CODE_INTROUVABLE,
                         "Aucune image proposable ne porte cet identifiant"));
-        UUID sensRetenu = sensRetenus.sensIdDe(commande.preparationMotId())
-                .orElseThrow(() -> new IllegalStateException("Sens retenu du mot de préparation "
-                        + commande.preparationMotId() + " introuvable"));
-        if (!image.sensId().equals(sensRetenu)) {
+        if (!image.sensId().equals(sensRetenu(commande.preparationMotId()))) {
             throw new ErreurMetier(400, CODE_SENS_DIFFERENT, "Cette image illustre un autre sens que le sens retenu");
         }
+        return lier(commande, image, enseignant);
+    }
+
+    /**
+     * Lie l'Image de la commande au Mot de Préparation de l'enseignant courant si elle peut l'être, sans rien refuser :
+     * mêmes contrôles que {@link #lierImage} (verrou, {@link VisibiliteImages#proposable proposable}, Sens retenu), mais
+     * une Image absente, qui ne lui est plus proposable ou qui illustre un autre Sens n'est pas liée et le Mot reste
+     * « à illustrer ». Sert au rétablissement d'un Mot retiré, sans exception qui marquerait la transaction en
+     * annulation.
+     *
+     * @return l'Image liée, vue par l'enseignant courant ; vide si elle n'a pas été liée
+     * @throws ErreurMetier {@code 409 preparation.mot_deja_illustre} si le Mot a déjà une Image
+     * @throws IllegalStateException si le Mot de Préparation n'a pas de Sens retenu
+     */
+    @Transactional
+    public Optional<ImageVue> lierImageSiPossible(LierImageCommande commande) {
+        UUID enseignant = enseignantCourant.id();
+        Optional<Image> image = imageProposable(commande.imageId(), enseignant);
+        if (image.isEmpty() || !image.get().sensId().equals(sensRetenu(commande.preparationMotId()))) {
+            return Optional.empty();
+        }
+        return Optional.of(lier(commande, image.get(), enseignant));
+    }
+
+    /** Image {@code imageId}, verrouillée, si elle existe et est proposable à l'enseignant. */
+    private Optional<Image> imageProposable(UUID imageId, UUID enseignant) {
+        return (imageId == null ? Optional.<Image>empty() : images.verrouillee(imageId))
+                .filter(trouvee -> visibilite.proposable(trouvee, enseignant));
+    }
+
+    /** Sens retenu pour le Mot de Préparation {@code preparationMotId}. */
+    private UUID sensRetenu(UUID preparationMotId) {
+        return sensRetenus.sensIdDe(preparationMotId)
+                .orElseThrow(() -> new IllegalStateException("Sens retenu du mot de préparation "
+                        + preparationMotId + " introuvable"));
+    }
+
+    /** Écrit le lien, l'Image ayant passé les contrôles. */
+    private ImageVue lier(LierImageCommande commande, Image image, UUID enseignant) {
         if (liens.existePourMot(commande.preparationMotId())) {
             throw new ErreurMetier(409, CODE_MOT_DEJA_ILLUSTRE, "Ce mot a déjà une image dans la préparation");
         }

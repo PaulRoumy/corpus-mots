@@ -4,12 +4,10 @@ import fr.corpusmots.commun.api.ErreurMetier;
 import fr.corpusmots.commun.service.EnseignantCourant;
 import fr.corpusmots.vocabulaire.service.AjouterImageCommande;
 import fr.corpusmots.vocabulaire.service.FichierImageVue;
+import fr.corpusmots.vocabulaire.service.FichierTeleverseVue;
 import fr.corpusmots.vocabulaire.service.FichiersImages;
-import fr.corpusmots.vocabulaire.service.ImageReduiteVue;
 import fr.corpusmots.vocabulaire.service.Images;
-import fr.corpusmots.vocabulaire.service.Licence;
 import fr.corpusmots.vocabulaire.service.ReductionImages;
-import fr.corpusmots.vocabulaire.service.TypeImage;
 import fr.corpusmots.vocabulaire.service.UsageFichierImage;
 import jakarta.inject.Inject;
 import jakarta.ws.rs.Consumes;
@@ -25,9 +23,6 @@ import jakarta.ws.rs.core.HttpHeaders;
 import jakarta.ws.rs.core.MediaType;
 import jakarta.ws.rs.core.Request;
 import jakarta.ws.rs.core.Response;
-import java.io.IOException;
-import java.io.UncheckedIOException;
-import java.nio.file.Files;
 import java.util.UUID;
 import org.eclipse.microprofile.openapi.annotations.Operation;
 import org.eclipse.microprofile.openapi.annotations.enums.SchemaType;
@@ -78,24 +73,12 @@ public class ImagesResource {
         if (ajout == null || ajout.fichier == null) {
             throw new ErreurMetier(400, "requete.invalide", "Le fichier est obligatoire");
         }
-        TypeImage type = TypeImage.deValeur(ajout.typeImage)
-                .orElseThrow(() -> new ErreurMetier(400, "requete.invalide", "Type d'image absent ou inconnu"));
-        Licence licence = ajout.licence == null || ajout.licence.isBlank() ? null
-                : Licence.deValeur(ajout.licence)
-                        .orElseThrow(() -> new ErreurMetier(400, "requete.invalide", "Licence inconnue"));
         UUID albumId = albumId(ajout.albumId);
-        // 413 avant de lire le fichier en mémoire : reduire() ne prend que des octets déjà lus.
-        reduction.verifierTaille(ajout.fichier.size());
-        byte[] octets;
-        try {
-            octets = Files.readAllBytes(ajout.fichier.uploadedFile());
-        } catch (IOException erreur) {
-            throw new UncheckedIOException(erreur);
-        }
-        // Réduction coûteuse hors transaction : aucune connexion tenue pendant le décodage.
-        ImageReduiteVue fichier = reduction.reduire(octets, type);
-        return MesMotsImageDto.de(images.ajouterDansMesMots(new AjouterImageCommande(fichier, ajout.mot, type,
-                licence, ajout.source, ajout.auteur, albumId)));
+        // Lecture et réduction coûteuses hors transaction : aucune connexion tenue pendant le décodage.
+        FichierTeleverseVue prepare = reduction.preparerTeleversement(ajout.fichier.uploadedFile(),
+                ajout.fichier.size(), ajout.typeImage, ajout.licence);
+        return MesMotsImageDto.de(images.ajouterDansMesMots(new AjouterImageCommande(prepare.fichier(), ajout.mot,
+                prepare.typeImage(), prepare.licence(), ajout.source, ajout.auteur, albumId)));
     }
 
     @GET

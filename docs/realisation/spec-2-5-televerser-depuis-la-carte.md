@@ -157,7 +157,7 @@ Décisions :
 ## Implementation Notes
 
 - Réduction par le seul JDK (ImageIO, AWT) : JPEG, PNG et GIF acceptés ; en-tête lu avant décodage (12 000 px par côté, 50 Mpx au plus), décodage sous-échantillonné des grandes sources ; orientation EXIF lue à la main (JPEG seulement) ; ré-encodage sans métadonnées (JPEG qualité 0,88, PNG si transparence). Un JPEG CMJN, illisible par ImageIO, est refusé en 415. Le conteneur du back démarre avec `-Djava.awt.headless=true`.
-- Album d'origine : celui de la Préparation, enregistré pour tous les types (requis seulement pour `image_album`).
+- Album d'origine : celui de la Préparation, enregistré pour tous les types (requis seulement pour `image_album`). Remplacé le 2026-11-13 (`spec-retro-e1-11-corrections-revue-mi-epic-2.md`) : seule une `image_album` reçoit un Album d'origine.
 - `ETag` = version de l'Image, identique pour les deux tailles (chaque URL a le sien).
 - Le multipart passe par les fichiers temporaires de Quarkus (supprimés en fin de requête) ; rien n'est stocké sur disque.
 - Rétablir un Mot illustré relie la même Image (origine `reutilisee`), si elle est encore proposable.

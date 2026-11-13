@@ -203,6 +203,13 @@ class MotsPreparationResourceTest {
     }
 
     @Test
+    void unDoubleArticleNEnPerdQuUn() {
+        ajouter(preparation, "le l'ours").statusCode(201).body("forme", equalTo("l'ours"));
+
+        assertEquals(List.of("l'ours:1"), motsEnBase(preparation));
+    }
+
+    @Test
     void unMotDejaPresentALaCasseOuALArticlePresEstRefuse() {
         ajouter(preparation, "Lapin").statusCode(201);
 

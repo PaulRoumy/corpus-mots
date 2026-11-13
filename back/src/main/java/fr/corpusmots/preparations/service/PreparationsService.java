@@ -228,14 +228,14 @@ public class PreparationsService {
     /**
      * Rétablit dans la Préparation {@code id} de l'enseignant courant un Mot retiré, avec le Sens et le Thème qu'il
      * avait, à sa place d'origine si elle est libre, sinon en fin ; un Thème supprimé entre-temps n'est pas repris.
-     * L'Image qui lui était liée l'est de nouveau, avec l'origine {@code reutilisee} (AD-14). Rien n'est ajouté en cas
-     * de refus.
+     * L'Image qui lui était liée l'est de nouveau, avec l'origine {@code reutilisee} (AD-14), si elle lui est encore
+     * proposable et illustre le Sens retenu ({@link Usages#lierImageSiPossible}) ; sinon le Mot revient « à illustrer »,
+     * sans refus. Rien n'est ajouté en cas de refus.
      *
+     * @return le Mot rétabli ; sans Image si celle qu'il avait n'a pas pu être liée de nouveau
      * @throws ErreurMetier {@code 404 ressource.introuvable} si la Préparation n'existe pas ou appartient à un
-     *         collègue, si le Mot n'existe pas, ou si l'Image n'existe pas ou n'est plus proposable ;
-     *         {@code 400 preparation.sens_invalide} si le Sens n'est pas un Sens de ce Mot ;
-     *         {@code 400 image.sens_different} si l'Image illustre un autre Sens ;
-     *         {@code 409 preparation.mot_deja_present} si le Mot figure de nouveau dans la Préparation
+     *         collègue, ou si le Mot n'existe pas ; {@code 400 preparation.sens_invalide} si le Sens n'est pas un Sens
+     *         de ce Mot ; {@code 409 preparation.mot_deja_present} si le Mot figure de nouveau dans la Préparation
      */
     @Transactional
     public MotPreparationVue retablirMot(UUID id, RetablirMotCommande commande) {
@@ -261,21 +261,24 @@ public class PreparationsService {
         SensVue sens = usages.retenirSens(new RetenirSensCommande(preparation.id(), ligne.id(), mot.id(),
                 preparation.albumId(), preparation.section(), commande.sensId()));
         ImageVue image = commande.imageId() == null ? null
-                : usages.lierImage(new LierImageCommande(preparation.id(), ligne.id(), commande.imageId(),
-                        preparation.albumId(), preparation.section(), OrigineLien.REUTILISEE));
+                : usages.lierImageSiPossible(new LierImageCommande(preparation.id(), ligne.id(), commande.imageId(),
+                        preparation.albumId(), preparation.section(), OrigineLien.REUTILISEE)).orElse(null);
         return vue(ligne, mot, sens, image);
     }
 
     /**
      * Téléverse une Image pour le Mot de Préparation {@code motPreparationId} de la Préparation {@code id} de
      * l'enseignant courant, à partir du fichier déjà réduit (hors transaction) : l'Image est créée ({@code privee},
-     * Sens retenu du Mot, Album d'origine de la Préparation) et liée au Mot avec l'origine {@code nouvelle}, dans une
-     * même transaction. Rien n'est enregistré en cas de refus.
+     * Sens retenu du Mot ; Album de la Préparation comme Album d'origine pour une image d'album seulement, règle tenue
+     * par {@link Images#televerser}) et liée au Mot avec l'origine {@code nouvelle}, dans une même transaction. Rien
+     * n'est enregistré en cas de refus.
      *
      * @throws ErreurMetier {@code 404 ressource.introuvable} si la Préparation n'existe pas ou appartient à un
      *         collègue, ou si le Mot de Préparation n'existe pas ou appartient à une autre Préparation ;
      *         {@code 400 requete.invalide} si la licence ne peut pas être choisie pour ce type ;
-     *         {@code 409 preparation.mot_deja_illustre} si le Mot a déjà une Image
+     *         {@code 400 image.album_requis} ou {@code 400 image.album_introuvable} pour une image d'album dont la
+     *         Préparation n'a pas d'Album existant ; {@code 409 preparation.mot_deja_illustre} si le Mot a déjà une
+     *         Image
      */
     @Transactional
     public MotPreparationVue televerserImage(UUID id, UUID motPreparationId, TeleverserImageMotCommande commande) {

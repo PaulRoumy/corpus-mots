@@ -2,6 +2,7 @@ package fr.corpusmots.vocabulaire.service;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTimeoutPreemptively;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -11,10 +12,14 @@ import io.quarkus.runtime.configuration.MemorySizeConverter;
 import java.awt.Color;
 import java.awt.image.BufferedImage;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.time.Duration;
 import java.util.stream.Stream;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.function.Executable;
+import org.junit.jupiter.api.io.TempDir;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.MethodSource;
 
@@ -27,6 +32,46 @@ class ReductionImagesTest {
     void reduction() {
         reduction = new ReductionImages();
         reduction.tailleMaximale = new MemorySizeConverter().convert("20M");
+    }
+
+    @Test
+    void preparerUnTeleversementLitTypeLicenceEtReduitLeFichier(@TempDir Path dossier) throws Exception {
+        Path chemin = Files.write(dossier.resolve("page.jpg"), FichiersDeTest.jpeg(3000, 2000));
+
+        FichierTeleverseVue prepare = reduction.preparerTeleversement(chemin, Files.size(chemin), "image_album",
+                "cc0_domaine_public");
+        FichierTeleverseVue sansLicence = reduction.preparerTeleversement(chemin, Files.size(chemin), "image_libre",
+                "  ");
+
+        assertEquals(TypeImage.IMAGE_ALBUM, prepare.typeImage());
+        assertEquals(Licence.CC0_DOMAINE_PUBLIC, prepare.licence());
+        assertEquals(400, prepare.fichier().largeur());
+        assertEquals(TypeImage.IMAGE_LIBRE, sansLicence.typeImage());
+        assertNull(sansLicence.licence());
+        assertEquals(1600, sansLicence.fichier().largeur());
+    }
+
+    @Test
+    void preparerUnTeleversementRefuseTypeLicenceTailleEtFormat(@TempDir Path dossier) throws Exception {
+        Path png = Files.write(dossier.resolve("a.png"), FichiersDeTest.png(10, 10));
+        Path texte = Files.write(dossier.resolve("b.png"), "bonjour".getBytes(StandardCharsets.UTF_8));
+        Path absent = dossier.resolve("absent.png");
+
+        assertRefus(400, "requete.invalide", () -> reduction.preparerTeleversement(png, 10, null, null));
+        assertRefus(400, "requete.invalide", () -> reduction.preparerTeleversement(png, 10, "dessin", null));
+        assertRefus(400, "requete.invalide",
+                () -> reduction.preparerTeleversement(png, 10, "image_libre", "gratuite"));
+        // 413 sur la taille annoncée, avant toute lecture : le fichier n'a pas besoin d'exister.
+        assertRefus(413, "requete.trop_volumineuse",
+                () -> reduction.preparerTeleversement(absent, 21L * 1024 * 1024, "image_libre", null));
+        assertRefus(415, "format.non_supporte",
+                () -> reduction.preparerTeleversement(texte, Files.size(texte), "image_libre", null));
+    }
+
+    private static void assertRefus(int statut, String code, Executable appel) {
+        ErreurMetier erreur = assertThrows(ErreurMetier.class, appel);
+        assertEquals(statut, erreur.status());
+        assertEquals(code, erreur.code());
     }
 
     @Test

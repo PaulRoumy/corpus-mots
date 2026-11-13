@@ -107,8 +107,9 @@ class ImagesMotsPreparationResourceTest {
                 .extract().path("image.id");
 
         UUID image = UUID.fromString(imageId);
-        assertEquals("privee|image_libre|cc0_domaine_public|https://openclipart.org|Anne|" + rouleGalette + "|"
-                + CLAIRE + "|image|0", ligneImage(image));
+        // Seule une image d'album reçoit un Album d'origine, quel que soit le chemin.
+        assertEquals("privee|image_libre|cc0_domaine_public|https://openclipart.org|Anne|null|" + CLAIRE
+                + "|image|0", ligneImage(image));
         assertEquals(sensRetenu(citrouille), sensDeLImage(image));
         assertEquals("1600x800|image/jpeg", fichierEnBase(image));
         assertEquals(preparation + "|" + image + "|" + CLAIRE + "|" + rouleGalette + "|ms|nouvelle",
@@ -201,6 +202,30 @@ class ImagesMotsPreparationResourceTest {
         assertEquals(400, erreur.status());
         assertEquals("image.album_requis", erreur.code());
         assertEquals(0L, nombre("select count(*) from image"));
+    }
+
+    @Test
+    void uneImageDAlbumDUnAlbumInconnuEstRefuseeParLeService() {
+        ImageReduiteVue fichier = reduction.reduire(FichiersDeTest.png(10, 10), TypeImage.IMAGE_ALBUM);
+
+        ErreurMetier erreur = assertThrows(ErreurMetier.class, () -> images.televerser(
+                new TeleverserImageCommande(fichier, sensRetenu(citrouille), TypeImage.IMAGE_ALBUM, null, null, null,
+                        UUID.randomUUID())));
+
+        assertEquals(400, erreur.status());
+        assertEquals("image.album_introuvable", erreur.code());
+        assertEquals(0L, nombre("select count(*) from image"));
+    }
+
+    @Test
+    void lAlbumDemandePourUnAutreTypeQuUneImageDAlbumEstIgnoreParLeService() {
+        ImageReduiteVue fichier = reduction.reduire(FichiersDeTest.png(10, 10), TypeImage.PHOTO_PERSONNELLE);
+
+        UUID image = QuarkusTransaction.requiringNew().call(() -> images.televerser(
+                new TeleverserImageCommande(fichier, sensRetenu(citrouille), TypeImage.PHOTO_PERSONNELLE, null, null,
+                        null, UUID.randomUUID())).id());
+
+        assertTrue(ligneImage(image).startsWith("privee|photo_personnelle|droits_auteur_enseignant|null|null|null|"));
     }
 
     @Test
@@ -315,7 +340,7 @@ class ImagesMotsPreparationResourceTest {
     }
 
     @Test
-    void retablirAvecLImagePriveeDUnCollegueEstRefuse() {
+    void retablirAvecLImagePriveeDUnCollegueRetablitLeMotSansImage() {
         Map<String, Object> retire = given().when().delete("/api/preparations/" + preparation + "/mots/" + citrouille)
                 .then().statusCode(200).body("image", nullValue()).extract().jsonPath().getMap("$");
         @SuppressWarnings("unchecked")
@@ -323,8 +348,30 @@ class ImagesMotsPreparationResourceTest {
         UUID sensId = UUID.fromString((String) sens.get("id"));
         UUID deZoe = imagesDeTest.image(UUID.fromString(ZOE), sensId, "privee", new byte[] { 1 }, new byte[] { 2 });
 
-        refus(retablir(retire.get("motId"), sensId, deZoe.toString()), 404, "ressource.introuvable");
-        assertEquals(0L, nombre("select count(*) from preparation_mot"));
+        retablir(retire.get("motId"), sensId, deZoe.toString())
+                .statusCode(201)
+                .body("motId", equalTo(retire.get("motId")))
+                .body("sens.id", equalTo(sensId.toString()))
+                .body("ordre", equalTo(1))
+                .body("illustre", equalTo(false))
+                .body("image", nullValue());
+        assertEquals(1L, nombre("select count(*) from preparation_mot"));
+        assertEquals(1L, nombre("select count(*) from sens_retenu"));
+        assertEquals(0L, nombre("select count(*) from lien_image"));
+    }
+
+    @Test
+    void retablirAvecUneImageAbsenteRetablitLeMotSansImage() {
+        Map<String, Object> retire = given().when().delete("/api/preparations/" + preparation + "/mots/" + citrouille)
+                .then().statusCode(200).extract().jsonPath().getMap("$");
+        @SuppressWarnings("unchecked")
+        Map<String, Object> sens = (Map<String, Object>) retire.get("sens");
+
+        retablir(retire.get("motId"), sens.get("id"), UUID.randomUUID().toString())
+                .statusCode(201)
+                .body("illustre", equalTo(false))
+                .body("image", nullValue());
+        assertEquals(1L, nombre("select count(*) from preparation_mot"));
         assertEquals(0L, nombre("select count(*) from lien_image"));
     }
 
@@ -345,7 +392,7 @@ class ImagesMotsPreparationResourceTest {
     }
 
     @Test
-    void retablirAvecUneImageDUnAutreSensEstRefuse() {
+    void retablirAvecUneImageDUnAutreSensRetablitLeMotSansImage() {
         UUID potiron = UUID.fromString(ajouter(preparation, "potiron"));
         UUID duPotiron = imagesDeTest.image(UUID.fromString(CLAIRE), sensRetenu(potiron), "privee",
                 new byte[] { 1 }, new byte[] { 2 });
@@ -354,8 +401,12 @@ class ImagesMotsPreparationResourceTest {
         @SuppressWarnings("unchecked")
         Map<String, Object> sens = (Map<String, Object>) retire.get("sens");
 
-        refus(retablir(retire.get("motId"), sens.get("id"), duPotiron.toString()), 400, "image.sens_different");
-        assertEquals(1L, nombre("select count(*) from preparation_mot"));
+        retablir(retire.get("motId"), sens.get("id"), duPotiron.toString())
+                .statusCode(201)
+                .body("sens.id", equalTo(sens.get("id")))
+                .body("illustre", equalTo(false))
+                .body("image", nullValue());
+        assertEquals(2L, nombre("select count(*) from preparation_mot"));
         assertEquals(0L, nombre("select count(*) from lien_image"));
     }
 

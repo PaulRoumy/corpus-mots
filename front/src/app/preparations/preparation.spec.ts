@@ -2044,6 +2044,44 @@ describe('Preparation (En-tête)', () => {
       expect(document.activeElement).toBe(boutonRetirer('citrouille'));
     });
 
+    it('erreur 5xx du rétablissement : « Réessayer » proposé', async () => {
+      await ouvrirAvec([GALETTE, CITROUILLE]);
+      await retirer('citrouille');
+      retrait(CITROUILLE).flush(CITROUILLE);
+      await stabiliser();
+
+      await annuler();
+      retablissement().flush(
+        { status: 503, code: 'erreur.interne' },
+        { status: 503, statusText: 'Service Unavailable' },
+      );
+      await stabiliser();
+
+      const libelles = [
+        ...racine.querySelectorAll('app-bandeau-erreur.erreur-retablissement button'),
+      ].map((bouton) => bouton.textContent?.trim() || bouton.getAttribute('aria-label'));
+      expect(libelles).toContain('Réessayer');
+    });
+
+    it('autre refus du back (404) : message seul, sans « Réessayer »', async () => {
+      await ouvrirAvec([GALETTE, CITROUILLE]);
+      await retirer('citrouille');
+      retrait(CITROUILLE).flush(CITROUILLE);
+      await stabiliser();
+
+      await annuler();
+      retablissement().flush(
+        { status: 404, code: 'ressource.introuvable' },
+        { status: 404, statusText: 'Not Found' },
+      );
+      await stabiliser();
+
+      const libelles = [
+        ...racine.querySelectorAll('app-bandeau-erreur.erreur-retablissement button'),
+      ].map((bouton) => bouton.textContent?.trim() || bouton.getAttribute('aria-label'));
+      expect(libelles).toEqual(['Fermer']);
+    });
+
     it('Mot revenu entre-temps (409) : message seul, sans « Réessayer »', async () => {
       await ouvrirAvec([GALETTE, CITROUILLE]);
       await retirer('citrouille');
@@ -2570,6 +2608,37 @@ describe('Preparation (En-tête)', () => {
       requete.flush(ILLUSTREE, { status: 201, statusText: 'Created' });
       await stabiliser();
       expect(texte('.entete__compteur')).toBe('2 mots, 1 déjà illustré');
+      expect(texte('p[aria-live="polite"]')).toBe('« citrouille » rétabli.');
+    });
+
+    it('« Annuler » quand l’Image n’est plus disponible : le Mot revient « à illustrer », l’annonce le dit', async () => {
+      const afficher = vi.fn<(message: string, annuler: () => unknown) => void>();
+      vi.spyOn(TestBed.inject(BandeauAnnuler), 'afficher').mockImplementation(afficher);
+      await ouvrir(
+        { ...PREPARATION, nombreMots: 2, nombreIllustres: 1 },
+        MODULES,
+        THEMES,
+        albumDe(PREPARATION),
+        [GALETTE, ILLUSTREE],
+      );
+      boutonRetirer('citrouille').click();
+      await stabiliser();
+      serveur.expectOne(`${URL_MOTS}/${ILLUSTREE.id}`).flush(ILLUSTREE);
+      await stabiliser();
+      afficher.mock.lastCall![1]();
+      await stabiliser();
+
+      serveur
+        .expectOne(`${URL_MOTS}/retablissement`)
+        .flush(CITROUILLE, { status: 201, statusText: 'Created' });
+      await stabiliser();
+
+      expect(cartes()).toEqual(['galette', 'citrouille']);
+      expect(texte('.entete__compteur')).toBe('2 mots, 0 déjà illustrés');
+      expect(texte('p[aria-live="polite"]')).toBe(
+        "« citrouille » rétabli, sans son image, qui n'est plus disponible.",
+      );
+      expect(racine.querySelector('app-bandeau-erreur.erreur-retablissement')).toBeNull();
     });
   });
 });
