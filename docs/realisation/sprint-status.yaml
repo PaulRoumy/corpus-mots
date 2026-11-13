@@ -29,7 +29,7 @@
 # - Dev moves story to 'review', then runs code-review (fresh context, different LLM recommended)
 # - Retrospective appends its action items to action_items; the status view surfaces open ones
 generated: 10-30-2026 18:50
-last_updated: 2026-11-12
+last_updated: 2026-11-13
 project: corpus-mots
 project_key: NOKEY
 tracking_system: file-system
@@ -177,5 +177,5 @@ action_items:
     action: "Revue bmad-review du diff cumulé en milieu d'epic, centrée sur les frontières
       entre stories (L-3)"
     owner: "Paul, Epic 2"
-    status: open
+    status: done
     ref: "docs/realisation/epic-1-retro-2026-11-05.md"

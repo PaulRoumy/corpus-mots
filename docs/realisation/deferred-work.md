@@ -122,6 +122,7 @@
 - source_spec: none
   summary: Story 2.3, partie 3 : Thème de chaque Mot, prérempli par le Thème par défaut de la Préparation et modifiable mot par mot (FR-6) ; stockage dans `preparation_mot` et retrait par `ThemesDesPreparations` à la suppression du Thème ; interface à concevoir (aucune maquette ne la décrit).
   evidence: Découpage de la story 2.3 choisi par Paul ; ni l'architecture ni l'UX ne fixent où vit le Thème d'un Mot ni comment le changer sur une Carte.
+  status: fait (`docs/realisation/spec-2-3-3-theme-de-chaque-mot.md`).
 - source_spec: `docs/realisation/spec-2-3-saisir-des-mots-en-serie.md`
   summary: Story 2.10 : supprimer une Préparation appelle d'abord `Usages.libererPreparation`, pour ne laisser aucun `sens_retenu` (ni `lien_image`) orphelin ; la cascade de `preparation_mot` ne touche pas les tables de `vocabulaire`.
   evidence: Revue de la story 2.3, partie 1, ligne 8 du journal de tri : des `sens_retenu` orphelins garderaient `enseignant_id` et continueraient d'alimenter le Sens « le plus récent ».
@@ -131,6 +132,7 @@
 - source_spec: `docs/realisation/spec-2-3-2-retirer-un-mot.md`
   summary: Story 2.4 : `Usages.libererPreparationMot` supprime aussi le `lien_image` du Mot de Préparation, et le rétablissement par « Annuler » rétablit son Image.
   evidence: Revue de la story 2.3, partie 2, ligne 16 du journal de tri : seul un commentaire Javadoc le prévoit aujourd'hui.
+  status: fait (`docs/realisation/spec-2-5-televerser-depuis-la-carte.md` ; rétablissement sans Image si elle n'est plus proposable : `docs/realisation/spec-retro-e1-11-corrections-revue-mi-epic-2.md`).
 - source_spec: `docs/realisation/spec-2-3-3-theme-de-chaque-mot.md`
   summary: Thème supprimé en même temps qu'il est écrit sur un Mot de Préparation (ajout, changement, rétablissement) ou comme Thème par défaut : verrou partagé côté `referentiels` (`SELECT … FOR SHARE` sur `theme`) pris par `preparations` avant d'écrire, à traiter avec l'entrée de la story 2.6 sur `UtilisationThemes`.
   evidence: Revue de la story 2.3, partie 3, ligne 9 du journal de tri : sans clé étrangère (AD-1), un `theme_id` orphelin reste en base, affiché « Sans thème ».
@@ -150,3 +152,39 @@
 - source_spec: none
   summary: Story 2.7 : le Panneau de choix d'Image propose « Téléverser » (« Ajouter une image ») avec le formulaire de la story 2.5.
   evidence: Critère de la story 2.5 qui dépend d'un Panneau livré par la story 2.7.
+- source_spec: none
+  summary: Avant la story 2.4, partie 2 : ajouter `vocabulaire.service.SuggestionsArasaac` aux cibles de la règle ArchUnit `aucunAppelHttpSortantEnTransaction` (`ReglesArchitecture.APPELS_HTTP_SORTANTS`), avec sa fixture en violation.
+  evidence: Revue de mi-epic de l'Epic 2 (2026-11-13, diff 757d63c..8a08761, action 11 de la rétrospective de l'Epic 1), lentille verification-gap : la règle ne voit que les appels directs à `SourceArasaac` ; un `@Transactional` qui appellerait `SuggestionsArasaac.pictogramme` tiendrait une connexion jusqu'à 3 s sans faire échouer le test.
+- source_spec: none
+  summary: Test des migrations Flyway (sans Quarkus) : nom `V<AAAAMMJJHHMM>__<module>_<objet>.sql` avec un module du graphe d'AD-1, aucun `REFERENCES` vers une table d'un autre module, et somme de contrôle des migrations publiées vérifiée en CI (AD-22).
+  evidence: Revue de mi-epic de l'Epic 2 (2026-11-13, diff 757d63c..8a08761, action 11 de la rétrospective de l'Epic 1), lentille verification-gap : seul `MigrationInitialeTest` lit les migrations (extensions) ; la règle est respectée aujourd'hui mais rien ne l'impose, alors que la story 2.10 et la fusion d'Albums (Epic 6) tenteront une clé étrangère vers `preparation_mot`.
+- source_spec: none
+  summary: Test de concurrence : retrait d'un Mot de Préparation et téléversement (ou rétablissement) simultanés ; aucun `lien_image` orphelin et `nombreAIllustrer` jamais négatif.
+  evidence: Revue de mi-epic de l'Epic 2 (2026-11-13, diff 757d63c..8a08761, action 11 de la rétrospective de l'Epic 1), lentille verification-gap : seul le verrou de la Préparation (`PreparationsService.verrouillee`) sérialise ces écritures, sans clé étrangère `lien_image` → `preparation_mot` (AD-1), et aucun test de `preparations` n'exerce deux requêtes parallèles.
+- source_spec: none
+  summary: Calculer `aRemplacer` dans `vocabulaire.service` (`Images.vue`), au lieu de `null`, avant que l'Epic 3 ne s'en serve.
+  evidence: Revue de mi-epic de l'Epic 2 (2026-11-13, diff 757d63c..8a08761, action 11 de la rétrospective de l'Epic 1), lentille adversarial : le champ est publié dans le contrat (AD-16) mais vaut toujours `null`, y compris pour une Image liée qui deviendrait `abandonnee` ou `supprimee`.
+- source_spec: none
+  summary: Fixer `quarkus.http.body.uploads-directory` vers un dossier inscriptible par l'utilisateur 1001 (`${java.io.tmpdir}` ou `tmpfs` du `compose.yaml`), vérifier un téléversement sur l'image construite (`podman run`), et corriger dans `deploiement/README.md` la phrase « aucun fichier sur le disque du serveur ».
+  evidence: Revue de mi-epic de l'Epic 2 (2026-11-13, diff 757d63c..8a08761, action 11 de la rétrospective de l'Epic 1), lentille adversarial (non vérifié dans un conteneur, gravité haute si confirmé) : le réglage n'est pas fixé, Quarkus écrit les fichiers reçus par rapport au répertoire courant `/app`, créé par root, alors que le `Containerfile` passe en `USER 1001` ; les `@QuarkusTest`, hors conteneur, ne le voient pas.
+- source_spec: none
+  summary: Limiter les réductions d'images simultanées dans `ReductionImages` (sémaphore, 503 au-delà) pour borner la mémoire du décodage AWT.
+  evidence: Revue de mi-epic de l'Epic 2 (2026-11-13, diff 757d63c..8a08761, action 11 de la rétrospective de l'Epic 1), lentille edge-case-hunter : plusieurs fichiers de 20 Mo décodés en parallèle peuvent épuiser le tas et faire tomber tout le back.
+- source_spec: none
+  summary: Avant l'ouverture du pilote : permettre au propriétaire de supprimer une Image sans lien de Mes mots (transition AD-3 par `vocabulaire.service`), ou dire sur la page Données personnelles qu'elle n'est pas encore consultable ni supprimable. Décision de Paul.
+  evidence: Revue de mi-epic de l'Epic 2 (2026-11-13, diff 757d63c..8a08761, action 11 de la rétrospective de l'Epic 1), lentille adversarial : depuis la story 2.5, une Image (photo personnelle comprise) entre dans Mes mots sans écran pour la voir ni moyen de l'effacer avant l'Epic 3 ; le droit à l'effacement n'est pas tenu.
+- source_spec: none
+  summary: Lire la taille maximale d'un fichier (`corpusmots.limites.taille-fichier`) depuis le back plutôt que `TAILLE_MAX_FICHIER` et le texte « 20 Mo » codés dans le front, ou documenter dans `deploiement/README.md` qu'elle ne change pas sans recompiler le front.
+  evidence: Revue de mi-epic de l'Epic 2 (2026-11-13, diff 757d63c..8a08761, action 11 de la rétrospective de l'Epic 1), lentille adversarial : un administrateur qui change la limite fait diverger le contrôle du front et celui du back.
+- source_spec: none
+  summary: Supprimer un Module en même temps qu'une Préparation l'écrit (`creer`, `regler`) : verrou partagé côté `referentiels` (`SELECT … FOR SHARE` sur `module`) pris par `preparations`, comme prévu pour les Thèmes.
+  evidence: Revue de mi-epic de l'Epic 2 (2026-11-13, diff 757d63c..8a08761, action 11 de la rétrospective de l'Epic 1), lentille adversarial : `supprimerModule` émet `ModuleSupprime` sans verrou commun avec la vérification puis l'écriture de `preparation.module_id` ; sans clé étrangère (AD-1), un `module_id` orphelin peut rester.
+- source_spec: none
+  summary: Thèmes des Mots de Préparation : brancher une `UtilisationThemes` dans `preparations.service` (Thème porté par un Mot d'un collègue = utilisé), ou faire valider que FR-5 ne protège pas ces Mots et le dire dans le Dialogue de suppression. Décision de Paul.
+  evidence: Revue de mi-epic de l'Epic 2 (2026-11-13, diff 757d63c..8a08761, action 11 de la rétrospective de l'Epic 1), lentille adversarial : depuis la story 2.3, partie 3, le créateur d'un Thème peut l'effacer des Mots de toutes les Préparations des collègues, sans préavis.
+- source_spec: none
+  summary: Nouvelle migration `preparations` : index partiels sur `preparation.module_id` et `preparation.theme_defaut_id`, utilisés par les mises à jour en masse de `ModulesDesPreparations` et `ThemesDesPreparations`.
+  evidence: Revue de mi-epic de l'Epic 2 (2026-11-13, diff 757d63c..8a08761, action 11 de la rétrospective de l'Epic 1), lentille adversarial : la suppression d'un Module ou d'un Thème parcourt toute la table `preparation` dans la transaction ; `preparation_mot.theme_id` a déjà son index. (Le nom de `V202611091000__referentiels_album.sql`, qui crée aussi `module` et `theme`, ne peut plus changer : une migration par objet pour les suivantes.)
+- source_spec: none
+  summary: Relire `deploiement/RESTAURATION.md` et `deploiement/README.md` pour les Images en `bytea` (`image_fichier`) : taille des sauvegardes et durée d'une restauration.
+  evidence: Revue de mi-epic de l'Epic 2 (2026-11-13, diff 757d63c..8a08761, action 11 de la rétrospective de l'Epic 1), lentille adversarial : AGENTS.md demande cette relecture quand les données conservées changent ; la story 2.5 a ajouté les fichiers d'Image en base sans la faire.
