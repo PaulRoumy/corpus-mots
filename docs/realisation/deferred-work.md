@@ -210,3 +210,9 @@
 - source_spec: `docs/realisation/spec-2-6-4-sens-de-l-image.md`
   summary: `Images.sensVisibles` charge toutes les Images des Sens du Mot (tous enseignants, tous états) pour décider des Sens proposés ; lire une projection (`proprietaire_id`, `etat`, `sens_id`) toujours filtrée par `VisibiliteImages.proposable`.
   evidence: Revue de la story 2.6, partie 4, ligne 5 du journal de tri (maybe-false, medium si confirmé) : à mesurer sur un Mot courant quand la Banque partagée de l'Epic 3 contiendra beaucoup d'Images ; la lecture se fait aussi sous le verrou de l'Image dans `PUT /images/{id}/sens`.
+- source_spec: none
+  summary: Story 2.7, partie 2 : retenir une Image proposée dans le Panneau de détection (↑ ↓ puis Entrée, ou clic) ajoute le Mot et lie l'Image par `Usages.lierImage` avec l'origine `reutilisee`, sans copie (AD-5) ; l'Entrée seule, sans choix, ajoute toujours le Mot « à illustrer ».
+  evidence: Découpage de la story 2.7 en trois parties choisi par Paul ; la partie 1 pose le Panneau de détection en lecture.
+- source_spec: none
+  summary: Story 2.7, partie 3 : Panneau de choix d'Image ouvert depuis une Carte de Mot (clic ou Entrée), à droite sans masquer la grille : Mot et Sens, Repère de qualité, Images classées comme la détection, « Ajouter une image » ; choisir une autre Image la remplace par `Usages.remplacerImage` puis ferme ; Échap ferme sans rien changer.
+  evidence: Découpage de la story 2.7 en trois parties choisi par Paul.

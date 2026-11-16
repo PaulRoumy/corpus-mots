@@ -81,6 +81,17 @@ public class PreparationsResource {
         return PreparationDto.de(preparations.lire(id));
     }
 
+    @GET
+    @Path("/{id}/detection")
+    @Operation(operationId = "detecterMotPreparation",
+            summary = "Mots existants de même forme que la saisie, visibles de l'enseignant connecté, avec leurs Sens,"
+                    + " leurs Albums et leurs Images classées ; rien n'est écrit")
+    public DetectionPreparationDto detecter(@PathParam("id") UUID id,
+            @Parameter(description = "Saisie en cours, de 2 à 100 caractères une fois normalisée (l'article initial"
+                    + " est ignoré)", required = true) @QueryParam("saisie") String saisie) {
+        return DetectionPreparationDto.de(preparations.detecter(id, saisie));
+    }
+
     @PUT
     @Path("/{id}/reglages")
     @Consumes(MediaType.APPLICATION_JSON)

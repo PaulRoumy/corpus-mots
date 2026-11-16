@@ -19,6 +19,7 @@ import { BandeauAnnuler } from '../commun/bandeau-annuler/bandeau-annuler';
 import { CompteCourant } from '../commun/compte-courant';
 import { MESSAGE_RESEAU } from '../commun/erreurs/message-erreur';
 import { provideIcones } from '../commun/icones';
+import { DELAI_DETECTION_MS } from './panneau-detection';
 import {
   heuresEnMinutes,
   libelleIllustres,
@@ -1723,6 +1724,74 @@ describe('Preparation (En-tête)', () => {
       expect(document.activeElement).toBe(champSaisie());
       expect(texte('.entete__compteur')).toBe('2 mots, 0 déjà illustrés');
       expect(texte('p[aria-live="polite"]')).toBe('« citrouille » ajouté.');
+    });
+
+    it('détection (story 2.7) : « fa » puis « farine » sans valider, panneau sous le champ, focus gardé ; Entrée ajoute et le masque', async () => {
+      await ouvrir();
+      champSaisie().focus();
+
+      for (const saisie of ['f', 'fa', 'farine']) {
+        champSaisie().value = saisie;
+        champSaisie().dispatchEvent(new Event('input'));
+        await fixture.whenStable();
+      }
+      await new Promise((fin) => setTimeout(fin, DELAI_DETECTION_MS + 20));
+      await stabiliser();
+      const detection = serveur.expectOne(
+        (requete) => requete.url === `/api/preparations/${ID}/detection`,
+      );
+      expect(detection.request.params.get('saisie')).toBe('farine');
+      detection.flush({
+        forme: 'farine',
+        mots: [
+          {
+            motId: 'm1',
+            forme: 'farine',
+            dejaDansLaPreparation: false,
+            sens: [{ id: 's1', libelle: 'à compléter', categorie: null, aCompleter: true }],
+            albums: [],
+            images: [],
+          },
+        ],
+      });
+      await stabiliser();
+
+      expect(texte('app-panneau-detection .detection__entete')).toBe(
+        'farine — existe déjà · aucune image',
+      );
+      expect(texte('app-panneau-detection [aria-live="polite"]')).toBe(
+        'farine — existe déjà · aucune image',
+      );
+      expect(document.activeElement).toBe(champSaisie());
+      serveur.expectNone(URL_MOTS);
+
+      champSaisie().dispatchEvent(
+        new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }),
+      );
+      await stabiliser();
+      ajout('farine').flush(motPreparation('farine', 1));
+      await stabiliser();
+
+      expect(cartes()).toEqual(['farine']);
+      expect(racine.querySelector('app-panneau-detection')!.textContent?.trim()).toBe('');
+      expect(document.activeElement).toBe(champSaisie());
+    });
+
+    it('détection : une autre Préparation ouverte recrée le champ vide, la saisie quittée n’est pas détectée', async () => {
+      await ouvrir();
+      champSaisie().value = 'farine';
+      champSaisie().dispatchEvent(new Event('input'));
+      await fixture.whenStable();
+
+      fixture.componentRef.setInput('id', AUTRE_ID);
+      await stabiliser();
+      await ouvrir(LOUP, [], THEMES);
+      await new Promise((fin) => setTimeout(fin, DELAI_DETECTION_MS + 20));
+      await stabiliser();
+
+      expect(champSaisie().value).toBe('');
+      serveur.expectNone((requete) => requete.url.endsWith('/detection'));
+      expect(racine.querySelector('app-panneau-detection')!.textContent?.trim()).toBe('');
     });
 
     it('le premier Mot ajouté affiche « 1 mot, 0 déjà illustré »', async () => {

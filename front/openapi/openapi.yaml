@@ -407,6 +407,159 @@ components:
             \ sinon"
           type: string
           $ref: "#/components/schemas/UUID"
+    DetectionAlbumDto:
+      type: object
+      required:
+      - id
+      - titre
+      properties:
+        id:
+          $ref: "#/components/schemas/UUID"
+        titre:
+          type: string
+    DetectionImageDto:
+      type: object
+      required:
+      - id
+      - proprietaireId
+      - etat
+      - reutilisable
+      - typeImage
+      - aCompleter
+      - sections
+      - sens
+      - dejaUtilisee
+      properties:
+        id:
+          $ref: "#/components/schemas/UUID"
+        proprietaireId:
+          $ref: "#/components/schemas/UUID"
+        etat:
+          type: string
+          enum:
+          - privee
+          - versee
+          - abandonnee
+          - supprimee
+        aRemplacer:
+          type:
+          - string
+          - "null"
+          description: "État « à remplacer », calculé à la lecture ; null tant que\
+            \ l'Image reste disponible"
+          enum:
+          - retiree
+          - supprimee
+        reutilisable:
+          type: boolean
+          description: Vrai si l'enseignant connecté peut réutiliser cette Image
+        typeImage:
+          type: string
+          enum:
+          - image_album
+          - image_libre
+          - photo_personnelle
+          - inconnu
+        aCompleter:
+          type: boolean
+          description: Vrai pour une image libre sans source ou sans licence
+        sections:
+          description: "Sections cochées, dans l'ordre PS, MS, GS"
+          type: array
+          items:
+            $ref: "#/components/schemas/DetectionSectionDto"
+        albumOrigine:
+          description: "Album d'origine d'une image d'album, null pour un autre type"
+          type:
+          - object
+          - "null"
+          anyOf:
+          - $ref: "#/components/schemas/DetectionAlbumDto"
+          - type: "null"
+        sens:
+          description: Sens illustré par l'Image
+          type: object
+          $ref: "#/components/schemas/DetectionSensDto"
+        dejaUtilisee:
+          type: boolean
+          description: Vrai si l'enseignant connecté a déjà lié cette Image dans l'une
+            de ses Préparations
+    DetectionMotDto:
+      type: object
+      required:
+      - motId
+      - forme
+      - dejaDansLaPreparation
+      - sens
+      - albums
+      - images
+      properties:
+        motId:
+          description: "Identifiant du Mot du Lexique, partagé par l'école"
+          type: string
+          $ref: "#/components/schemas/UUID"
+        forme:
+          type: string
+          description: "Première forme saisie dans l'école, sans article"
+        dejaDansLaPreparation:
+          type: boolean
+          description: Vrai si le Mot figure déjà dans cette Préparation
+        sens:
+          type: array
+          items:
+            $ref: "#/components/schemas/DetectionSensDto"
+          description: "Sens visibles, par libellé, « à compléter » en dernier"
+        albums:
+          type: array
+          items:
+            $ref: "#/components/schemas/DetectionAlbumDto"
+          description: "Albums d'origine des Images proposables et Albums des Pré\
+            parations de l'enseignant connecté où figure le Mot, par titre"
+        images:
+          type: array
+          items:
+            $ref: "#/components/schemas/DetectionImageDto"
+          description: "Images proposables, dans l'ordre de classement"
+    DetectionPreparationDto:
+      type: object
+      required:
+      - forme
+      - mots
+      properties:
+        forme:
+          type: string
+          description: "Saisie normalisée par le Lexique, sans article"
+        mots:
+          type: array
+          items:
+            $ref: "#/components/schemas/DetectionMotDto"
+          description: "Mots existants et visibles, par forme ; vide pour un Mot nouveau"
+    DetectionSectionDto:
+      description: "Section de maternelle : ps, ms ou gs"
+      type: string
+      enum:
+      - ps
+      - ms
+      - gs
+    DetectionSensDto:
+      type: object
+      required:
+      - id
+      - libelle
+      - aCompleter
+      properties:
+        id:
+          $ref: "#/components/schemas/UUID"
+        libelle:
+          type: string
+        categorie:
+          type:
+          - string
+          - "null"
+          description: "Catégorie grammaticale, null si elle reste à compléter"
+        aCompleter:
+          type: boolean
+          description: Vrai pour le Sens par défaut « à compléter »
     EnseignantDto:
       type: object
       required:
@@ -1655,6 +1808,34 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/PreparationDto"
+      tags:
+      - Preparations Resource
+  /api/preparations/{id}/detection:
+    get:
+      summary: "Mots existants de même forme que la saisie, visibles de l'enseignant\
+        \ connecté, avec leurs Sens, leurs Albums et leurs Images classées ; rien\
+        \ n'est écrit"
+      operationId: detecterMotPreparation
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          $ref: "#/components/schemas/UUID"
+      - description: "Saisie en cours, de 2 à 100 caractères une fois normalisée (l'article\
+          \ initial est ignoré)"
+        required: true
+        name: saisie
+        in: query
+        schema:
+          type: string
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DetectionPreparationDto"
       tags:
       - Preparations Resource
   /api/preparations/{id}/mots:

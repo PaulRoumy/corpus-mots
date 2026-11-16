@@ -12,6 +12,8 @@ import fr.corpusmots.referentiels.service.AlbumVue;
 import fr.corpusmots.referentiels.service.ModuleVue;
 import fr.corpusmots.referentiels.service.ReferentielsService;
 import fr.corpusmots.referentiels.service.ThemeVue;
+import fr.corpusmots.vocabulaire.service.DetectionMots;
+import fr.corpusmots.vocabulaire.service.DetectionVue;
 import fr.corpusmots.vocabulaire.service.ImageVue;
 import fr.corpusmots.vocabulaire.service.Images;
 import fr.corpusmots.vocabulaire.service.Lexique;
@@ -29,7 +31,9 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 /**
  * Préparations de l'enseignant courant (FR-6) : seul point d'écriture de la table {@code preparation}. Le propriétaire
@@ -79,6 +83,9 @@ public class PreparationsService {
 
     @Inject
     Images images;
+
+    @Inject
+    DetectionMots detectionMots;
 
     @Inject
     EnseignantCourant enseignantCourant;
@@ -335,6 +342,26 @@ public class PreparationsService {
         return lignes.stream()
                 .map(ligne -> vue(ligne, motDe(ligne, mots), sens.get(ligne.id()), imagesLiees.get(ligne.id())))
                 .toList();
+    }
+
+    /**
+     * Détection pendant la frappe dans la Préparation {@code id} de l'enseignant courant (story 2.7) : {@code vocabulaire}
+     * reçoit l'Album et la Section de la Préparation et décide seul de ce qui est visible et du classement
+     * ({@link DetectionMots}). Lecture seule, sans verrou : rien n'est écrit.
+     *
+     * @throws ErreurMetier {@code 404 ressource.introuvable} si la Préparation n'existe pas ou appartient à un
+     *         collègue ; {@code 400 requete.invalide} si la saisie normalisée compte moins de 2 ou plus de
+     *         {@value Lexique#LONGUEUR_MAX_FORME} caractères
+     */
+    @Transactional
+    public DetectionPreparationVue detecter(UUID id, String saisie) {
+        Preparation preparation = mienne(id);
+        DetectionVue detection = detectionMots.detecter(saisie, preparation.albumId(), preparation.section());
+        Set<UUID> presents = detection.mots().stream()
+                .map(mot -> mot.mot().id())
+                .filter(motId -> preparationMots.contient(preparation.id(), motId))
+                .collect(Collectors.toUnmodifiableSet());
+        return new DetectionPreparationVue(detection, presents);
     }
 
     /** Section de la Préparation la plus récente de l'enseignant courant, vide s'il n'en a aucune. */

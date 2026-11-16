@@ -69,6 +69,9 @@ describe('TexteDonneesPersonnelles', () => {
     expect(texte).toContain(
       'le serveur envoie les Mots de vos Préparations à ARASAAC, un service extérieur, sans votre nom ni aucune information de votre compte',
     );
+    expect(texte).toContain(
+      "Un mot tapé dans « Ajouter un mot » peut aussi lui être envoyé pendant la frappe, avant d'être ajouté.",
+    );
   });
 
   it('donne les durées, dont les 14 jours des sauvegardes, et la réserve du délégué à la protection des données', () => {

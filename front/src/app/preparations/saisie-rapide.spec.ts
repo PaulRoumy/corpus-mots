@@ -7,11 +7,13 @@ import { LONGUEUR_MAX_SAISIE, SaisieRapide } from './saisie-rapide';
   template: `<app-saisie-rapide
     [focusInitial]="focusInitial()"
     (ajouter)="ajoutes.push($event)"
+    (saisieModifiee)="saisies.push($event)"
   />`,
 })
 class Hote {
   readonly focusInitial = signal(false);
   readonly ajoutes: string[] = [];
+  readonly saisies: string[] = [];
   readonly saisie = viewChild.required(SaisieRapide);
 }
 
@@ -53,6 +55,19 @@ describe('SaisieRapide', () => {
 
     await entree('   ');
     expect(fixture.componentInstance.ajoutes).toEqual(['la citrouille']);
+  });
+
+  it('émet chaque valeur du champ pour la détection : frappe, vidage après Entrée, saisie refusée remise', async () => {
+    await creer(true);
+
+    champ().value = 'fa';
+    champ().dispatchEvent(new Event('input'));
+    await entree('farine');
+    fixture.componentInstance.saisie().refuser('Ce mot est déjà dans la préparation.', 'farine');
+    await fixture.whenStable();
+
+    expect(fixture.componentInstance.saisies).toEqual(['fa', 'farine', '', 'farine']);
+    expect(document.activeElement).toBe(champ());
   });
 
   it('limite la saisie à 100 caractères plus l’article le plus long et son espace', async () => {

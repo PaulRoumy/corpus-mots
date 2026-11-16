@@ -204,6 +204,12 @@ $typographie-material: (
   --cm-epaisseur-bordure-type-image: 2px;
   --cm-epaisseur-bordure-type-photo: 3px;
   --cm-taille-apercu-televersement: 160px;
+  // Panneau de détection (key-preparation.html › `.detect`, `.choice`, story 2.7) : vignettes de 232 px de large,
+  // photo de 96 px de haut, pictogramme de 80 px ; anneau de 2 px de la première proposition.
+  --cm-largeur-vignette-detection: 232px;
+  --cm-hauteur-photo-detection: 96px;
+  --cm-taille-image-detection: 80px;
+  --cm-epaisseur-anneau-proposition: 2px;
   // Bouton texte du Thème d'une Carte de Mot (story 2.3, partie 3) : cible de 24 px au moins (WCAG 2.5.8).
   --cm-hauteur-bouton-theme-mot: 24px;
 

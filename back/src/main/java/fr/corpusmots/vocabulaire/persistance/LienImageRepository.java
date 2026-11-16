@@ -7,6 +7,7 @@ import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 
 @ApplicationScoped
@@ -30,6 +31,32 @@ public class LienImageRepository implements PanacheRepositoryBase<LienImage, UUI
     /** Vrai si au moins un enseignant, propriétaire compris, a un lien vers cette Image (AD-5). */
     public boolean existePourImage(UUID imageId) {
         return count("imageId", imageId) > 0;
+    }
+
+    /** Celles de ces Images qui ont un lien, de n'importe quel enseignant, dans un autre Album que {@code albumId}. */
+    public Set<UUID> lieesHorsAlbum(Collection<UUID> imageIds, UUID albumId) {
+        if (imageIds.isEmpty()) {
+            return Set.of();
+        }
+        return Set.copyOf(getEntityManager().createQuery(
+                "select distinct l.imageId from LienImage l where l.imageId in :images and l.albumId <> :album",
+                UUID.class)
+                .setParameter("images", imageIds)
+                .setParameter("album", albumId)
+                .getResultList());
+    }
+
+    /** Celles de ces Images que l'enseignant a liées, dans l'une quelconque de ses Préparations. */
+    public Set<UUID> lieesPar(Collection<UUID> imageIds, UUID enseignantId) {
+        if (imageIds.isEmpty()) {
+            return Set.of();
+        }
+        return Set.copyOf(getEntityManager().createQuery(
+                "select distinct l.imageId from LienImage l where l.imageId in :images and l.enseignantId = :enseignant",
+                UUID.class)
+                .setParameter("images", imageIds)
+                .setParameter("enseignant", enseignantId)
+                .getResultList());
     }
 
     /** Image liée à chacun de ces Mots de Préparation ; ceux qui n'en ont pas sont absents. */

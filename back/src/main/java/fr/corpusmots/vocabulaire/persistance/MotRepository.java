@@ -28,6 +28,21 @@ public class MotRepository implements PanacheRepositoryBase<Mot, UUID> {
         return find("formeCle", formeCle).firstResultOptional();
     }
 
+    /**
+     * Mots dont {@code forme_recherche} égale {@code unaccent(formeCle)} : même forme sans casse ni accents (« cote »
+     * trouve « côte » et « côté »), sans recherche partielle. {@code formeCle} est une clé de {@code Lexique} ;
+     * l'égalité est calculée comme à l'insertion ({@link #insererSiAbsent}) et servie par l'index trigramme
+     * ({@code gin_trgm_ops} accepte l'égalité).
+     */
+    @SuppressWarnings("unchecked")
+    public List<Mot> parFormeRecherche(String formeCle) {
+        return getEntityManager().createNativeQuery(
+                "select m.id, m.forme, m.forme_cle, m.cree_le from mot m"
+                        + " where m.forme_recherche = unaccent(:cle)", Mot.class)
+                .setParameter("cle", formeCle)
+                .getResultList();
+    }
+
     /** Mots de ces identifiants ; les identifiants inconnus sont ignorés. */
     public List<Mot> lire(Collection<UUID> ids) {
         return ids.isEmpty() ? List.of() : list("id in ?1", ids);

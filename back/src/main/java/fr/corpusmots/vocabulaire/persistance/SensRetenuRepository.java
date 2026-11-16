@@ -40,6 +40,19 @@ public class SensRetenuRepository implements PanacheRepositoryBase<SensRetenu, U
                 .getResultList());
     }
 
+    /** Sens retenus par l'enseignant pour l'un de ces Mots, dans l'une quelconque de ses Préparations. */
+    public List<SensRetenu> deMots(UUID enseignantId, Collection<UUID> motIds) {
+        if (motIds.isEmpty()) {
+            return List.of();
+        }
+        return getEntityManager().createQuery(
+                "select r from SensRetenu r, Sens s where s.id = r.sensId and r.enseignantId = :enseignant"
+                        + " and s.motId in :mots", SensRetenu.class)
+                .setParameter("enseignant", enseignantId)
+                .setParameter("mots", motIds)
+                .getResultList();
+    }
+
     /** Sens retenu de chacun de ces Mots de Préparation ; ceux qui n'en ont pas sont absents. */
     public Map<UUID, Sens> sensDe(Collection<UUID> preparationMotIds) {
         if (preparationMotIds.isEmpty()) {

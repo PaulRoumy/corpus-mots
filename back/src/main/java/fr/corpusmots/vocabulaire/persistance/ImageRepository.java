@@ -29,6 +29,20 @@ public class ImageRepository implements PanacheRepositoryBase<Image, UUID> {
         return sensIds.isEmpty() ? List.of() : list("sensId in ?1", sensIds);
     }
 
+    /**
+     * Comme {@link #deSens}, avec les Sections de chaque Image chargées dans la même requête (aucune requête par
+     * Image) ; l'appelant les filtre par {@code VisibiliteImages} (AD-2).
+     */
+    public List<Image> deSensAvecSections(Collection<UUID> sensIds) {
+        if (sensIds.isEmpty()) {
+            return List.of();
+        }
+        return getEntityManager().createQuery(
+                "select distinct i from Image i left join fetch i.sections where i.sensId in :sens", Image.class)
+                .setParameter("sens", sensIds)
+                .getResultList();
+    }
+
     /** Vrai si au moins une Image, de n'importe quel enseignant et à n'importe quel état, porte le Thème. */
     public boolean porteTheme(UUID themeId) {
         return (Boolean) getEntityManager()

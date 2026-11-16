@@ -2,6 +2,7 @@ package fr.corpusmots.vocabulaire.persistance;
 
 import io.quarkus.hibernate.orm.panache.PanacheRepositoryBase;
 import jakarta.enterprise.context.ApplicationScoped;
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -32,5 +33,10 @@ public class SensRepository implements PanacheRepositoryBase<Sens, UUID> {
     /** Sens du Mot {@code motId}, tous enseignants confondus : l'appelant ne révèle que ceux qui lui sont visibles. */
     public List<Sens> duMot(UUID motId) {
         return list("motId", motId);
+    }
+
+    /** Sens de ces Mots, tous enseignants confondus : l'appelant ne révèle que ceux qui lui sont visibles. */
+    public List<Sens> deMots(Collection<UUID> motIds) {
+        return motIds.isEmpty() ? List.of() : list("motId in ?1", motIds);
     }
 }

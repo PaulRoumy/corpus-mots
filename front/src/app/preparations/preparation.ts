@@ -69,6 +69,7 @@ import { ChampNomModule } from './champ-nom-module';
 import { map } from 'rxjs';
 import { ouvrirDialogueCorrigerAlbum } from './corriger-album-dialogue';
 import { libelleMots } from './preparations';
+import { PanneauDetection } from './panneau-detection';
 import { SaisieRapide } from './saisie-rapide';
 import { ouvrirDialogueTeleverserImage } from './televerser-image-dialogue';
 import {
@@ -271,6 +272,7 @@ type Source = 'module' | 'theme';
     MatSelectModule,
     ReactiveFormsModule,
     RepereSection,
+    PanneauDetection,
     SaisieRapide,
     Squelette,
   ],
@@ -500,7 +502,9 @@ type Source = 'module' | 'theme';
             <app-saisie-rapide
               [focusInitial]="motsCharges.length === 0"
               (ajouter)="ajouterMot($event)"
+              (saisieModifiee)="saisieTapee.set($event)"
             />
+            <app-panneau-detection [preparationId]="courante.id" [saisie]="saisieTapee()" />
             @if (motsCharges.length > 0) {
               <section class="mots" aria-labelledby="mots-titre">
                 <h2 id="mots-titre" class="mots__titre">Mots de la préparation</h2>
@@ -658,6 +662,8 @@ export class Preparation {
       : mots.filter((mot) => mot.illustre).length;
   });
   private readonly saisieRapide = viewChild(SaisieRapide);
+  /** Saisie en cours du Champ de saisie rapide, suivie par le Panneau de détection. */
+  protected readonly saisieTapee = signal('');
   /** Panneau Carte d'identité ouvert : le Mot dont la vignette l'a ouvert et son Image ; un seul à la fois. */
   protected readonly carteOuverte = signal<{
     readonly motId: string;
@@ -712,6 +718,8 @@ export class Preparation {
     this.erreurTheme.set(null);
     this.enregistrementEnAttente = false;
     this.mots.set(null);
+    // Le Champ de saisie rapide est recréé vide : la détection ne suit plus l'ancienne saisie.
+    this.saisieTapee.set('');
     this.erreurMots.set(null);
     this.echecAjout.set(null);
     this.echecRetrait.set(null);

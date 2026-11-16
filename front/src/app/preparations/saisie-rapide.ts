@@ -8,6 +8,7 @@ import {
   signal,
   viewChild,
 } from '@angular/core';
+import { outputFromObservable } from '@angular/core/rxjs-interop';
 import { FormControl, ReactiveFormsModule } from '@angular/forms';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatInputModule } from '@angular/material/input';
@@ -25,6 +26,9 @@ let prochainNumero = 0;
  *
  * Un refus que l'enseignant doit corriger (Mot déjà présent) s'affiche sous le champ par `refuser`, annoncé aux lecteurs
  * d'écran, jusqu'à la prochaine frappe ; la saisie refusée revient dans le champ s'il est resté vide.
+ *
+ * Chaque changement de la valeur est émis par `saisieModifiee`, sans validation : la page la donne au Panneau de
+ * détection (story 2.7), qui ne prend jamais le focus.
  */
 @Component({
   selector: 'app-saisie-rapide',
@@ -66,6 +70,9 @@ export class SaisieRapide {
   protected readonly idErreur = `saisie-rapide-erreur-${this.numero}`;
   protected readonly saisie = new FormControl('', { nonNullable: true });
   protected readonly erreur = signal<string | null>(null);
+
+  /** Valeur du champ à chaque changement (frappe, vidage après Entrée, saisie refusée remise) : la détection la suit. */
+  readonly saisieModifiee = outputFromObservable(this.saisie.valueChanges);
 
   private readonly champ = viewChild.required<ElementRef<HTMLInputElement>>('champ');
 

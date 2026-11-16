@@ -47,6 +47,8 @@ const TRACES = {
   interrogation:
     '<circle cx="12" cy="12" r="8.5"/>' +
     '<path d="M9.6 9.6a2.5 2.5 0 1 1 3.4 2.3c-.6.3-1 .9-1 1.6v.5M12 16.8h.01"/>',
+  // Historique (`i-hist` de la maquette) : Marque « déjà utilisée » d'une Image.
+  historique: '<path d="M4 12a8 8 0 1 0 2.4-5.7"/><path d="M4 4v4h4"/><path d="M12 8v4l3 2"/>',
   // Trois points verticaux : bouton du menu « Actions du module » de l'En-tête de Préparation.
   actions:
     '<circle cx="12" cy="5.5" r="1.2"/><circle cx="12" cy="12" r="1.2"/><circle cx="12" cy="18.5" r="1.2"/>',

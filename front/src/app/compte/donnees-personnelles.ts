@@ -61,7 +61,8 @@ import { ChangeDetectionStrategy, Component } from '@angular/core';
         <h3 class="donnees__sous-titre">Pictogrammes ARASAAC</h3>
         <p class="donnees__paragraphe">
           Pour chercher des pictogrammes, le serveur envoie les Mots de vos Préparations à ARASAAC,
-          un service extérieur, sans votre nom ni aucune information de votre compte.
+          un service extérieur, sans votre nom ni aucune information de votre compte. Un mot tapé
+          dans « Ajouter un mot » peut aussi lui être envoyé pendant la frappe, avant d'être ajouté.
         </p>
 
         <h3 class="donnees__sous-titre">Ce que l'application ne fait pas</h3>
