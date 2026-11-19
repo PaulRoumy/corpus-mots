@@ -153,6 +153,7 @@
 - source_spec: none
   summary: Story 2.7 : le Panneau de choix d'Image propose « Téléverser » (« Ajouter une image ») avec le formulaire de la story 2.5.
   evidence: Critère de la story 2.5 qui dépend d'un Panneau livré par la story 2.7.
+  status: fait (`docs/realisation/spec-2-7-3-panneau-de-choix-d-image.md`).
 - source_spec: none
   summary: Avant la story 2.4, partie 2 : ajouter `vocabulaire.service.SuggestionsArasaac` aux cibles de la règle ArchUnit `aucunAppelHttpSortantEnTransaction` (`ReglesArchitecture.APPELS_HTTP_SORTANTS`), avec sa fixture en violation.
   evidence: Revue de mi-epic de l'Epic 2 (2026-11-13, diff 757d63c..8a08761, action 11 de la rétrospective de l'Epic 1), lentille verification-gap : la règle ne voit que les appels directs à `SourceArasaac` ; un `@Transactional` qui appellerait `SuggestionsArasaac.pictogramme` tiendrait une connexion jusqu'à 3 s sans faire échouer le test.
@@ -213,6 +214,8 @@
 - source_spec: none
   summary: Story 2.7, partie 2 : retenir une Image proposée dans le Panneau de détection (↑ ↓ puis Entrée, ou clic) ajoute le Mot et lie l'Image par `Usages.lierImage` avec l'origine `reutilisee`, sans copie (AD-5) ; l'Entrée seule, sans choix, ajoute toujours le Mot « à illustrer ».
   evidence: Découpage de la story 2.7 en trois parties choisi par Paul ; la partie 1 pose le Panneau de détection en lecture.
+  status: fait (`docs/realisation/spec-2-7-2-retenir-une-image-dans-la-detection.md`).
 - source_spec: none
   summary: Story 2.7, partie 3 : Panneau de choix d'Image ouvert depuis une Carte de Mot (clic ou Entrée), à droite sans masquer la grille : Mot et Sens, Repère de qualité, Images classées comme la détection, « Ajouter une image » ; choisir une autre Image la remplace par `Usages.remplacerImage` puis ferme ; Échap ferme sans rien changer.
   evidence: Découpage de la story 2.7 en trois parties choisi par Paul.
+  status: fait (`docs/realisation/spec-2-7-3-panneau-de-choix-d-image.md`).

@@ -96,6 +96,38 @@ public class DetectionMots {
         if (enseignant == null || trouves.isEmpty()) {
             return new DetectionVue(forme, List.of());
         }
+        return new DetectionVue(forme, detectes(trouves, albumId, section, enseignant, false));
+    }
+
+    /**
+     * Propositions d'Images pour le Mot {@code motId}, qui figure dans une Préparation de l'enseignant courant de
+     * l'Album {@code albumId} et de la Section {@code section} (Panneau de choix d'Image, story 2.7) : ses Sens visibles,
+     * ses Albums et ses Images {@link VisibiliteImages#proposable proposables}, de tous ses Sens, classées comme la
+     * détection. Lecture seule. L'appelant a vérifié que le Mot est celui d'une Préparation de l'enseignant courant.
+     *
+     * @throws IllegalArgumentException si le Mot n'existe pas
+     */
+    @Transactional
+    public MotDetecteVue propositions(UUID motId, UUID albumId, Section section) {
+        UUID enseignant = enseignantCourant.id();
+        List<Mot> trouves = motId == null ? List.of() : mots.lire(List.of(motId));
+        if (trouves.isEmpty()) {
+            throw new IllegalArgumentException("Mot " + motId + " introuvable");
+        }
+        if (enseignant == null) {
+            Mot mot = trouves.get(0);
+            return new MotDetecteVue(new MotVue(mot.id(), mot.forme()), List.of(), List.of(), List.of());
+        }
+        return detectes(trouves, albumId, section, enseignant, true).get(0);
+    }
+
+    /**
+     * Calcul commun de la détection et des propositions : pour chacun de ces Mots, par forme, ses Sens visibles, ses
+     * Albums et ses Images proposables classées. Un Mot sans Image proposable ni Sens retenu par l'enseignant est omis,
+     * sauf si {@code garderTous}.
+     */
+    private List<MotDetecteVue> detectes(List<Mot> trouves, UUID albumId, Section section, UUID enseignant,
+            boolean garderTous) {
         List<UUID> motIds = trouves.stream().map(Mot::id).toList();
         Map<UUID, Sens> sensParId = sens.deMots(motIds).stream()
                 .collect(Collectors.toMap(Sens::id, Function.identity()));
@@ -128,7 +160,7 @@ public class DetectionMots {
             List<SensRetenu> retenusDuMot = retenus.stream()
                     .filter(retenu -> mot.id().equals(sensParId.get(retenu.sensId()).motId()))
                     .toList();
-            if (imagesDuMot.isEmpty() && retenusDuMot.isEmpty()) {
+            if (!garderTous && imagesDuMot.isEmpty() && retenusDuMot.isEmpty()) {
                 continue;
             }
             Set<UUID> sensVisibles = new LinkedHashSet<>();
@@ -157,7 +189,7 @@ public class DetectionMots {
             detectes.add(new MotDetecteVue(new MotVue(mot.id(), mot.forme()), sensDuMot, albumsMontres,
                     imagesMontrees));
         }
-        return new DetectionVue(forme, detectes);
+        return detectes;
     }
 
     private static SensProposeVue propose(Sens sens) {

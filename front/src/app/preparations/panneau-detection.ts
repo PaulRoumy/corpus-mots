@@ -11,22 +11,16 @@ import {
   signal,
   untracked,
 } from '@angular/core';
-import { MatIconModule } from '@angular/material/icon';
 import { Api } from '../api/api';
-import { fichierImage } from '../api/fn/images-resource/fichier-image';
 import { detecterMotPreparation } from '../api/fn/preparations-resource/detecter-mot-preparation';
 import { DetectionImageDto } from '../api/models/detection-image-dto';
 import { DetectionMotDto } from '../api/models/detection-mot-dto';
 import { DetectionPreparationDto } from '../api/models/detection-preparation-dto';
 import { Annuaire } from '../commun/annuaire';
-import { BadgeTypeImage } from '../commun/badge-type-image/badge-type-image';
-import { CHAMP_VIDE, PROPRIETAIRE_INCONNU } from '../commun/carte-identite/carte-identite';
 import { CompteCourant } from '../commun/compte-courant';
 import { codeErreur } from '../commun/erreurs/message-erreur';
-import { ChargementImage, ImageSecurisee } from '../commun/image-securisee/image-securisee';
-import { LIBELLES_TYPE_IMAGE } from '../commun/libelles-images';
-import { LIBELLES_SECTION, RepereSection } from '../commun/repere-section/repere-section';
 import { SuggestionsArasaac } from './suggestions-arasaac';
+import { libelleProprietaire, nomProposition, VignetteProposition } from './vignette-proposition';
 
 /** Pause de frappe après laquelle la détection part, en millisecondes. */
 export const DELAI_DETECTION_MS = 250;
@@ -57,12 +51,6 @@ type Etat =
   | { readonly nom: 'masque' }
   | { readonly nom: 'resultat'; readonly resultat: DetectionPreparationDto }
   | { readonly nom: 'erreur' };
-
-/** Vignette affichée : l'Image et le chargement de sa miniature, d'identité stable pour `image-securisee`. */
-interface Vignette {
-  readonly image: DetectionImageDto;
-  readonly charger: ChargementImage;
-}
 
 /** « aucune image », « 1 image », « 3 images ». */
 function libelleImages(nombre: number): string {
@@ -119,7 +107,7 @@ export function libelleSens(mot: DetectionMotDto): string | null {
  */
 @Component({
   selector: 'app-panneau-detection',
-  imports: [BadgeTypeImage, ImageSecurisee, MatIconModule, RepereSection, SuggestionsArasaac],
+  imports: [SuggestionsArasaac, VignetteProposition],
   changeDetection: ChangeDetectionStrategy.OnPush,
   styleUrl: './panneau-detection.scss',
   template: `
@@ -158,73 +146,23 @@ export function libelleSens(mot: DetectionMotDto): string | null {
                       }
                     </div>
                     <ul class="detection__images" role="presentation">
-                      @for (vignette of vignettes(mot); track vignette.image.id) {
+                      @for (image of mot.images; track image.id) {
                         <li
-                          class="vignette"
-                          [id]="idOption(vignette.image.id)"
+                          [id]="idOption(image.id)"
                           [attr.role]="deplie() ? 'option' : null"
-                          [attr.aria-selected]="
-                            deplie() ? vignette.image.id === imageChoisie() : null
-                          "
-                          [attr.aria-label]="nomOption(mot, vignette.image)"
+                          [attr.aria-selected]="deplie() ? image.id === imageChoisie() : null"
+                          [attr.aria-label]="nomOption(mot, image)"
                           [class.vignette--premiere]="
-                            imageChoisie() === null && vignette.image.id === premiereImageId()
+                            imageChoisie() === null && image.id === premiereImageId()
                           "
-                          [class.vignette--choisie]="vignette.image.id === imageChoisie()"
                           (mousedown)="$event.preventDefault()"
-                          (click)="retenirParClic(mot, vignette.image)"
-                        >
-                          @if (vignette.image.id === imageChoisie()) {
-                            <span class="vignette__coche" aria-hidden="true">
-                              <mat-icon svgIcon="coche" />
-                            </span>
-                          }
-                          <span class="vignette__photo">
-                            @if (echecs().has(vignette.image.id)) {
-                              <mat-icon
-                                class="vignette__repli"
-                                svgIcon="image"
-                                aria-hidden="true"
-                              />
-                            } @else {
-                              <img
-                                class="vignette__image"
-                                [appImageSecurisee]="vignette.charger"
-                                [alt]="mot.forme + ', ' + vignette.image.sens.libelle"
-                                (echec)="signalerEchec(vignette.image.id)"
-                              />
-                            }
-                          </span>
-                          <span class="vignette__infos">
-                            <span class="vignette__rangee">
-                              @for (section of vignette.image.sections; track section) {
-                                <app-repere-section [section]="section" />
-                              }
-                              <app-badge-type-image [type]="vignette.image.typeImage" />
-                            </span>
-                            <span class="vignette__origine">
-                              @if (vignette.image.albumOrigine) {
-                                <mat-icon svgIcon="livre" aria-hidden="true" />
-                              }
-                              {{ origine(vignette.image) }}
-                            </span>
-                            @if (vignette.image.dejaUtilisee || mot.sens.length > 1) {
-                              <span class="vignette__rangee">
-                                @if (vignette.image.dejaUtilisee) {
-                                  <span class="vignette__marque">
-                                    <mat-icon svgIcon="historique" aria-hidden="true" />
-                                    déjà utilisée
-                                  </span>
-                                }
-                                @if (mot.sens.length > 1) {
-                                  <span class="vignette__sens">{{
-                                    vignette.image.sens.libelle
-                                  }}</span>
-                                }
-                              </span>
-                            }
-                          </span>
-                        </li>
+                          (click)="retenirParClic(mot, image)"
+                          appVignetteProposition
+                          [image]="image"
+                          [forme]="mot.forme"
+                          [afficherSens]="mot.sens.length > 1"
+                          [choisie]="image.id === imageChoisie()"
+                        ></li>
                       }
                     </ul>
                   </section>
@@ -291,27 +229,10 @@ export class PanneauDetection {
 
   protected readonly messageIndisponible = MESSAGE_DETECTION_INDISPONIBLE;
   protected readonly etat = signal<Etat>({ nom: 'masque' });
-  /** Images dont la miniature n'a pas pu être chargée : l'icône d'image la remplace. */
-  protected readonly echecs = signal<ReadonlySet<string>>(new Set());
 
   protected readonly resultat = computed(() => {
     const etat = this.etat();
     return etat.nom === 'resultat' ? etat.resultat : null;
-  });
-
-  /** Vignettes de chaque Mot du résultat affiché, avec un chargement stable par Image. */
-  private readonly vignettesParMot = computed(() => {
-    const parMot = new Map<string, readonly Vignette[]>();
-    for (const mot of this.resultat()?.mots ?? []) {
-      parMot.set(
-        mot.motId,
-        mot.images.map((image) => ({
-          image,
-          charger: () => this.api.invoke(fichierImage, { id: image.id, taille: 'miniature' }),
-        })),
-      );
-    }
-    return parMot;
   });
 
   /** Mots du résultat qui proposent des Images (dans la liste), puis ceux qui n'en ont pas (hors de la liste). */
@@ -452,25 +373,13 @@ export class PanneauDetection {
     return `${this.idListe}-image-${imageId}`;
   }
 
-  /**
-   * Nom accessible d'une Image proposée : Mot, Sens, propriétaire, puis ce que la vignette montre (« déjà utilisée »,
-   * Sections, type, album d'origine).
-   */
+  /** Nom accessible d'une Image proposée (`nomProposition`). */
   protected nomOption(mot: DetectionMotDto, image: DetectionImageDto): string {
-    const sens = image.sens.categorie
-      ? `${image.sens.libelle} (${image.sens.categorie})`
-      : image.sens.libelle;
-    return [
+    return nomProposition(
       mot.forme,
-      sens,
-      this.proprietaire(image.proprietaireId),
-      image.dejaUtilisee ? 'déjà utilisée' : null,
-      image.sections.map((section) => LIBELLES_SECTION[section]).join(' ') || null,
-      LIBELLES_TYPE_IMAGE[image.typeImage],
-      image.albumOrigine ? `album ${image.albumOrigine.titre}` : null,
-    ]
-      .filter((partie) => partie !== null)
-      .join(', ');
+      image,
+      libelleProprietaire(image.proprietaireId, this.compteCourant, this.annuaire),
+    );
   }
 
   protected etatMot(mot: DetectionMotDto): string {
@@ -485,37 +394,10 @@ export class PanneauDetection {
     return mot.albums.map((album) => album.titre).join(', ');
   }
 
-  protected vignettes(mot: DetectionMotDto): readonly Vignette[] {
-    return this.vignettesParMot().get(mot.motId) ?? [];
-  }
-
-  /** « La petite poule rousse · vous », ou le seul propriétaire sans album d'origine. */
-  protected origine(image: DetectionImageDto): string {
-    const proprietaire = this.proprietaire(image.proprietaireId);
-    return image.albumOrigine ? `${image.albumOrigine.titre} · ${proprietaire}` : proprietaire;
-  }
-
-  protected signalerEchec(imageId: string): void {
-    this.echecs.update((echecs) => new Set(echecs).add(imageId));
-  }
-
-  /** « vous » pour l'enseignant connecté, sinon son nom dans l'Annuaire. */
-  private proprietaire(id: string): string {
-    if (this.compteCourant.compte()?.id === id) {
-      return 'vous';
-    }
-    const nom = this.annuaire.enseignant(id)?.nomAffiche;
-    if (nom) {
-      return nom;
-    }
-    return this.annuaire.etat().statut === 'charge' ? PROPRIETAIRE_INCONNU : CHAMP_VIDE;
-  }
-
   private async detecter(preparationId: string, saisie: string, numero: number): Promise<void> {
     try {
       const resultat = await this.api.invoke(detecterMotPreparation, { id: preparationId, saisie });
       if (numero === this.derniereFrappe) {
-        this.echecs.set(new Set());
         this.imageChoisie.set(null);
         this.saisieDuResultat.set(saisie);
         this.etat.set({ nom: 'resultat', resultat });

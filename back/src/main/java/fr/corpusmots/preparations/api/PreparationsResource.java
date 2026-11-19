@@ -187,7 +187,33 @@ public class PreparationsResource {
                 televersement.fichier.size(), televersement.typeImage, televersement.licence);
         return MotPreparationDto.de(preparations.televerserImage(id, motPreparationId,
                 new TeleverserImageMotCommande(prepare.fichier(), prepare.typeImage(), prepare.licence(),
-                        televersement.source, televersement.auteur)));
+                        televersement.source, televersement.auteur,
+                        Boolean.TRUE.equals(televersement.remplacer))));
+    }
+
+    @GET
+    @Path("/{id}/mots/{motPreparationId}/propositions")
+    @Operation(operationId = "proposerImagesMotPreparation",
+            summary = "Images proposables d'un Mot d'une Préparation de l'enseignant connecté, de tous ses Sens,"
+                    + " classées comme la détection ; rien n'est écrit")
+    public DetectionMotDto propositions(@PathParam("id") UUID id,
+            @PathParam("motPreparationId") UUID motPreparationId) {
+        return DetectionMotDto.de(preparations.propositions(id, motPreparationId), true);
+    }
+
+    @PUT
+    @Path("/{id}/mots/{motPreparationId}/image")
+    @Consumes(MediaType.APPLICATION_JSON)
+    @Operation(operationId = "choisirImageMotPreparation",
+            summary = "Lier une Image existante à un Mot d'une Préparation de l'enseignant connecté, à la place de"
+                    + " celle qu'il a (origine reutilisee) ; l'Image remplacée est seulement déliée")
+    public MotPreparationDto choisirImage(@PathParam("id") UUID id,
+            @PathParam("motPreparationId") UUID motPreparationId,
+            @RequestBody(required = true) ChoixImageMotPreparationDto choix) {
+        if (choix == null || choix.imageId() == null) {
+            throw new ErreurMetier(400, "requete.invalide", "L'image est obligatoire");
+        }
+        return MotPreparationDto.de(preparations.remplacerImage(id, motPreparationId, choix.imageId()));
     }
 
     @PUT

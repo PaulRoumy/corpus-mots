@@ -9,7 +9,8 @@ import org.jboss.resteasy.reactive.multipart.FileUpload;
 
 /**
  * Formulaire {@code multipart/form-data} du téléversement d'une Image depuis la Carte d'un Mot : le fichier (JPEG, PNG
- * ou GIF, 20 Mo au plus), son type, sa source, sa licence et son auteur.
+ * ou GIF, 20 Mo au plus), son type, sa source, sa licence et son auteur ; {@code remplacer} pour remplacer l'Image
+ * déjà liée.
  */
 public class TeleversementImageMotPreparationDto {
 
@@ -36,4 +37,9 @@ public class TeleversementImageMotPreparationDto {
     @RestForm
     @Schema(description = "Auteur de l'image, facultatif, 500 caractères au plus")
     public String auteur;
+
+    @RestForm
+    @Schema(description = "Vrai : l'Image créée remplace l'Image déjà liée au Mot, qui est seulement déliée ; absent ou"
+            + " faux : un Mot déjà illustré est refusé (409 preparation.mot_deja_illustre)")
+    public Boolean remplacer;
 }

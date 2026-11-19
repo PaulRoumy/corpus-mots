@@ -11,6 +11,8 @@ import { MatDialog } from '@angular/material/dialog';
 import { Title } from '@angular/platform-browser';
 import { of } from 'rxjs';
 import { AlbumDto } from '../api/models/album-dto';
+import { DetectionImageDto } from '../api/models/detection-image-dto';
+import { DetectionMotDto } from '../api/models/detection-mot-dto';
 import { ModuleDto } from '../api/models/module-dto';
 import { MotPreparationDto } from '../api/models/mot-preparation-dto';
 import { PreparationDto } from '../api/models/preparation-dto';
@@ -3154,9 +3156,33 @@ describe('Preparation (En-tête)', () => {
 
     const vignette = (forme: string) =>
       racine.querySelector<HTMLButtonElement>(
-        `app-carte-mot button[aria-label="Carte d'identité de « ${forme} »"]`,
+        `app-carte-mot button[aria-label="Changer l'image de « ${forme} »"]`,
       )!;
     const panneau = () => racine.querySelector<HTMLElement>('app-carte-identite aside');
+    const MOTS: Record<string, MotPreparationDto> = { citrouille: CITROUILLE, potiron: POTIRON };
+
+    /**
+     * La vignette ouvre le Panneau de choix d'Image (story 2.7, partie 3) ; son bouton « Carte d'identité » ouvre à sa
+     * place le Panneau Carte d'identité.
+     */
+    async function ouvrirCarte(forme: string) {
+      const mot = MOTS[forme];
+      vignette(forme).click();
+      await stabiliser();
+      serveur.expectOne(`${URL_MOTS}/${mot.id}/propositions`).flush({
+        motId: mot.motId,
+        forme,
+        dejaDansLaPreparation: true,
+        sens: [],
+        albums: [],
+        images: [],
+      });
+      await stabiliser();
+      racine
+        .querySelector<HTMLButtonElement>('app-panneau-choix-image .choix-image__carte-identite')!
+        .click();
+      await stabiliser();
+    }
 
     async function ouvrirGrille() {
       await ouvrir({ ...PREPARATION, nombreMots: 3 }, MODULES, THEMES, albumDe(PREPARATION), [
@@ -3170,8 +3196,7 @@ describe('Preparation (En-tête)', () => {
       await ouvrirGrille();
       expect(panneau()).toBeNull();
 
-      vignette('citrouille').click();
-      await stabiliser();
+      await ouvrirCarte('citrouille');
 
       expect(racine.querySelector('.disposition')?.classList).toContain('disposition--panneau');
       expect(panneau()).not.toBeNull();
@@ -3182,10 +3207,8 @@ describe('Preparation (En-tête)', () => {
 
     it('une autre vignette remplace le panneau : un seul à la fois', async () => {
       await ouvrirGrille();
-      vignette('citrouille').click();
-      await stabiliser();
-      vignette('potiron').click();
-      await stabiliser();
+      await ouvrirCarte('citrouille');
+      await ouvrirCarte('potiron');
 
       expect(racine.querySelectorAll('app-carte-identite')).toHaveLength(1);
       serveur.expectOne(`/api/images/${IMAGE_1}`);
@@ -3194,8 +3217,7 @@ describe('Preparation (En-tête)', () => {
 
     it('Échap ferme le panneau et rend le focus à la vignette', async () => {
       await ouvrirGrille();
-      vignette('citrouille').click();
-      await stabiliser();
+      await ouvrirCarte('citrouille');
       serveur.expectOne(`/api/images/${IMAGE_1}`);
 
       panneau()!.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
@@ -3208,8 +3230,7 @@ describe('Preparation (En-tête)', () => {
 
     it('« Fermer » ferme le panneau et rend le focus à la vignette', async () => {
       await ouvrirGrille();
-      vignette('potiron').click();
-      await stabiliser();
+      await ouvrirCarte('potiron');
       serveur.expectOne(`/api/images/${IMAGE_2}`);
 
       panneau()!.querySelector<HTMLButtonElement>('button[aria-label="Fermer"]')!.click();
@@ -3227,8 +3248,7 @@ describe('Preparation (En-tête)', () => {
         nomAffiche: 'Moi',
       });
       await ouvrirGrille();
-      vignette('citrouille').click();
-      await stabiliser();
+      await ouvrirCarte('citrouille');
       const carte = {
         id: IMAGE_1,
         proprietaireId: MOI,
@@ -3283,8 +3303,7 @@ describe('Preparation (En-tête)', () => {
         nomAffiche: 'Moi',
       });
       await ouvrirGrille();
-      vignette('citrouille').click();
-      await stabiliser();
+      await ouvrirCarte('citrouille');
       const carte = {
         id: IMAGE_1,
         proprietaireId: MOI,
@@ -3337,24 +3356,19 @@ describe('Preparation (En-tête)', () => {
         .forEach((surcouche) => surcouche.remove());
     });
 
-    it('la vignette de l’Image déjà affichée rend le focus au panneau, sans relire', async () => {
+    it('« Carte d’identité » ouvre le panneau à la place du Panneau de choix d’Image : un seul à la fois', async () => {
       await ouvrirGrille();
-      vignette('citrouille').click();
-      await stabiliser();
-      serveur.expectOne(`/api/images/${IMAGE_1}`);
-      vignette('citrouille').focus();
+      await ouvrirCarte('citrouille');
 
-      vignette('citrouille').click();
-      await stabiliser();
-
+      expect(racine.querySelector('app-panneau-choix-image')).toBeNull();
+      expect(racine.querySelectorAll('app-carte-identite')).toHaveLength(1);
       expect(document.activeElement).toBe(panneau());
-      serveur.expectNone(`/api/images/${IMAGE_1}`);
+      serveur.expectOne(`/api/images/${IMAGE_1}`);
     });
 
     it('ouvrir une autre Préparation ferme le panneau', async () => {
       await ouvrirGrille();
-      vignette('citrouille').click();
-      await stabiliser();
+      await ouvrirCarte('citrouille');
       serveur.expectOne(`/api/images/${IMAGE_1}`);
 
       fixture.componentRef.setInput('id', AUTRE_ID);
@@ -3366,8 +3380,7 @@ describe('Preparation (En-tête)', () => {
 
     it('panneau ouvert sur grand écran : la page reste active', async () => {
       await ouvrirGrille();
-      vignette('citrouille').click();
-      await stabiliser();
+      await ouvrirCarte('citrouille');
       serveur.expectOne(`/api/images/${IMAGE_1}`);
 
       expect(racine.querySelector('.disposition')?.classList).not.toContain(
@@ -3378,8 +3391,7 @@ describe('Preparation (En-tête)', () => {
 
     it('retirer le Mot affiché ferme le panneau', async () => {
       await ouvrirGrille();
-      vignette('citrouille').click();
-      await stabiliser();
+      await ouvrirCarte('citrouille');
       serveur.expectOne(`/api/images/${IMAGE_1}`);
 
       racine
@@ -3391,6 +3403,402 @@ describe('Preparation (En-tête)', () => {
 
       expect(panneau()).toBeNull();
       serveur.expectOne(`${URL_MOTS}/${CITROUILLE.id}`);
+    });
+  });
+
+  describe('Panneau de choix d’Image (story 2.7, partie 3)', () => {
+    const GALETTE = motPreparation('galette', 1);
+    const IMAGE_X = '0190f0a0-0000-7000-8000-0000000c0031';
+    const IMAGE_Y = '0190f0a0-0000-7000-8000-0000000c0032';
+    const IMAGE_Z = '0190f0a0-0000-7000-8000-0000000c0033';
+    function image(id: string): NonNullable<MotPreparationDto['image']> {
+      return {
+        id,
+        proprietaireId: MOI,
+        etat: 'privee',
+        aRemplacer: null,
+        reutilisable: true,
+        typeImage: 'image_libre',
+        aCompleter: false,
+      };
+    }
+    const FARINE: MotPreparationDto = {
+      ...motPreparation('farine', 2),
+      sens: { id: '0190f0a0-0000-7000-8000-0000000d0002', libelle: 'farine', categorie: 'nom' },
+      illustre: true,
+      image: image(IMAGE_X),
+    };
+    /** Image proposée pour « farine », au format de la détection. */
+    function proposition(id: string): DetectionImageDto {
+      return {
+        ...image(id),
+        sections: ['ms'],
+        albumOrigine: null,
+        sens: { id: FARINE.sens.id, libelle: 'farine', categorie: 'nom', aCompleter: false },
+        dejaUtilisee: false,
+      };
+    }
+    const PROPOSITIONS: DetectionMotDto = {
+      motId: FARINE.motId,
+      forme: 'farine',
+      dejaDansLaPreparation: true,
+      sens: [{ id: FARINE.sens.id, libelle: 'farine', categorie: 'nom', aCompleter: false }],
+      albums: [],
+      images: [proposition(IMAGE_Y), proposition(IMAGE_X)],
+    };
+    const URL_PROPOSITIONS = `${URL_MOTS}/${FARINE.id}/propositions`;
+    const URL_IMAGE = `${URL_MOTS}/${FARINE.id}/image`;
+    const original = { creer: URL.createObjectURL, revoquer: URL.revokeObjectURL };
+
+    beforeEach(() => {
+      URL.createObjectURL = vi.fn(() => 'blob:http://localhost/image');
+      URL.revokeObjectURL = vi.fn();
+      document.body.appendChild(racine);
+    });
+
+    afterEach(() => {
+      serveur.match((requete) => requete.url.endsWith('/fichier'));
+      serveur.match('/api/enseignants');
+      document
+        .querySelectorAll('.cdk-overlay-container')
+        .forEach((surcouche) => surcouche.remove());
+      racine.remove();
+      URL.createObjectURL = original.creer;
+      URL.revokeObjectURL = original.revoquer;
+    });
+
+    const vignette = (forme: string) =>
+      racine.querySelector<HTMLButtonElement>(
+        `app-carte-mot button[aria-label="Changer l'image de « ${forme} »"]`,
+      )!;
+    const panneau = () => racine.querySelector<HTMLElement>('app-panneau-choix-image aside');
+    const liste = () =>
+      racine.querySelector<HTMLElement>('app-panneau-choix-image [role="listbox"]')!;
+    const options = () => [
+      ...racine.querySelectorAll<HTMLElement>('app-panneau-choix-image [role="option"]'),
+    ];
+
+    async function ouvrirGrille() {
+      await ouvrir(
+        { ...PREPARATION, nombreMots: 2, nombreIllustres: 1 },
+        MODULES,
+        THEMES,
+        albumDe(PREPARATION),
+        [GALETTE, FARINE],
+      );
+    }
+
+    async function ouvrirChoix(propositions: DetectionMotDto = PROPOSITIONS) {
+      vignette('farine').click();
+      await stabiliser();
+      serveur.expectOne(URL_PROPOSITIONS).flush(propositions);
+      await stabiliser();
+    }
+
+    it('la vignette ouvre le panneau à droite, la Grille reste affichée, le focus va à la liste', async () => {
+      await ouvrirGrille();
+
+      await ouvrirChoix();
+
+      expect(panneau()).not.toBeNull();
+      expect(racine.querySelector('.disposition')?.classList).toContain('disposition--panneau');
+      expect(cartes()).toEqual(['galette', 'farine']);
+      expect(panneau()!.querySelector('.choix-image__forme')?.textContent).toBe('farine');
+      expect(panneau()!.querySelector('.choix-image__sens')?.textContent).toBe(
+        'Sens : farine (nom)',
+      );
+      expect(options().map((option) => option.id)).toEqual([
+        `choix-image-${IMAGE_Y}`,
+        `choix-image-${IMAGE_X}`,
+      ]);
+      // L'Image actuelle porte « actuelle », dans le texte et dans le nom accessible.
+      expect(options()[1].querySelector('.vignette__actuelle')?.textContent).toBe('actuelle');
+      expect(options()[1].getAttribute('aria-label')).toBe(
+        'farine, farine (nom), —, actuelle, MS, image libre',
+      );
+      expect(document.activeElement).toBe(liste());
+    });
+
+    it('la vignette « + » d’une Carte « à illustrer » ouvre le panneau', async () => {
+      await ouvrirGrille();
+
+      racine
+        .querySelector<HTMLButtonElement>(
+          'app-carte-mot button[aria-label="Choisir une image pour « galette »"]',
+        )!
+        .click();
+      await stabiliser();
+      serveur.expectOne(`${URL_MOTS}/${GALETTE.id}/propositions`).flush({
+        motId: GALETTE.motId,
+        forme: 'galette',
+        dejaDansLaPreparation: true,
+        sens: [],
+        albums: [],
+        images: [],
+      });
+      await stabiliser();
+
+      expect(panneau()).not.toBeNull();
+      expect(panneau()!.querySelector('.choix-image__vide')?.textContent).toBe(
+        'Aucune image pour ce mot.',
+      );
+      expect(panneau()!.querySelector('.choix-image__carte-identite')).toBeNull();
+      expect(panneau()!.querySelector('.choix-image__ajouter')?.textContent?.trim()).toBe(
+        'Ajouter une image',
+      );
+    });
+
+    it('↓ puis Entrée : l’Image remplace l’actuelle, panneau fermé, Carte mise à jour, focus sur la vignette', async () => {
+      await ouvrirGrille();
+      await ouvrirChoix();
+
+      liste().dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true }));
+      await stabiliser();
+      expect(liste().getAttribute('aria-activedescendant')).toBe(`choix-image-${IMAGE_Y}`);
+      expect(options()[0].getAttribute('aria-selected')).toBe('true');
+      liste().dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+      await stabiliser();
+
+      const requete = serveur.expectOne(URL_IMAGE);
+      expect(requete.request.method).toBe('PUT');
+      expect(requete.request.body).toEqual({ imageId: IMAGE_Y });
+      requete.flush({ ...FARINE, image: image(IMAGE_Y) });
+      await stabiliser();
+
+      expect(panneau()).toBeNull();
+      expect(racine.querySelector('.disposition')?.classList).not.toContain('disposition--panneau');
+      // La miniature de la Carte (celle du panneau fermé est annulée).
+      serveur
+        .match((requete) => requete.url === `/api/images/${IMAGE_Y}/fichier`)
+        .filter((requete) => !requete.cancelled)
+        .forEach((requete) => requete.flush(new Blob(['png'])));
+      await stabiliser();
+      expect(document.activeElement).toBe(vignette('farine'));
+      expect(texte('p[aria-live="polite"]')).toBe('Image de « farine » changée.');
+    });
+
+    it('un clic sur une Image la lie ; une Carte « à illustrer » devient illustrée', async () => {
+      await ouvrirGrille();
+      racine
+        .querySelector<HTMLButtonElement>(
+          'app-carte-mot button[aria-label="Choisir une image pour « galette »"]',
+        )!
+        .click();
+      await stabiliser();
+      serveur.expectOne(`${URL_MOTS}/${GALETTE.id}/propositions`).flush({
+        ...PROPOSITIONS,
+        motId: GALETTE.motId,
+        forme: 'galette',
+        images: [proposition(IMAGE_Z)],
+      });
+      await stabiliser();
+      expect(texte('.entete__compteur')).toBe('2 mots, 1 déjà illustré');
+
+      options()[0].click();
+      await stabiliser();
+      serveur
+        .expectOne(`${URL_MOTS}/${GALETTE.id}/image`)
+        .flush({ ...GALETTE, illustre: true, image: image(IMAGE_Z) });
+      await stabiliser();
+
+      expect(panneau()).toBeNull();
+      expect(texte('.entete__compteur')).toBe('2 mots, 2 déjà illustrés');
+      expect(
+        [...racine.querySelectorAll('.mots__element')].map((element) =>
+          element.classList.contains('mots__element--a-illustrer'),
+        ),
+      ).toEqual([false, false]);
+      expect(document.activeElement).toBe(vignette('galette'));
+      expect(texte('p[aria-live="polite"]')).toBe('Image de « galette » changée.');
+    });
+
+    it('retenir l’Image actuelle ferme le panneau sans requête', async () => {
+      await ouvrirGrille();
+      await ouvrirChoix();
+
+      options()[1].click();
+      await stabiliser();
+
+      expect(panneau()).toBeNull();
+      serveur.expectNone(URL_IMAGE);
+      expect(document.activeElement).toBe(vignette('farine'));
+    });
+
+    it('Échap ferme le panneau sans requête et rend le focus à la vignette', async () => {
+      await ouvrirGrille();
+      await ouvrirChoix();
+
+      liste().dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true }));
+      liste().dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+      await stabiliser();
+
+      expect(panneau()).toBeNull();
+      serveur.expectNone(URL_IMAGE);
+      expect(document.activeElement).toBe(vignette('farine'));
+    });
+
+    it('Image indisponible : message dans le panneau, liste relue, panneau ouvert, pas de Bandeau', async () => {
+      await ouvrirGrille();
+      await ouvrirChoix();
+
+      options()[0].click();
+      await stabiliser();
+      serveur
+        .expectOne(URL_IMAGE)
+        .flush(
+          { status: 404, code: 'image.indisponible', title: 'Not Found' },
+          { status: 404, statusText: 'Not Found' },
+        );
+      await stabiliser();
+
+      expect(panneau()).not.toBeNull();
+      expect(panneau()!.querySelector('.choix-image__message')?.textContent).toBe(
+        "Cette image n'est plus disponible.",
+      );
+      serveur
+        .expectOne(URL_PROPOSITIONS)
+        .flush({ ...PROPOSITIONS, images: [proposition(IMAGE_X)] });
+      await stabiliser();
+      expect(options()).toHaveLength(1);
+      expect(racine.querySelector('.page app-bandeau-erreur')).toBeNull();
+    });
+
+    it('autre échec : message dans le panneau, qui reste ouvert', async () => {
+      await ouvrirGrille();
+      await ouvrirChoix();
+
+      options()[0].click();
+      await stabiliser();
+      serveur.expectOne(URL_IMAGE).error(new ProgressEvent('error'));
+      await stabiliser();
+
+      expect(panneau()).not.toBeNull();
+      expect(panneau()!.querySelector('.choix-image__message')?.textContent).toBe(MESSAGE_RESEAU);
+      serveur.expectNone(URL_PROPOSITIONS);
+    });
+
+    it('le Panneau Carte d’identité ouvert, la vignette d’une autre Carte n’affiche que le Panneau de choix', async () => {
+      const POTIRON: MotPreparationDto = {
+        ...motPreparation('potiron', 3),
+        illustre: true,
+        image: image(IMAGE_Z),
+      };
+      await ouvrir(
+        { ...PREPARATION, nombreMots: 3, nombreIllustres: 2 },
+        MODULES,
+        THEMES,
+        albumDe(PREPARATION),
+        [GALETTE, FARINE, POTIRON],
+      );
+      await ouvrirChoix();
+      panneau()!.querySelector<HTMLButtonElement>('.choix-image__carte-identite')!.click();
+      await stabiliser();
+      serveur.expectOne(`/api/images/${IMAGE_X}`);
+      expect(racine.querySelector('app-carte-identite')).not.toBeNull();
+      expect(panneau()).toBeNull();
+
+      vignette('potiron').click();
+      await stabiliser();
+      serveur
+        .expectOne(`${URL_MOTS}/${POTIRON.id}/propositions`)
+        .flush({ ...PROPOSITIONS, motId: POTIRON.motId, forme: 'potiron', images: [] });
+      await stabiliser();
+
+      expect(racine.querySelector('app-carte-identite')).toBeNull();
+      expect(racine.querySelectorAll('app-panneau-choix-image')).toHaveLength(1);
+    });
+
+    it('« Ajouter une image » : le Dialogue remplace l’Image, la Carte la montre et le panneau se ferme', async () => {
+      const ouvrirDialogue = vi.spyOn(TestBed.inject(MatDialog), 'open');
+      await ouvrirGrille();
+      await ouvrirChoix();
+
+      panneau()!.querySelector<HTMLButtonElement>('.choix-image__ajouter')!.click();
+      await stabiliser();
+      expect(document.querySelector('app-televerser-image')).not.toBeNull();
+      expect(ouvrirDialogue.mock.lastCall![1]!.data).toEqual(
+        expect.objectContaining({ preparationId: ID, mot: FARINE, remplacer: true }),
+      );
+
+      TestBed.inject(MatDialog).openDialogs[0].close({ ...FARINE, image: image(IMAGE_Z) });
+      await stabiliser();
+
+      expect(panneau()).toBeNull();
+      serveur
+        .expectOne((requete) => requete.url === `/api/images/${IMAGE_Z}/fichier`)
+        .flush(new Blob(['png']));
+      await stabiliser();
+      expect(document.activeElement).toBe(vignette('farine'));
+      expect(texte('p[aria-live="polite"]')).toBe('Image de « farine » changée.');
+    });
+
+    it('la vignette du Mot déjà affiché rend le focus au panneau, sans relire', async () => {
+      await ouvrirGrille();
+      await ouvrirChoix();
+      vignette('farine').focus();
+
+      vignette('farine').click();
+      await stabiliser();
+
+      expect(document.activeElement).toBe(panneau());
+      serveur.expectNone(URL_PROPOSITIONS);
+    });
+
+    it('deux changements de la même Image : l’annonce est vidée puis répétée', async () => {
+      await ouvrirGrille();
+      const region = racine.querySelector<HTMLElement>('p[aria-live="polite"]')!;
+      const annonces: string[] = [];
+      const observateur = new MutationObserver(() => annonces.push(region.textContent ?? ''));
+      observateur.observe(region, { childList: true, characterData: true, subtree: true });
+
+      for (const id of [IMAGE_Y, IMAGE_Z]) {
+        await ouvrirChoix({ ...PROPOSITIONS, images: [proposition(id)] });
+        options()[0].click();
+        await stabiliser();
+        serveur.expectOne(URL_IMAGE).flush({ ...FARINE, image: image(id) });
+        await stabiliser();
+        await stabiliser();
+      }
+      observateur.disconnect();
+
+      expect(annonces.filter((texte) => texte === 'Image de « farine » changée.')).toHaveLength(2);
+      expect(region.textContent).toBe('Image de « farine » changée.');
+    });
+
+    it('code du panneau introuvable : rien ne reste ouvert, le message réseau est annoncé, un clic réessaie', async () => {
+      await ouvrirGrille();
+      const page = fixture.componentInstance as unknown as { codePanneauChoix: Promise<unknown> };
+      const echec = Promise.reject(new Error('chunk introuvable'));
+      echec.catch(() => undefined);
+      page.codePanneauChoix = echec;
+
+      vignette('farine').click();
+      await stabiliser();
+      await stabiliser();
+
+      expect(racine.querySelector('app-panneau-choix-image')).toBeNull();
+      expect(racine.querySelector('.disposition')?.classList).not.toContain('disposition--panneau');
+      expect(racine.querySelector('.page')?.hasAttribute('inert')).toBe(false);
+      expect(texte('p[aria-live="polite"]')).toBe(MESSAGE_RESEAU);
+      expect(page.codePanneauChoix).toBeNull();
+
+      await ouvrirChoix();
+      expect(panneau()).not.toBeNull();
+    });
+
+    it('retirer le Mot affiché ferme le panneau', async () => {
+      await ouvrirGrille();
+      await ouvrirChoix();
+
+      racine
+        .querySelector<HTMLButtonElement>(
+          'app-carte-mot button[aria-label="Retirer « farine » de la préparation"]',
+        )!
+        .click();
+      await stabiliser();
+
+      expect(panneau()).toBeNull();
+      serveur.expectOne(`${URL_MOTS}/${FARINE.id}`);
     });
   });
 });
@@ -3411,7 +3819,7 @@ describe('Preparation (Carte d’identité sous 600 px)', () => {
     },
   };
 
-  async function ouvrirPanneau(matches: boolean) {
+  async function ouvrirPanneau(matches: boolean, carteIdentite = true) {
     TestBed.configureTestingModule({
       imports: [Preparation],
       providers: [
@@ -3442,9 +3850,24 @@ describe('Preparation (Carte d’identité sous 600 px)', () => {
     await stabiliser();
     const racine = fixture.nativeElement as HTMLElement;
     racine
-      .querySelector<HTMLButtonElement>(`button[aria-label="Carte d'identité de « citrouille »"]`)!
+      .querySelector<HTMLButtonElement>(`button[aria-label="Changer l'image de « citrouille »"]`)!
       .click();
     await stabiliser();
+    serveur.expectOne(`${URL_MOTS}/${CITROUILLE.id}/propositions`).flush({
+      motId: CITROUILLE.motId,
+      forme: 'citrouille',
+      dejaDansLaPreparation: true,
+      sens: [],
+      albums: [],
+      images: [],
+    });
+    await stabiliser();
+    if (carteIdentite) {
+      racine
+        .querySelector<HTMLButtonElement>('app-panneau-choix-image .choix-image__carte-identite')!
+        .click();
+      await stabiliser();
+    }
     serveur.match(() => true);
     return racine;
   }
@@ -3454,6 +3877,15 @@ describe('Preparation (Carte d’identité sous 600 px)', () => {
 
     expect(racine.querySelector('.disposition')?.classList).toContain('disposition--plein-ecran');
     expect(racine.querySelector('app-carte-identite')).not.toBeNull();
+    expect(racine.querySelector('.page')?.hasAttribute('inert')).toBe(true);
+  });
+
+  it('sous 600 px, Panneau de choix d’Image seul : la page dessous est inerte', async () => {
+    const racine = await ouvrirPanneau(true, false);
+
+    expect(racine.querySelector('app-panneau-choix-image')).not.toBeNull();
+    expect(racine.querySelector('app-carte-identite')).toBeNull();
+    expect(racine.querySelector('.disposition')?.classList).toContain('disposition--plein-ecran');
     expect(racine.querySelector('.page')?.hasAttribute('inert')).toBe(true);
   });
 

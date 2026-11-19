@@ -284,6 +284,16 @@ components:
         creeLe:
           type: string
           $ref: "#/components/schemas/OffsetDateTime"
+    ChoixImageMotPreparationDto:
+      type: object
+      required:
+      - imageId
+      properties:
+        imageId:
+          description: "Image proposable d'un Sens du Mot ; si son Sens n'est pas\
+            \ le Sens retenu, il le devient"
+          type: string
+          $ref: "#/components/schemas/UUID"
     ClassementImageDto:
       type: object
       required:
@@ -1126,6 +1136,11 @@ components:
         auteur:
           type: string
           description: "Auteur de l'image, facultatif, 500 caractères au plus"
+        remplacer:
+          type: boolean
+          description: "Vrai : l'Image créée remplace l'Image déjà liée au Mot, qui\
+            \ est seulement déliée ; absent ou faux : un Mot déjà illustré est refusé\
+            \ (409 preparation.mot_deja_illustre)"
     ThemeDto:
       type: object
       required:
@@ -2014,6 +2029,64 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/MotPreparationDto"
+      tags:
+      - Preparations Resource
+    put:
+      summary: "Lier une Image existante à un Mot d'une Préparation de l'enseignant\
+        \ connecté, à la place de celle qu'il a (origine reutilisee) ; l'Image remplacé\
+        e est seulement déliée"
+      operationId: choisirImageMotPreparation
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          $ref: "#/components/schemas/UUID"
+      - name: motPreparationId
+        in: path
+        required: true
+        schema:
+          $ref: "#/components/schemas/UUID"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ChoixImageMotPreparationDto"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MotPreparationDto"
+        "400":
+          description: Bad Request
+      tags:
+      - Preparations Resource
+  /api/preparations/{id}/mots/{motPreparationId}/propositions:
+    get:
+      summary: "Images proposables d'un Mot d'une Préparation de l'enseignant connecté\
+        , de tous ses Sens, classées comme la détection ; rien n'est écrit"
+      operationId: proposerImagesMotPreparation
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          $ref: "#/components/schemas/UUID"
+      - name: motPreparationId
+        in: path
+        required: true
+        schema:
+          $ref: "#/components/schemas/UUID"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DetectionMotDto"
       tags:
       - Preparations Resource
   /api/preparations/{id}/mots/{motPreparationId}/theme:

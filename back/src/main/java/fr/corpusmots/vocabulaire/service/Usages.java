@@ -32,6 +32,8 @@ public class Usages {
     static final String CODE_MOT_DEJA_ILLUSTRE = "preparation.mot_deja_illustre";
     static final String CODE_SENS_DIFFERENT = "image.sens_different";
     static final String CODE_INTROUVABLE = "ressource.introuvable";
+    static final String CODE_IMAGE_INDISPONIBLE = "image.indisponible";
+    static final String CODE_SENS_INVALIDE = "preparation.sens_invalide";
 
     @Inject
     SensRetenuRepository sensRetenus;
@@ -157,6 +159,47 @@ public class Usages {
                         .map(etat -> visibilite.proposable((UUID) ligne[1], etat, enseignant))
                         .orElse(false))
                 .map(ligne -> (UUID) ligne[0]);
+    }
+
+    /**
+     * Lie l'Image de la commande au Mot de Préparation de l'enseignant courant à la place de celle qu'il a, s'il en a
+     * une (Panneau de choix d'Image, story 2.7). L'Image est verrouillée ({@code SELECT … FOR UPDATE}, après la
+     * Préparation que l'appelant a verrouillée), puis doit lui être {@link VisibiliteImages#proposable proposable} et
+     * illustrer un Sens du Mot. Si elle illustre un autre Sens que le Sens retenu, celui-ci devient le Sens de l'Image
+     * (invariant : Sens de l'Image = Sens retenu). L'ancien lien est supprimé ; l'Image remplacée n'est ni supprimée ni
+     * modifiée. Choisir l'Image déjà liée ne change rien.
+     *
+     * @return l'Image liée, vue par l'enseignant courant
+     * @throws ErreurMetier {@code 404 image.indisponible} si l'Image n'existe pas ou ne lui est pas proposable ;
+     *         {@code 400 preparation.sens_invalide} si elle illustre un autre Mot
+     * @throws IllegalStateException si le Mot de Préparation n'a pas de Sens retenu
+     */
+    @Transactional
+    public ImageVue remplacerImage(RemplacerImageCommande commande) {
+        UUID enseignant = enseignantCourant.id();
+        Optional<UUID> actuelle = liens.imageIdDe(commande.preparationMotId());
+        if (actuelle.isPresent() && actuelle.get().equals(commande.imageId())) {
+            return Images.vue(images.findById(commande.imageId()), enseignant, visibilite);
+        }
+        Image image = imageProposable(commande.imageId(), enseignant)
+                .orElseThrow(() -> new ErreurMetier(404, CODE_IMAGE_INDISPONIBLE,
+                        "Aucune image proposable ne porte cet identifiant"));
+        SensRetenu retenu = sensRetenus.de(commande.preparationMotId())
+                .orElseThrow(() -> new IllegalStateException("Sens retenu du mot de préparation "
+                        + commande.preparationMotId() + " introuvable"));
+        if (!image.sensId().equals(retenu.sensId())) {
+            UUID motId = lexique.sens(retenu.sensId()).map(SensVue::motId).orElse(null);
+            if (motId == null || lexique.sensDuMot(motId, image.sensId()).isEmpty()) {
+                throw new ErreurMetier(400, CODE_SENS_INVALIDE, "Cette image illustre un autre mot");
+            }
+            retenu.changerSens(image.sensId());
+        }
+        liens.supprimerDe(commande.preparationMotId());
+        liens.persist(LienImage.nouveau(liens.nouvelIdentifiant(), commande.preparationId(),
+                commande.preparationMotId(), image.id(), enseignant, commande.albumId(), commande.section(),
+                commande.origine().valeur()));
+        liens.flush();
+        return Images.vue(image, enseignant, visibilite);
     }
 
     /** Image {@code imageId}, verrouillée, si elle existe et est proposable à l'enseignant. */

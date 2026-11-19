@@ -73,6 +73,11 @@ public class SensRetenuRepository implements PanacheRepositoryBase<SensRetenu, U
         return find("preparationMotId", preparationMotId).firstResultOptional().map(SensRetenu::sensId);
     }
 
+    /** Sens retenu de ce Mot de Préparation, vide s'il n'en a pas. */
+    public Optional<SensRetenu> de(UUID preparationMotId) {
+        return find("preparationMotId", preparationMotId).firstResultOptional();
+    }
+
     /** Supprime le Sens retenu de ce Mot de Préparation, s'il en a un. */
     public void supprimerDe(UUID preparationMotId) {
         delete("preparationMotId", preparationMotId);

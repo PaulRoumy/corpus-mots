@@ -18,8 +18,10 @@ import fr.corpusmots.vocabulaire.service.ImageVue;
 import fr.corpusmots.vocabulaire.service.Images;
 import fr.corpusmots.vocabulaire.service.Lexique;
 import fr.corpusmots.vocabulaire.service.LierImageCommande;
+import fr.corpusmots.vocabulaire.service.MotDetecteVue;
 import fr.corpusmots.vocabulaire.service.MotVue;
 import fr.corpusmots.vocabulaire.service.OrigineLien;
+import fr.corpusmots.vocabulaire.service.RemplacerImageCommande;
 import fr.corpusmots.vocabulaire.service.RetenirSensCommande;
 import fr.corpusmots.vocabulaire.service.SensVue;
 import fr.corpusmots.vocabulaire.service.TeleverserImageCommande;
@@ -318,15 +320,16 @@ public class PreparationsService {
      * Téléverse une Image pour le Mot de Préparation {@code motPreparationId} de la Préparation {@code id} de
      * l'enseignant courant, à partir du fichier déjà réduit (hors transaction) : l'Image est créée ({@code privee},
      * Sens retenu du Mot ; Album de la Préparation comme Album d'origine pour une image d'album seulement, règle tenue
-     * par {@link Images#televerser}) et liée au Mot avec l'origine {@code nouvelle}, dans une même transaction. Rien
-     * n'est enregistré en cas de refus.
+     * par {@link Images#televerser}) et liée au Mot avec l'origine {@code nouvelle}, dans une même transaction. Si la
+     * commande le demande ({@link TeleverserImageMotCommande#remplacer}, Panneau de choix d'Image), l'Image créée remplace
+     * l'Image déjà liée, qui est seulement déliée ({@link Usages#remplacerImage}). Rien n'est enregistré en cas de refus.
      *
      * @throws ErreurMetier {@code 404 ressource.introuvable} si la Préparation n'existe pas ou appartient à un
      *         collègue, ou si le Mot de Préparation n'existe pas ou appartient à une autre Préparation ;
      *         {@code 400 requete.invalide} si la licence ne peut pas être choisie pour ce type ;
      *         {@code 400 image.album_requis} ou {@code 400 image.album_introuvable} pour une image d'album dont la
      *         Préparation n'a pas d'Album existant ; {@code 409 preparation.mot_deja_illustre} si le Mot a déjà une
-     *         Image
+     *         Image et que la commande ne demande pas de la remplacer
      */
     @Transactional
     public MotPreparationVue televerserImage(UUID id, UUID motPreparationId, TeleverserImageMotCommande commande) {
@@ -338,10 +341,51 @@ public class PreparationsService {
         }
         ImageVue creee = images.televerser(new TeleverserImageCommande(commande.fichier(), sens.id(), commande.typeImage(),
                 commande.licence(), commande.source(), commande.auteur(), preparation.albumId()));
-        ImageVue liee = usages.lierImage(new LierImageCommande(preparation.id(), ligne.id(), creee.id(),
-                preparation.albumId(), preparation.section(), OrigineLien.NOUVELLE));
+        ImageVue liee = commande.remplacer()
+                ? usages.remplacerImage(new RemplacerImageCommande(preparation.id(), ligne.id(), creee.id(),
+                        preparation.albumId(), preparation.section(), OrigineLien.NOUVELLE))
+                : usages.lierImage(new LierImageCommande(preparation.id(), ligne.id(), creee.id(),
+                        preparation.albumId(), preparation.section(), OrigineLien.NOUVELLE));
         MotVue mot = motDe(ligne, lexique.mots(List.of(ligne.motId())));
         return vue(ligne, mot, sens, liee);
+    }
+
+    /**
+     * Images proposées pour le Mot de Préparation {@code motPreparationId} de la Préparation {@code id} de l'enseignant
+     * courant (Panneau de choix d'Image, story 2.7) : toutes les Images proposables du Mot, quel que soit leur Sens,
+     * classées par {@code vocabulaire} comme la détection ({@link DetectionMots#propositions}). Lecture seule, sans
+     * verrou.
+     *
+     * @throws ErreurMetier {@code 404 ressource.introuvable} si la Préparation n'existe pas ou appartient à un
+     *         collègue, ou si le Mot de Préparation n'existe pas ou appartient à une autre Préparation
+     */
+    @Transactional
+    public MotDetecteVue propositions(UUID id, UUID motPreparationId) {
+        Preparation preparation = mienne(id);
+        PreparationMot ligne = deLaPreparation(preparation, motPreparationId);
+        return detectionMots.propositions(ligne.motId(), preparation.albumId(), preparation.section());
+    }
+
+    /**
+     * Lie l'Image {@code imageId} au Mot de Préparation {@code motPreparationId} de la Préparation {@code id} de
+     * l'enseignant courant, à la place de celle qu'il a s'il en a une (Panneau de choix d'Image, story 2.7), avec
+     * l'origine {@code reutilisee}, par {@link Usages#remplacerImage} qui verrouille l'Image, revérifie qu'elle est
+     * proposable et d'un Sens du Mot, et change le Sens retenu si besoin. L'Image remplacée est seulement déliée.
+     * Choisir l'Image déjà liée ne change rien. Une seule transaction : rien n'est modifié en cas de refus.
+     *
+     * @throws ErreurMetier {@code 404 ressource.introuvable} si la Préparation n'existe pas ou appartient à un
+     *         collègue, ou si le Mot de Préparation n'existe pas ou appartient à une autre Préparation ;
+     *         {@code 404 image.indisponible} si l'Image n'existe pas ou ne lui est pas proposable ;
+     *         {@code 400 preparation.sens_invalide} si l'Image illustre un autre Mot
+     */
+    @Transactional
+    public MotPreparationVue remplacerImage(UUID id, UUID motPreparationId, UUID imageId) {
+        Preparation preparation = verrouillee(id);
+        PreparationMot ligne = deLaPreparation(preparation, motPreparationId);
+        ImageVue image = usages.remplacerImage(new RemplacerImageCommande(preparation.id(), ligne.id(), imageId,
+                preparation.albumId(), preparation.section(), OrigineLien.REUTILISEE));
+        MotVue mot = motDe(ligne, lexique.mots(List.of(ligne.motId())));
+        return vue(ligne, mot, lexique.sensRetenus(List.of(ligne.id())).get(ligne.id()), image);
     }
 
     /**

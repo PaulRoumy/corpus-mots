@@ -63,6 +63,14 @@ public class SensRetenu {
         return retenu;
     }
 
+    /**
+     * Change le Sens retenu, quand l'Image choisie pour ce Mot illustre un autre de ses Sens (invariant : Sens de
+     * l'Image = Sens retenu). Appelé uniquement par {@code vocabulaire.service.Usages} (AD-14).
+     */
+    public void changerSens(UUID sensId) {
+        this.sensId = sensId;
+    }
+
     public UUID id() {
         return id;
     }

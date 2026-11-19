@@ -21,15 +21,16 @@ import { SuggestionsArasaac } from './suggestions-arasaac';
 /**
  * Carte de Mot de la Grille d'une Préparation (story 2.3). Tant que le Mot n'a pas d'Image, c'est une Carte « à
  * illustrer » (key-preparation.html › `.todo`) : fond et bordure tirets « à illustrer » ; à gauche, vignette vide avec
- * « + », Mot en cursive, badge crayon « à illustrer » ; à droite, les suggestions ARASAAC (story 2.4, partie 1). La page
- * lui fait occuper trois colonnes de la Grille. Sous les suggestions, le bouton texte « Téléverser » émet `televerser` :
+ * « + », bouton « Choisir une image pour « forme » » qui émet `choisirImage` (la page ouvre le Panneau de choix
+ * d'Image), Mot en cursive, badge crayon « à illustrer » ; à droite, les suggestions ARASAAC (story 2.4, partie 1). La
+ * page lui fait occuper trois colonnes de la Grille. Sous les suggestions, le bouton texte « Téléverser » émet `televerser` :
  * la page ouvre le Dialogue « Téléverser une image » (story 2.5, partie 1).
  *
  * Une fois illustrée, la Carte occupe une colonne (key-preparation.html › `.wc`) : vignette de la miniature de l'Image,
  * chargée en `blob` par le client généré (`?taille=miniature`, AD-23), d'alternative « Mot, Sens » ; Badge de type
  * d'image ; Mot en cursive. Une miniature qui ne se charge pas laisse voir l'icône d'image. La vignette est un bouton
- * « Carte d'identité de « forme » », qui émet `ouvrirCarteIdentite` : la page ouvre le Panneau Carte d'identité
- * (story 2.6, partie 1).
+ * « Changer l'image de « forme » », qui émet `choisirImage` : la page ouvre le Panneau de choix d'Image (story 2.7,
+ * partie 3), d'où l'on ouvre la Carte d'identité (story 2.6).
  *
  * Le bouton icône « Retirer « forme » de la préparation » (croix), toujours visible, émet `retirer` : le retrait se
  * fait sans confirmation et s'annule par le Bandeau « Annuler » (story 2.3, partie 2).
@@ -64,7 +65,7 @@ import { SuggestionsArasaac } from './suggestions-arasaac';
           type="button"
           [attr.aria-label]="nomAccessibleVignette()"
           [attr.aria-describedby]="idAlternative()"
-          (click)="ouvrirCarteIdentite.emit()"
+          (click)="choisirImage.emit()"
         >
           @if (echecVignette()) {
             <mat-icon class="carte-mot__repli" svgIcon="image" aria-hidden="true" />
@@ -79,7 +80,15 @@ import { SuggestionsArasaac } from './suggestions-arasaac';
         </button>
         <span class="cm-visuellement-masque" [id]="idAlternative()">{{ alternative() }}</span>
       } @else {
-        <span class="carte-mot__vignette" aria-hidden="true"><mat-icon svgIcon="plus" /></span>
+        <button
+          #boutonVignette
+          class="carte-mot__vignette"
+          type="button"
+          [attr.aria-label]="'Choisir une image pour « ' + mot().forme + ' »'"
+          (click)="choisirImage.emit()"
+        >
+          <mat-icon svgIcon="plus" aria-hidden="true" />
+        </button>
       }
       <span class="carte-mot__mot">{{ mot().forme }}</span>
       @if (mot().image; as image) {
@@ -128,8 +137,8 @@ export class CarteMot {
   readonly retirer = output<void>();
   readonly changerTheme = output<void>();
   readonly televerser = output<void>();
-  /** Clic sur la vignette d'une Carte illustrée : la page ouvre le Panneau Carte d'identité. */
-  readonly ouvrirCarteIdentite = output<void>();
+  /** Clic ou Entrée sur la vignette, illustrée ou « + » : la page ouvre le Panneau de choix d'Image. */
+  readonly choisirImage = output<void>();
 
   private readonly api = inject(Api);
 
@@ -153,9 +162,9 @@ export class CarteMot {
   /** Identifiant de l'alternative « Mot, Sens », description du bouton de la vignette. */
   protected readonly idAlternative = computed(() => `carte-mot-alternative-${this.mot().id}`);
 
-  /** Nom du bouton de la vignette : « Carte d'identité de « citrouille » ». */
+  /** Nom du bouton de la vignette d'une Carte illustrée : « Changer l'image de « citrouille » ». */
   protected readonly nomAccessibleVignette = computed(
-    () => `Carte d'identité de « ${this.mot().forme} »`,
+    () => `Changer l'image de « ${this.mot().forme} »`,
   );
 
   protected readonly nomAccessibleTheme = computed(
@@ -183,7 +192,10 @@ export class CarteMot {
     return this.boutonTheme()?.nativeElement;
   }
 
-  /** Vignette d'une Carte illustrée, à laquelle le focus revient à la fermeture du Panneau Carte d'identité. */
+  /**
+   * Vignette de la Carte (miniature, ou « + » d'une Carte « à illustrer »), à laquelle le focus revient à la fermeture
+   * du Panneau de choix d'Image ou du Panneau Carte d'identité.
+   */
   elementVignette(): HTMLButtonElement | undefined {
     return this.boutonVignette()?.nativeElement;
   }

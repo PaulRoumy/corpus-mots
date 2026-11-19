@@ -239,6 +239,39 @@ describe('Dialogue « Téléverser une image »', () => {
     expect(URL.revokeObjectURL).toHaveBeenCalledWith('blob:http://localhost/apercu');
   });
 
+  it('ouvert depuis le Panneau de choix d’Image : « remplacer » est envoyé ; sinon il est absent', async () => {
+    resultat = ouvrirDialogueTeleverserImage(
+      TestBed.inject(Injector),
+      {
+        preparationId: PREPARATION,
+        mot: CITROUILLE,
+        titreAlbum: 'La Roule Galette',
+        remplacer: true,
+      },
+      declencheur,
+    );
+    await stabiliser();
+    await choisirFichier(fichier('photo.jpg', 'image/jpeg'));
+    await choisirOption("Type d'image", 'photo personnelle');
+    bouton('Enregistrer').click();
+    await stabiliser();
+
+    const requete = serveur.expectOne(URL_TELEVERSEMENT);
+    expect((requete.request.body as FormData).get('remplacer')).toBe('true');
+    requete.flush(ILLUSTREE, { status: 201, statusText: 'Created' });
+    await stabiliser();
+    expect(await resultat).toEqual(ILLUSTREE);
+
+    await ouvrir();
+    await choisirFichier(fichier('photo.jpg', 'image/jpeg'));
+    await choisirOption("Type d'image", 'photo personnelle');
+    bouton('Enregistrer').click();
+    await stabiliser();
+    expect((serveur.expectOne(URL_TELEVERSEMENT).request.body as FormData).has('remplacer')).toBe(
+      false,
+    );
+  });
+
   it('photo personnelle : la licence choisie avant n’est pas envoyée, ni les champs vides', async () => {
     await ouvrir();
     await choisirFichier(fichier('photo.jpg', 'image/jpeg'));

@@ -61,7 +61,7 @@
 }
 
 // Vignette de la Carte illustrée (DESIGN.md › Vignette d'Image) : carrée, l'image d'abord, entière.
-// C'est un bouton, qui ouvre le Panneau Carte d'identité (story 2.6).
+// C'est un bouton, qui ouvre le Panneau de choix d'Image (story 2.7) ; le « + » d'une Carte « à illustrer » aussi.
 .carte-mot__image {
   display: grid;
   place-items: center;
@@ -103,8 +103,17 @@
   box-sizing: border-box;
   width: var(--cm-taille-vignette-vide);
   height: var(--cm-taille-vignette-vide);
+  padding: 0;
   border: var(--cm-epaisseur-bordure-a-illustrer) dashed var(--cm-etat-a-illustrer-bordure);
   border-radius: var(--cm-arrondi-md);
+  background: none;
+  color: inherit;
+  cursor: pointer;
+
+  &:focus-visible {
+    outline: var(--cm-anneau-focus-epaisseur) solid var(--mat-sys-primary);
+    outline-offset: var(--cm-anneau-focus-decalage);
+  }
 
   mat-icon {
     width: var(--cm-taille-icone-grande);

@@ -7,6 +7,7 @@ import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 
@@ -21,6 +22,11 @@ public class LienImageRepository implements PanacheRepositoryBase<LienImage, UUI
     /** Vrai si ce Mot de Préparation a déjà une Image liée. */
     public boolean existePourMot(UUID preparationMotId) {
         return count("preparationMotId", preparationMotId) > 0;
+    }
+
+    /** Identifiant de l'Image liée à ce Mot de Préparation, vide s'il n'en a pas. */
+    public Optional<UUID> imageIdDe(UUID preparationMotId) {
+        return find("preparationMotId", preparationMotId).firstResultOptional().map(LienImage::imageId);
     }
 
     /** Vrai si l'enseignant a un lien vers cette Image, dans l'une quelconque de ses Préparations. */

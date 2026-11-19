@@ -85,6 +85,11 @@ export interface DonneesTeleverserImage {
   readonly mot: MotPreparationDto;
   /** Titre de l'Album de la Préparation, Album d'origine de l'Image. */
   readonly titreAlbum: string;
+  /**
+   * Vrai depuis le Panneau de choix d'Image (story 2.7, partie 3) : l'Image téléversée remplace celle du Mot, au lieu
+   * du refus `preparation.mot_deja_illustre`.
+   */
+  readonly remplacer?: boolean;
 }
 
 /** Données du Dialogue « Téléverser une image » ouvert par « + › Ajouter une image » : sans Préparation. */
@@ -538,7 +543,7 @@ export class TeleverserImageDialogue {
           ? await this.api.invoke(televerserImageMotPreparation, {
               id: this.carte.preparationId,
               motPreparationId: this.carte.mot.id,
-              body: carteIdentite,
+              body: this.carte.remplacer ? { ...carteIdentite, remplacer: true } : carteIdentite,
             })
           : await this.api.invoke(ajouterImage, {
               body: { ...carteIdentite, mot: this.mot.value.trim(), albumId: album?.id },

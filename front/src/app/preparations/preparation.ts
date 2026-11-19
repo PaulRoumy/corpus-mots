@@ -2,6 +2,7 @@ import { BreakpointObserver, Breakpoints } from '@angular/cdk/layout';
 import {
   afterNextRender,
   ChangeDetectionStrategy,
+  ComponentRef,
   Component,
   computed,
   effect,
@@ -9,10 +10,12 @@ import {
   inject,
   Injector,
   input,
+  PendingTasks,
   signal,
   untracked,
   viewChild,
   viewChildren,
+  ViewContainerRef,
 } from '@angular/core';
 import {
   AbstractControl,
@@ -60,6 +63,7 @@ import { DialogueConfirmation } from '../commun/dialogue-confirmation/dialogue-c
 import {
   codeErreur,
   erreurPassagere,
+  MESSAGE_RESEAU,
   MESSAGES_PAR_CODE,
   messageErreur,
 } from '../commun/erreurs/message-erreur';
@@ -70,6 +74,7 @@ import { ChampNomModule } from './champ-nom-module';
 import { map } from 'rxjs';
 import { ouvrirDialogueCorrigerAlbum } from './corriger-album-dialogue';
 import { libelleMots } from './preparations';
+import type { PanneauChoixImage } from './panneau-choix-image';
 import { ChoixImage, PanneauDetection } from './panneau-detection';
 import { SaisieRapide } from './saisie-rapide';
 import { ouvrirDialogueTeleverserImage } from './televerser-image-dialogue';
@@ -278,10 +283,16 @@ type Source = 'module' | 'theme';
  * illustrés » suit la Grille une fois chargée. Retirer un Mot illustré ne supprime pas son Image : « Annuler » le
  * rétablit avec la même Image.
  *
- * Carte d'identité (story 2.6, partie 1) : la vignette d'une Carte illustrée ouvre à droite, sur 400 px, le Panneau
- * Carte d'identité de son Image, sans masquer la Grille, qui reste utilisable ; une autre vignette le remplace.
- * « Fermer » ou Échap le ferment et rendent le focus à la vignette ; retirer le Mot le ferme aussi. Sous 600 px de
- * large, le panneau couvre l'écran et la page dessous est inerte.
+ * Panneau de choix d'Image (story 2.7, partie 3) : la vignette d'une Carte (miniature, ou « + » d'une Carte « à
+ * illustrer ») ouvre à droite, sur 400 px, le Panneau de choix d'Image du Mot, chargé à la demande (import
+ * dynamique), sans masquer la Grille ; une autre vignette le remplace. L'Image choisie, ou téléversée par « Ajouter une image » (qui
+ * remplace l'actuelle), met à jour la Carte ; le panneau se ferme, le focus revient à la vignette et « Image de
+ * « farine » changée. » est annoncé. « Fermer » ou Échap le ferment sans rien changer.
+ *
+ * Carte d'identité (story 2.6, partie 1) : « Carte d'identité » dans le Panneau de choix d'Image ouvre à sa place le
+ * Panneau Carte d'identité de l'Image. Un seul panneau latéral est ouvert à la fois. « Fermer » ou Échap le ferment et
+ * rendent le focus à la vignette ; retirer le Mot le ferme aussi. Sous 600 px de large, le panneau couvre l'écran et
+ * la page dessous est inerte.
  *
  * Le Temps passé est un champ texte en mode de saisie décimal plutôt qu'un `type="number"` : celui-ci, selon la langue
  * du navigateur, refuse la virgule sans le dire (sa valeur devient vide, comme un champ effacé).
@@ -311,7 +322,7 @@ type Source = 'module' | 'theme';
   template: `
     <div
       class="disposition"
-      [class.disposition--panneau]="carteOuverte() !== null"
+      [class.disposition--panneau]="panneauOuvert()"
       [class.disposition--plein-ecran]="pleinEcran()"
     >
       <div class="page" [attr.inert]="pageInerte() ? '' : null">
@@ -556,7 +567,7 @@ type Source = 'module' | 'theme';
                         (retirer)="retirerMot(mot)"
                         (changerTheme)="ouvrirThemeMot(mot)"
                         (televerser)="ouvrirTeleverser(mot)"
-                        (ouvrirCarteIdentite)="ouvrirCarteIdentite(mot)"
+                        (choisirImage)="ouvrirChoixImage(mot)"
                       />
                     </li>
                   }
@@ -571,6 +582,8 @@ type Source = 'module' | 'theme';
           <app-squelette forme="texte" [nombre]="3" />
         }
       </div>
+      <!-- Panneau de choix d'Image, chargé à la demande (import dynamique) : le paquet initial reste sous 600 kB. -->
+      <ng-container #emplacementChoix />
       @if (carteOuverte(); as ouverte) {
         <app-carte-identite
           class="disposition__panneau"
@@ -710,6 +723,25 @@ export class Preparation {
     readonly imageId: string;
   } | null>(null);
   private readonly panneauCarteIdentite = viewChild(CarteIdentite);
+  /**
+   * Panneau de choix d'Image ouvert : le Mot dont la vignette l'a ouvert. Un seul panneau latéral à la fois : il exclut
+   * le Panneau Carte d'identité.
+   */
+  protected readonly choixOuvert = signal<string | null>(null);
+  /** Mot du Panneau de choix d'Image, à jour de la Grille ; `null` si le panneau est fermé. */
+  protected readonly motChoixImage = computed(() => {
+    const motId = this.choixOuvert();
+    return motId === null ? null : (this.mots()?.find((mot) => mot.id === motId) ?? null);
+  });
+  /** Vrai quand un panneau latéral (choix d'Image ou Carte d'identité) est ouvert. */
+  protected readonly panneauOuvert = computed(
+    () => this.carteOuverte() !== null || this.motChoixImage() !== null,
+  );
+  private readonly tachesEnCours = inject(PendingTasks);
+  /** Emplacement du Panneau de choix d'Image, créé à la demande après le chargement de son code. */
+  private readonly emplacementChoix = viewChild('emplacementChoix', { read: ViewContainerRef });
+  private panneauChoix: ComponentRef<PanneauChoixImage> | null = null;
+  private codePanneauChoix: Promise<typeof import('./panneau-choix-image')> | null = null;
   /** Sous 600 px de large, le Panneau Carte d'identité couvre l'écran. */
   protected readonly pleinEcran = toSignal(
     inject(BreakpointObserver)
@@ -718,7 +750,7 @@ export class Preparation {
     { initialValue: false },
   );
   /** Panneau ouvert en plein écran : la page dessous est inerte (ni Tab ni lecteur d'écran). */
-  protected readonly pageInerte = computed(() => this.carteOuverte() !== null && this.pleinEcran());
+  protected readonly pageInerte = computed(() => this.panneauOuvert() && this.pleinEcran());
   private readonly cartesMots = viewChildren(CarteMot);
   protected readonly echecRetrait = signal<EchecRetrait | null>(null);
   protected readonly echecRetablissement = signal<EchecRetablissement | null>(null);
@@ -737,6 +769,75 @@ export class Preparation {
       const id = this.id();
       untracked(() => void this.charger(id));
     });
+    effect(() => {
+      const emplacement = this.emplacementChoix();
+      const mot = this.motChoixImage();
+      const preparationId = this.id();
+      if (emplacement !== undefined) {
+        untracked(() => void this.afficherChoixImage(emplacement, mot, preparationId));
+      }
+    });
+  }
+
+  /**
+   * Crée le Panneau de choix d'Image à la première ouverture, une fois son code chargé, et lui passe le Mot à jour ; le
+   * détruit à la fermeture.
+   */
+  private async afficherChoixImage(
+    emplacement: ViewContainerRef,
+    mot: MotPreparationDto | null,
+    preparationId: string,
+  ): Promise<void> {
+    if (mot === null) {
+      emplacement.clear();
+      this.panneauChoix = null;
+      return;
+    }
+    if (this.panneauChoix === null) {
+      const fin = this.tachesEnCours.add();
+      try {
+        this.codePanneauChoix ??= import('./panneau-choix-image');
+        let code: typeof import('./panneau-choix-image');
+        try {
+          code = await this.codePanneauChoix;
+        } catch {
+          // Code introuvable (hors ligne, nouvelle version déployée) : rien ne reste ouvert, un prochain clic réessaie.
+          this.codePanneauChoix = null;
+          this.choixOuvert.set(null);
+          this.annoncer(MESSAGE_RESEAU);
+          return;
+        }
+        const { PanneauChoixImage } = code;
+        // Fermé ou déjà créé pendant le chargement : la dernière demande l'emporte.
+        if (this.motChoixImage() === null || this.panneauChoix !== null) {
+          return;
+        }
+        const panneau = emplacement.createComponent(PanneauChoixImage);
+        panneau.location.nativeElement.classList.add('disposition__panneau');
+        panneau.instance.fermer.subscribe(() => this.fermerChoixImage());
+        panneau.instance.choisi.subscribe((change) => this.appliquerChoixImage(change));
+        panneau.instance.ouvrirCarteIdentite.subscribe(() => {
+          const courant = this.motChoixImage();
+          if (courant !== null) {
+            this.ouvrirCarteIdentite(courant);
+          }
+        });
+        panneau.instance.ajouterImage.subscribe((declencheur) => {
+          const courant = this.motChoixImage();
+          if (courant !== null) {
+            void this.ajouterImageDepuisChoix(courant, declencheur);
+          }
+        });
+        this.panneauChoix = panneau;
+      } finally {
+        fin();
+      }
+    }
+    const courant = this.motChoixImage();
+    if (this.panneauChoix !== null && courant !== null) {
+      this.panneauChoix.setInput('preparationId', preparationId);
+      this.panneauChoix.setInput('mot', courant);
+    }
   }
 
   async charger(id: string): Promise<void> {
@@ -766,6 +867,7 @@ export class Preparation {
     this.echecRetablissement.set(null);
     this.annonce.set('');
     this.carteOuverte.set(null);
+    this.choixOuvert.set(null);
     this.fileAjouts = [];
     try {
       const preparation = await this.api.invoke(lirePreparation, { id });
@@ -938,6 +1040,9 @@ export class Preparation {
     this.mots.set(restants);
     if (this.carteOuverte()?.motId === mot.id) {
       this.carteOuverte.set(null);
+    }
+    if (this.choixOuvert() === mot.id) {
+      this.choixOuvert.set(null);
     }
     this.focaliserApresRendu(restants[index] ?? restants[index - 1]);
     void this.envoyerRetrait(preparation.id, mot);
@@ -1118,15 +1223,74 @@ export class Preparation {
   }
 
   /**
-   * Vignette d'une Carte illustrée : ouvre le Panneau Carte d'identité de son Image, ou le remplace s'il était ouvert
-   * sur une autre ; le panneau prend le focus.
+   * Vignette d'une Carte (miniature ou « + ») : ouvre le Panneau de choix d'Image du Mot, à la place du panneau latéral
+   * ouvert ; le panneau prend le focus. Déjà ouvert pour ce Mot, il reprend seulement le focus.
    */
-  protected ouvrirCarteIdentite(mot: MotPreparationDto): void {
-    if (!mot.image) {
+  protected ouvrirChoixImage(mot: MotPreparationDto): void {
+    this.carteOuverte.set(null);
+    if (this.choixOuvert() === mot.id) {
+      this.panneauChoix?.instance.focus();
       return;
     }
-    const dejaOuverte = this.carteOuverte()?.imageId === mot.image.id;
-    this.carteOuverte.set({ motId: mot.id, imageId: mot.image.id });
+    this.choixOuvert.set(mot.id);
+  }
+
+  /** « Fermer » ou Échap dans le Panneau de choix d'Image : rien ne change, le focus revient à la vignette. */
+  protected fermerChoixImage(): void {
+    const motId = this.choixOuvert();
+    this.choixOuvert.set(null);
+    this.rendreFocusVignette(motId);
+  }
+
+  /**
+   * Image choisie dans le Panneau de choix d'Image (ou téléversée depuis lui) : la Carte prend le Mot renvoyé (vignette,
+   * badge, Sens), le panneau se ferme, le focus revient à la vignette et le changement est annoncé.
+   */
+  protected appliquerChoixImage(change: MotPreparationDto): void {
+    this.mots.update((mots) =>
+      mots === null ? mots : mots.map((autre) => (autre.id === change.id ? change : autre)),
+    );
+    this.choixOuvert.set(null);
+    this.annoncer(`Image de « ${change.forme} » changée.`);
+    this.rendreFocusVignette(change.id);
+  }
+
+  /**
+   * « Ajouter une image » du Panneau de choix d'Image : ouvre le Dialogue « Téléverser une image » pour ce Mot ; l'Image
+   * téléversée remplace l'actuelle et le panneau se ferme. Fermé sans enregistrement, le focus revient au bouton.
+   */
+  protected async ajouterImageDepuisChoix(
+    mot: MotPreparationDto,
+    declencheur: HTMLElement,
+  ): Promise<void> {
+    const preparation = this.preparation();
+    if (preparation === null) {
+      return;
+    }
+    const numero = this.dernierChargement;
+    const illustre = await ouvrirDialogueTeleverserImage(
+      this.injecteur,
+      { preparationId: preparation.id, mot, titreAlbum: preparation.titreAlbum, remplacer: true },
+      declencheur,
+    );
+    if (illustre === undefined || numero !== this.dernierChargement) {
+      return;
+    }
+    this.appliquerChoixImage(illustre);
+  }
+
+  /**
+   * « Carte d'identité » du Panneau de choix d'Image : ouvre à sa place le Panneau Carte d'identité de l'Image du Mot,
+   * ou le remplace s'il était ouvert sur une autre ; le panneau prend le focus.
+   */
+  protected ouvrirCarteIdentite(mot: MotPreparationDto): void {
+    const image = this.mots()?.find((autre) => autre.id === mot.id)?.image ?? mot.image;
+    if (!image) {
+      return;
+    }
+    this.choixOuvert.set(null);
+    const dejaOuverte = this.carteOuverte()?.imageId === image.id;
+    this.carteOuverte.set({ motId: mot.id, imageId: image.id });
     // Même Image : le panneau ne relit rien, il reprend seulement le focus.
     if (dejaOuverte) {
       this.panneauCarteIdentite()?.focus();
@@ -1137,10 +1301,24 @@ export class Preparation {
   protected fermerCarteIdentite(): void {
     const ouverte = this.carteOuverte();
     this.carteOuverte.set(null);
+    this.rendreFocusVignette(ouverte?.motId ?? null);
+  }
+
+  /**
+   * Annonce `message` dans la région `aria-live` : vidée d'abord, puis remplie après le rendu, pour qu'un même message
+   * (deuxième changement d'Image du même Mot) soit annoncé de nouveau.
+   */
+  private annoncer(message: string): void {
+    this.annonce.set('');
+    afterNextRender(() => this.annonce.set(message), { injector: this.injecteur });
+  }
+
+  /** Après le rendu, focus à la vignette de la Carte du Mot `motId`, ou au Champ de saisie rapide sans elle. */
+  private rendreFocusVignette(motId: string | null): void {
     afterNextRender(
       () => {
         const vignette = this.cartesMots()
-          .find((carte) => carte.mot().id === ouverte?.motId)
+          .find((carte) => carte.mot().id === motId)
           ?.elementVignette();
         if (vignette === undefined) {
           this.saisieRapide()?.focus();
