@@ -141,6 +141,24 @@ public class Usages {
         return Optional.of(lier(commande, image.get(), enseignant));
     }
 
+    /**
+     * Sens de l'Image {@code imageId} si elle existe et est {@link VisibiliteImages#proposable proposable} à
+     * l'enseignant courant ; vide sinon. Lecture sans verrou ni écriture : {@link #lierImage} revérifie tout sous
+     * verrou. Sert à retenir pour un Mot le Sens de l'Image choisie avant de la lier (story 2.7).
+     */
+    @Transactional
+    public Optional<UUID> sensDImageProposable(UUID imageId) {
+        UUID enseignant = enseignantCourant.id();
+        if (imageId == null || enseignant == null) {
+            return Optional.empty();
+        }
+        return images.sensProprietaireEtat(imageId)
+                .filter(ligne -> EtatImage.deValeur((String) ligne[2])
+                        .map(etat -> visibilite.proposable((UUID) ligne[1], etat, enseignant))
+                        .orElse(false))
+                .map(ligne -> (UUID) ligne[0]);
+    }
+
     /** Image {@code imageId}, verrouillée, si elle existe et est proposable à l'enseignant. */
     private Optional<Image> imageProposable(UUID imageId, UUID enseignant) {
         return (imageId == null ? Optional.<Image>empty() : images.verrouillee(imageId))

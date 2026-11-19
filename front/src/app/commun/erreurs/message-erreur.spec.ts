@@ -55,15 +55,16 @@ describe('messageErreur', () => {
     [400, 'image.mot_invalide', 'Saisissez un mot de 1 à 100 caractères.'],
     [400, 'image.sens_different', 'Cette image illustre un autre sens que celui du mot.'],
     [
+      404,
+      'image.indisponible',
+      "Cette image n'est plus disponible. Choisissez-en une autre, ou appuyez sur Entrée pour ajouter le mot sans image.",
+    ],
+    [
       403,
       'image.reservee_au_proprietaire',
       "Seul le propriétaire de l'image peut modifier sa carte d'identité.",
     ],
-    [
-      400,
-      'image.theme_introuvable',
-      "Un de ces thèmes n'existe plus. Retirez-le, puis réessayez.",
-    ],
+    [400, 'image.theme_introuvable', "Un de ces thèmes n'existe plus. Retirez-le, puis réessayez."],
     [400, 'image.module_introuvable', "Ce module n'existe plus. Choisissez-en un autre."],
     [400, 'image.sens_invalide', "Ce sens n'est plus proposé pour ce mot. Choisissez-en un autre."],
     [

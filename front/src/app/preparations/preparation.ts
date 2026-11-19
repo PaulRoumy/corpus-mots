@@ -40,6 +40,7 @@ import { listerMotsPreparation } from '../api/fn/preparations-resource/lister-mo
 import { reglerPreparation } from '../api/fn/preparations-resource/regler-preparation';
 import { retablirMotPreparation } from '../api/fn/preparations-resource/retablir-mot-preparation';
 import { retirerMotPreparation } from '../api/fn/preparations-resource/retirer-mot-preparation';
+import { reutiliserImageMotPreparation } from '../api/fn/preparations-resource/reutiliser-image-mot-preparation';
 import { creerTheme } from '../api/fn/themes-resource/creer-theme';
 import { listerThemes } from '../api/fn/themes-resource/lister-themes';
 import { renommerTheme } from '../api/fn/themes-resource/renommer-theme';
@@ -69,7 +70,7 @@ import { ChampNomModule } from './champ-nom-module';
 import { map } from 'rxjs';
 import { ouvrirDialogueCorrigerAlbum } from './corriger-album-dialogue';
 import { libelleMots } from './preparations';
-import { PanneauDetection } from './panneau-detection';
+import { ChoixImage, PanneauDetection } from './panneau-detection';
 import { SaisieRapide } from './saisie-rapide';
 import { ouvrirDialogueTeleverserImage } from './televerser-image-dialogue';
 import {
@@ -136,18 +137,42 @@ interface ErreurAffichee {
   readonly reessayer: () => void;
 }
 
-/** Mots dont l'ajout a échoué (autrement que par un doublon), et le message du dernier échec. */
+/**
+ * Ajout en attente dans la file : la saisie tapée, et l'Image retenue dans le Panneau de détection s'il y en a une
+ * (réutilisation : le Mot de l'Image est ajouté avec elle). La saisie revient dans le champ en cas de refus.
+ */
+interface Ajout {
+  readonly saisie: string;
+  readonly image?: ChoixImage;
+}
+
+/** Mots dont l'ajout a échoué (autrement que par un refus à corriger), et le message du dernier échec. */
 interface EchecAjout {
-  readonly saisies: readonly string[];
+  readonly ajouts: readonly Ajout[];
   readonly message: string;
+}
+
+/** Mot nommé pour un ajout : celui de l'Image retenue, sinon la saisie. */
+function motDeLAjout(ajout: Ajout): string {
+  return ajout.image?.forme ?? ajout.saisie;
 }
 
 /** « « citrouille » n'a pas été ajouté. », « « a », « b » n'ont pas été ajoutés. », suivi du message de l'échec. */
 export function messageEchecAjout(echec: EchecAjout): string {
-  const mots = echec.saisies.map((saisie) => `« ${saisie} »`).join(', ');
-  const verbe = echec.saisies.length === 1 ? "n'a pas été ajouté" : "n'ont pas été ajoutés";
+  const mots = echec.ajouts.map((ajout) => `« ${motDeLAjout(ajout)} »`).join(', ');
+  const verbe = echec.ajouts.length === 1 ? "n'a pas été ajouté" : "n'ont pas été ajoutés";
   return `${mots} ${verbe}. ${echec.message}`;
 }
+
+/**
+ * Refus d'une réutilisation dont l'Image n'est plus proposable ou a changé de Sens, y compris au contrôle sous verrou
+ * (`ressource.introuvable`) : « image indisponible » sous le champ.
+ */
+const CODES_IMAGE_INDISPONIBLE: ReadonlySet<string> = new Set([
+  'image.indisponible',
+  'image.sens_different',
+  'ressource.introuvable',
+]);
 
 /**
  * Refus d'un Mot déjà présent, qui le nomme : l'enseignant peut déjà taper le Mot suivant quand il s'affiche.
@@ -228,6 +253,11 @@ type Source = 'module' | 'theme';
  * de Grille sans prendre le focus, et le compteur de l'En-tête suit la Grille. Un Mot déjà présent est refusé sous le
  * champ, où la saisie revient s'il est vide ; tout autre échec ouvre un Bandeau d'erreur qui nomme le Mot, et
  * « Réessayer » le renvoie.
+ *
+ * Retenir une Image (story 2.7, partie 2) : Entrée avec une Image choisie au clavier dans le Panneau de détection, ou
+ * un clic sur une Image, ajoute le Mot de l'Image avec elle (réutilisation, sans copie), dans la même file que les
+ * Entrées ; annonce « « farine » ajouté avec son image. ». Une Image qui n'est plus disponible est refusée sous le
+ * champ, où la saisie revient et relance la détection.
  *
  * Retrait d'un Mot (story 2.3, partie 2) : « Retirer » sur une Carte la fait disparaître aussitôt, sans confirmation,
  * et le compteur suit ; le focus passe au bouton « Retirer » de la Carte suivante, sinon de la précédente, sinon au
@@ -501,10 +531,19 @@ type Source = 'module' | 'theme';
           @if (mots(); as motsCharges) {
             <app-saisie-rapide
               [focusInitial]="motsCharges.length === 0"
+              [idListe]="detection.idListe"
+              [deplie]="detection.deplie()"
+              [idActif]="detection.idActif()"
               (ajouter)="ajouterMot($event)"
+              (naviguer)="detection.naviguer($event)"
               (saisieModifiee)="saisieTapee.set($event)"
             />
-            <app-panneau-detection [preparationId]="courante.id" [saisie]="saisieTapee()" />
+            <app-panneau-detection
+              #detection
+              [preparationId]="courante.id"
+              [saisie]="saisieTapee()"
+              (retenir)="retenirImage($event)"
+            />
             @if (motsCharges.length > 0) {
               <section class="mots" aria-labelledby="mots-titre">
                 <h2 id="mots-titre" class="mots__titre">Mots de la préparation</h2>
@@ -662,6 +701,7 @@ export class Preparation {
       : mots.filter((mot) => mot.illustre).length;
   });
   private readonly saisieRapide = viewChild(SaisieRapide);
+  private readonly panneauDetection = viewChild(PanneauDetection);
   /** Saisie en cours du Champ de saisie rapide, suivie par le Panneau de détection. */
   protected readonly saisieTapee = signal('');
   /** Panneau Carte d'identité ouvert : le Mot dont la vignette l'a ouvert et son Image ; un seul à la fois. */
@@ -682,8 +722,8 @@ export class Preparation {
   private readonly cartesMots = viewChildren(CarteMot);
   protected readonly echecRetrait = signal<EchecRetrait | null>(null);
   protected readonly echecRetablissement = signal<EchecRetablissement | null>(null);
-  /** Saisies en attente d'envoi, dans l'ordre de frappe ; envoyées une à une. */
-  private fileAjouts: string[] = [];
+  /** Ajouts en attente d'envoi (saisies et réutilisations), dans l'ordre des gestes ; envoyés un à un. */
+  private fileAjouts: Ajout[] = [];
   private ajoutEnCours = false;
 
   /** Numéro du dernier chargement : la réponse d'une Préparation quittée depuis n'écrit rien. */
@@ -789,9 +829,21 @@ export class Preparation {
     }
   }
 
-  /** Entrée dans le Champ de saisie rapide : la saisie attend son tour, derrière les précédentes. */
+  /**
+   * Entrée dans le Champ de saisie rapide : avec une Image choisie dans le Panneau de détection, son Mot est ajouté avec
+   * elle ; sinon la saisie est ajoutée « à illustrer ». L'ajout attend son tour, derrière les précédents.
+   */
   protected ajouterMot(saisie: string): void {
-    this.fileAjouts.push(saisie);
+    const image = this.panneauDetection()?.choix() ?? null;
+    this.fileAjouts.push(image === null ? { saisie } : { saisie, image });
+    void this.envoyerAjouts();
+  }
+
+  /** Clic sur une Image du Panneau de détection : son Mot est ajouté avec elle ; le champ est vidé et garde le focus. */
+  protected retenirImage(image: ChoixImage): void {
+    const saisie = this.saisieTapee().trim();
+    this.saisieRapide()?.vider();
+    this.fileAjouts.push({ saisie: saisie === '' ? image.forme : saisie, image });
     void this.envoyerAjouts();
   }
 
@@ -800,53 +852,73 @@ export class Preparation {
     const echec = this.echecAjout();
     this.echecAjout.set(null);
     if (echec !== null) {
-      this.fileAjouts.push(...echec.saisies);
+      this.fileAjouts.push(...echec.ajouts);
       void this.envoyerAjouts();
     }
   }
 
-  /** Envoie les saisies en attente une à une, chacune après la réponse de la précédente. */
+  /** Envoie les ajouts en attente un à un, chacun après la réponse du précédent. */
   private async envoyerAjouts(): Promise<void> {
     if (this.ajoutEnCours) {
       return;
     }
     this.ajoutEnCours = true;
     try {
-      let saisie = this.fileAjouts.shift();
-      while (saisie !== undefined) {
-        await this.envoyerAjout(saisie);
-        saisie = this.fileAjouts.shift();
+      let ajout = this.fileAjouts.shift();
+      while (ajout !== undefined) {
+        await this.envoyerAjout(ajout);
+        ajout = this.fileAjouts.shift();
       }
     } finally {
       this.ajoutEnCours = false;
     }
   }
 
-  private async envoyerAjout(saisie: string): Promise<void> {
+  private async envoyerAjout(ajout: Ajout): Promise<void> {
     const preparation = this.preparation();
     if (preparation === null) {
       return;
     }
     const numero = this.dernierChargement;
+    const { saisie, image } = ajout;
     try {
-      const ajoute = await this.api.invoke(ajouterMotPreparation, {
-        id: preparation.id,
-        body: { saisie },
-      });
+      const ajoute =
+        image === undefined
+          ? await this.api.invoke(ajouterMotPreparation, { id: preparation.id, body: { saisie } })
+          : await this.api.invoke(reutiliserImageMotPreparation, {
+              id: preparation.id,
+              body: { motId: image.motId, imageId: image.imageId },
+            });
       if (numero === this.dernierChargement) {
         this.mots.update((mots) => (mots === null ? mots : [...mots, ajoute]));
-        this.annonce.set(`« ${ajoute.forme} » ajouté.`);
+        this.annonce.set(
+          image === undefined
+            ? `« ${ajoute.forme} » ajouté.`
+            : `« ${ajoute.forme} » ajouté avec son image.`,
+        );
       }
     } catch (erreur) {
       if (numero !== this.dernierChargement) {
         return;
       }
-      if (codeErreur(erreur) === 'preparation.mot_deja_present') {
-        this.saisieRapide()?.refuser(messageMotDejaPresent(saisie), saisie);
+      const code = codeErreur(erreur);
+      if (code === 'preparation.mot_deja_present') {
+        this.saisieRapide()?.refuser(messageMotDejaPresent(motDeLAjout(ajout)), saisie);
+        return;
+      }
+      if (image !== undefined && code !== null) {
+        // Refus définitif : « Réessayer » échouerait de nouveau. La saisie remise relance la détection : l'enseignant
+        // choisit une autre Image, ou Entrée sans Image.
+        this.saisieRapide()?.refuser(
+          CODES_IMAGE_INDISPONIBLE.has(code)
+            ? MESSAGES_PAR_CODE['image.indisponible']
+            : messageErreur(erreur),
+          saisie,
+        );
         return;
       }
       this.echecAjout.update((echec) => ({
-        saisies: [...(echec?.saisies ?? []), saisie],
+        ajouts: [...(echec?.ajouts ?? []), ajout],
         message: messageErreur(erreur),
       }));
     }

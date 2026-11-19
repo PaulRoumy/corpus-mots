@@ -992,6 +992,22 @@
           }
         }
       },
+      "ReutilisationImageMotPreparationDto" : {
+        "type" : "object",
+        "required" : [ "motId", "imageId" ],
+        "properties" : {
+          "motId" : {
+            "description" : "Identifiant du Mot du Lexique, celui que l'Image illustre",
+            "type" : "string",
+            "$ref" : "#/components/schemas/UUID"
+          },
+          "imageId" : {
+            "description" : "Image proposable retenue ; son Sens devient le Sens retenu du Mot",
+            "type" : "string",
+            "$ref" : "#/components/schemas/UUID"
+          }
+        }
+      },
       "RoleAdministrateurDto" : {
         "type" : "object",
         "required" : [ "administrateur" ],
@@ -2191,6 +2207,46 @@
         "responses" : {
           "201" : {
             "description" : "Mot rétabli, à sa place d'origine si elle est libre, sinon en fin",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/MotPreparationDto"
+                }
+              }
+            }
+          },
+          "400" : {
+            "description" : "Bad Request"
+          }
+        },
+        "tags" : [ "Preparations Resource" ]
+      }
+    },
+    "/api/preparations/{id}/mots/reutilisation" : {
+      "post" : {
+        "summary" : "Ajouter en fin de Préparation de l'enseignant connecté le Mot d'une Image existante, avec le Sens de l'Image, et la lui lier sans copie (origine reutilisee)",
+        "operationId" : "reutiliserImageMotPreparation",
+        "parameters" : [ {
+          "name" : "id",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "$ref" : "#/components/schemas/UUID"
+          }
+        } ],
+        "requestBody" : {
+          "required" : true,
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/ReutilisationImageMotPreparationDto"
+              }
+            }
+          }
+        },
+        "responses" : {
+          "201" : {
+            "description" : "Mot ajouté, illustré par l'Image retenue",
             "content" : {
               "application/json" : {
                 "schema" : {

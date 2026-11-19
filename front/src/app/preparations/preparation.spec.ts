@@ -1942,6 +1942,408 @@ describe('Preparation (En-tête)', () => {
     });
   });
 
+  describe('Retenir une Image dans la détection (story 2.7, partie 2)', () => {
+    const URL_REUTILISATION = `/api/preparations/${ID}/mots/reutilisation`;
+    const original = { creer: URL.createObjectURL, revoquer: URL.revokeObjectURL };
+    const champSaisie = () => racine.querySelector<HTMLInputElement>('app-saisie-rapide input')!;
+    const options = () => [
+      ...racine.querySelectorAll<HTMLElement>('app-panneau-detection [role="option"]'),
+    ];
+    const actif = () => champSaisie().getAttribute('aria-activedescendant');
+
+    /** Mot détecté, avec des Images de l'enseignant connecté. */
+    function motDetecte(forme: string, imageIds: string[]) {
+      return {
+        motId: `mot-${forme}`,
+        forme,
+        dejaDansLaPreparation: false,
+        sens: [{ id: `sens-${forme}`, libelle: forme, categorie: 'nom', aCompleter: false }],
+        albums: [],
+        images: imageIds.map((id) => ({
+          id,
+          proprietaireId: MOI,
+          etat: 'privee' as const,
+          aRemplacer: null,
+          reutilisable: true,
+          typeImage: 'image_libre' as const,
+          aCompleter: false,
+          sections: ['ms' as const],
+          albumOrigine: null,
+          sens: { id: `sens-${forme}`, libelle: forme, categorie: 'nom', aCompleter: false },
+          dejaUtilisee: false,
+        })),
+      };
+    }
+
+    /** Mot ajouté avec l'Image `imageId`. */
+    function motIllustre(forme: string, ordre: number, imageId: string): MotPreparationDto {
+      return {
+        ...motPreparation(forme, ordre),
+        illustre: true,
+        image: {
+          id: imageId,
+          proprietaireId: MOI,
+          etat: 'privee',
+          aRemplacer: null,
+          reutilisable: true,
+          typeImage: 'image_libre',
+          aCompleter: false,
+        },
+      };
+    }
+
+    function touche(key: string) {
+      champSaisie().dispatchEvent(
+        new KeyboardEvent('keydown', { key, bubbles: true, cancelable: true }),
+      );
+    }
+
+    /** Tape `saisie` sans valider, laisse partir la détection et y répond par ces Mots. */
+    async function detecter(saisie: string, mots: ReturnType<typeof motDetecte>[]) {
+      champSaisie().value = saisie;
+      champSaisie().dispatchEvent(new Event('input'));
+      await fixture.whenStable();
+      await new Promise((fin) => setTimeout(fin, DELAI_DETECTION_MS + 20));
+      await stabiliser();
+      serveur
+        .expectOne(
+          (requete) =>
+            requete.url === `/api/preparations/${ID}/detection` &&
+            requete.params.get('saisie') === saisie,
+        )
+        .flush({ forme: saisie, mots });
+      await stabiliser();
+      for (const miniature of serveur.match((requete) => requete.url.startsWith('/api/images/'))) {
+        miniature.flush(new Blob(['png']));
+      }
+      await stabiliser();
+    }
+
+    async function entree() {
+      touche('Enter');
+      await stabiliser();
+    }
+
+    const reutilisation = (imageId: string): TestRequest =>
+      serveur.expectOne(
+        (requete) => requete.url === URL_REUTILISATION && requete.body?.imageId === imageId,
+      );
+
+    beforeEach(() => {
+      URL.createObjectURL = vi.fn(() => 'blob:http://localhost/image');
+      URL.revokeObjectURL = vi.fn();
+      TestBed.inject(CompteCourant).mettreAJour({
+        id: MOI,
+        administrateur: false,
+        email: 'moi@ecole.fr',
+        nomAffiche: 'Moi',
+      });
+    });
+
+    afterEach(() => {
+      serveur.match((requete) => requete.url.startsWith('/api/images/'));
+      URL.createObjectURL = original.creer;
+      URL.revokeObjectURL = original.revoquer;
+    });
+
+    it('combobox : liste des Images, aucune choisie d’emblée, nom accessible Mot, Sens, propriétaire', async () => {
+      await ouvrir();
+      champSaisie().focus();
+      expect(champSaisie().getAttribute('role')).toBe('combobox');
+      expect(champSaisie().getAttribute('aria-expanded')).toBe('false');
+
+      await detecter('farine', [motDetecte('farine', ['i1', 'i2'])]);
+
+      const liste = racine.querySelector('app-panneau-detection [role="listbox"]')!;
+      expect(champSaisie().getAttribute('aria-expanded')).toBe('true');
+      expect(champSaisie().getAttribute('aria-controls')).toBe(liste.id);
+      expect(actif()).toBeNull();
+      expect(options().map((option) => option.getAttribute('aria-selected'))).toEqual([
+        'false',
+        'false',
+      ]);
+      expect(options()[0].getAttribute('aria-label')).toBe(
+        'farine, farine (nom), vous, MS, image libre',
+      );
+    });
+
+    it('↓ puis Entrée : la première Image est retenue ; champ vidé, focus gardé, Carte illustrée en fin', async () => {
+      await ouvrir({ ...PREPARATION, nombreMots: 1 }, MODULES, THEMES, albumDe(PREPARATION), [
+        MOT_CITROUILLE,
+      ]);
+      champSaisie().focus();
+      await detecter('farine', [motDetecte('farine', ['i1', 'i2'])]);
+
+      touche('ArrowDown');
+      await stabiliser();
+      expect(actif()).toBe(options()[0].id);
+      expect(options()[0].getAttribute('aria-selected')).toBe('true');
+      expect(options()[0].classList).toContain('vignette--choisie');
+
+      await entree();
+      const requete = reutilisation('i1');
+      expect(requete.request.method).toBe('POST');
+      expect(requete.request.body).toEqual({ motId: 'mot-farine', imageId: 'i1' });
+      serveur.expectNone(URL_MOTS);
+      expect(champSaisie().value).toBe('');
+      expect(document.activeElement).toBe(champSaisie());
+      expect(actif()).toBeNull();
+
+      requete.flush(motIllustre('farine', 2, 'i1'));
+      await stabiliser();
+      expect(cartes()).toEqual(['citrouille', 'farine']);
+      expect(texte('.entete__compteur')).toBe('2 mots, 1 déjà illustré');
+      expect(texte('p[aria-live="polite"]')).toBe('« farine » ajouté avec son image.');
+      expect(racine.querySelector('app-panneau-detection .detection')).toBeNull();
+      expect(document.activeElement).toBe(champSaisie());
+    });
+
+    it('Entrée sans choix : le Mot est ajouté « à illustrer », comme avant', async () => {
+      await ouvrir();
+      champSaisie().focus();
+      await detecter('farine', [motDetecte('farine', ['i1'])]);
+
+      await entree();
+
+      serveur.expectNone(URL_REUTILISATION);
+      serveur.expectOne(URL_MOTS).flush(motPreparation('farine', 1));
+      await stabiliser();
+      expect(texte('p[aria-live="polite"]')).toBe('« farine » ajouté.');
+    });
+
+    it('clic sur la deuxième Image : elle est retenue, le champ est vidé et garde le focus', async () => {
+      await ouvrir();
+      champSaisie().focus();
+      await detecter('farine', [motDetecte('farine', ['i1', 'i2'])]);
+
+      const appui = new MouseEvent('mousedown', { bubbles: true, cancelable: true });
+      options()[1].dispatchEvent(appui);
+      expect(appui.defaultPrevented).toBe(true);
+      options()[1].click();
+      await stabiliser();
+
+      expect(reutilisation('i2').request.body).toEqual({ motId: 'mot-farine', imageId: 'i2' });
+      expect(champSaisie().value).toBe('');
+      expect(document.activeElement).toBe(champSaisie());
+    });
+
+    it('↑ sur la première et Échap retirent le choix ; Entrée ajoute alors « à illustrer »', async () => {
+      await ouvrir();
+      champSaisie().focus();
+      await detecter('farine', [motDetecte('farine', ['i1', 'i2'])]);
+
+      touche('ArrowDown');
+      touche('ArrowDown');
+      await stabiliser();
+      expect(actif()).toBe(options()[1].id);
+      expect(options()[0].classList).not.toContain('vignette--premiere');
+      touche('ArrowUp');
+      touche('ArrowUp');
+      await stabiliser();
+      expect(actif()).toBeNull();
+      expect(options()[0].classList).toContain('vignette--premiere');
+
+      touche('ArrowDown');
+      await stabiliser();
+      const echap = new KeyboardEvent('keydown', {
+        key: 'Escape',
+        bubbles: true,
+        cancelable: true,
+      });
+      champSaisie().dispatchEvent(echap);
+      await stabiliser();
+      expect(echap.defaultPrevented).toBe(true);
+      expect(actif()).toBeNull();
+
+      await entree();
+      serveur.expectNone(URL_REUTILISATION);
+      serveur.expectOne(URL_MOTS).flush(motPreparation('farine', 1));
+      await stabiliser();
+    });
+
+    it('une frappe retire le choix', async () => {
+      await ouvrir();
+      champSaisie().focus();
+      await detecter('farine', [motDetecte('farine', ['i1'])]);
+      touche('ArrowDown');
+      await stabiliser();
+      expect(actif()).not.toBeNull();
+
+      champSaisie().value = 'farines';
+      champSaisie().dispatchEvent(new Event('input'));
+      await stabiliser();
+
+      expect(actif()).toBeNull();
+      await new Promise((fin) => setTimeout(fin, DELAI_DETECTION_MS + 20));
+      serveur.expectOne((requete) => requete.url.endsWith('/detection'));
+    });
+
+    it('Image indisponible (404) : message sous le champ, saisie remise, détection relancée, sans Bandeau', async () => {
+      await ouvrir();
+      champSaisie().focus();
+      await detecter('farine', [motDetecte('farine', ['i1'])]);
+      touche('ArrowDown');
+      await entree();
+
+      reutilisation('i1').flush(
+        { status: 404, code: 'image.indisponible' },
+        { status: 404, statusText: 'Not Found' },
+      );
+      await stabiliser();
+
+      expect(texte('.saisie-rapide__erreur')).toBe(
+        "Cette image n'est plus disponible. Choisissez-en une autre, ou appuyez sur Entrée pour ajouter le mot sans image.",
+      );
+      expect(champSaisie().value).toBe('farine');
+      expect(racine.querySelector('app-bandeau-erreur')).toBeNull();
+      expect(cartes()).toEqual([]);
+      await new Promise((fin) => setTimeout(fin, DELAI_DETECTION_MS + 20));
+      serveur.expectOne((requete) => requete.url.endsWith('/detection'));
+    });
+
+    it('Image d’un autre Sens entre-temps (400 image.sens_different) : même message sous le champ', async () => {
+      await ouvrir();
+      champSaisie().focus();
+      await detecter('farine', [motDetecte('farine', ['i1'])]);
+      touche('ArrowDown');
+      await entree();
+
+      reutilisation('i1').flush(
+        { status: 400, code: 'image.sens_different' },
+        { status: 400, statusText: 'Bad Request' },
+      );
+      await stabiliser();
+
+      expect(texte('.saisie-rapide__erreur')).toContain("Cette image n'est plus disponible.");
+      expect(champSaisie().value).toBe('farine');
+      expect(racine.querySelector('app-bandeau-erreur')).toBeNull();
+      serveur.match((requete) => requete.url.endsWith('/detection'));
+    });
+
+    it('Image devenue indisponible au contrôle sous verrou (404 ressource.introuvable) : message sous le champ, sans Bandeau', async () => {
+      await ouvrir();
+      champSaisie().focus();
+      await detecter('farine', [motDetecte('farine', ['i1'])]);
+      touche('ArrowDown');
+      await entree();
+
+      reutilisation('i1').flush(
+        { status: 404, code: 'ressource.introuvable' },
+        { status: 404, statusText: 'Not Found' },
+      );
+      await stabiliser();
+
+      expect(texte('.saisie-rapide__erreur')).toContain("Cette image n'est plus disponible.");
+      expect(champSaisie().value).toBe('farine');
+      expect(racine.querySelector('app-bandeau-erreur')).toBeNull();
+      serveur.match((requete) => requete.url.endsWith('/detection'));
+    });
+
+    it('autre refus définitif (400 preparation.sens_invalide) : son message sous le champ, sans Bandeau', async () => {
+      await ouvrir();
+      champSaisie().focus();
+      await detecter('farine', [motDetecte('farine', ['i1'])]);
+      touche('ArrowDown');
+      await entree();
+
+      reutilisation('i1').flush(
+        { status: 400, code: 'preparation.sens_invalide' },
+        { status: 400, statusText: 'Bad Request' },
+      );
+      await stabiliser();
+
+      expect(texte('.saisie-rapide__erreur')).toBe("Ce sens n'appartient pas à ce mot.");
+      expect(champSaisie().value).toBe('farine');
+      expect(racine.querySelector('app-bandeau-erreur')).toBeNull();
+      serveur.match((requete) => requete.url.endsWith('/detection'));
+    });
+
+    it('Mot déjà présent : refusé sous le champ comme une Entrée, saisie remise', async () => {
+      await ouvrir();
+      champSaisie().focus();
+      await detecter('cote', [motDetecte('côté', ['i1'])]);
+      touche('ArrowDown');
+      await entree();
+
+      reutilisation('i1').flush(
+        { status: 409, code: 'preparation.mot_deja_present' },
+        { status: 409, statusText: 'Conflict' },
+      );
+      await stabiliser();
+
+      expect(texte('.saisie-rapide__erreur')).toBe(
+        'Ce mot est déjà dans la préparation : « côté ».',
+      );
+      expect(champSaisie().value).toBe('cote');
+      serveur.match((requete) => requete.url.endsWith('/detection'));
+    });
+
+    it('échec réseau : Bandeau qui nomme le Mot, « Réessayer » renvoie la même réutilisation', async () => {
+      await ouvrir();
+      champSaisie().focus();
+      await detecter('cote', [motDetecte('côté', ['i1'])]);
+      touche('ArrowDown');
+      await entree();
+
+      reutilisation('i1').error(new ProgressEvent('error'));
+      await stabiliser();
+      expect(bandeau('erreur-ajout')).toBe(`« côté » n'a pas été ajouté. ${MESSAGE_RESEAU}`);
+
+      await reessayer('erreur-ajout');
+      expect(reutilisation('i1').request.body).toEqual({ motId: 'mot-côté', imageId: 'i1' });
+    });
+
+    it('plusieurs Mots : un groupe nommé par Mot, ↓ passe d’un Mot à l’autre sans boucler', async () => {
+      await ouvrir();
+      champSaisie().focus();
+      await detecter('cote', [motDetecte('côte', ['i1']), motDetecte('côté', ['i2'])]);
+
+      expect(
+        [...racine.querySelectorAll('app-panneau-detection [role="listbox"] [role="group"]')].map(
+          (groupe) => groupe.getAttribute('aria-label'),
+        ),
+      ).toEqual([
+        'côte — existe déjà · 1 image. Sens : côte (nom).',
+        'côté — existe déjà · 1 image. Sens : côté (nom).',
+      ]);
+      touche('ArrowDown');
+      touche('ArrowDown');
+      touche('ArrowDown');
+      await stabiliser();
+      expect(actif()).toBe(options()[1].id);
+
+      await entree();
+      expect(reutilisation('i2').request.body).toEqual({ motId: 'mot-côté', imageId: 'i2' });
+    });
+
+    it('deux réutilisations puis une Entrée tapées vite : les trois Cartes dans l’ordre des gestes', async () => {
+      await ouvrir();
+      champSaisie().focus();
+      await detecter('farine', [motDetecte('farine', ['i1'])]);
+      touche('ArrowDown');
+      await entree();
+      await detecter('sucre', [motDetecte('sucre', ['i2'])]);
+      touche('ArrowDown');
+      await entree();
+      champSaisie().value = 'oeuf';
+      champSaisie().dispatchEvent(new Event('input'));
+      await entree();
+
+      // Un seul envoi à la fois : le suivant part après la réponse du précédent.
+      serveur.expectNone(URL_MOTS);
+      reutilisation('i1').flush(motIllustre('farine', 1, 'i1'));
+      await stabiliser();
+      serveur.expectNone(URL_MOTS);
+      reutilisation('i2').flush(motIllustre('sucre', 2, 'i2'));
+      await stabiliser();
+      serveur.expectOne(URL_MOTS).flush(motPreparation('oeuf', 3));
+      await stabiliser();
+
+      expect(cartes()).toEqual(['farine', 'sucre', 'oeuf']);
+      serveur.match((requete) => requete.url.endsWith('/detection'));
+    });
+  });
+
   describe('Retrait d’un Mot (story 2.3, partie 2)', () => {
     const GALETTE = motPreparation('galette', 1);
     const CITROUILLE = motPreparation('citrouille', 2);

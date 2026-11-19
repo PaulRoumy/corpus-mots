@@ -1,10 +1,13 @@
 import {
+  afterRenderEffect,
   ChangeDetectionStrategy,
   Component,
   computed,
   effect,
+  ElementRef,
   inject,
   input,
+  output,
   signal,
   untracked,
 } from '@angular/core';
@@ -21,7 +24,8 @@ import { CHAMP_VIDE, PROPRIETAIRE_INCONNU } from '../commun/carte-identite/carte
 import { CompteCourant } from '../commun/compte-courant';
 import { codeErreur } from '../commun/erreurs/message-erreur';
 import { ChargementImage, ImageSecurisee } from '../commun/image-securisee/image-securisee';
-import { RepereSection } from '../commun/repere-section/repere-section';
+import { LIBELLES_TYPE_IMAGE } from '../commun/libelles-images';
+import { LIBELLES_SECTION, RepereSection } from '../commun/repere-section/repere-section';
 import { SuggestionsArasaac } from './suggestions-arasaac';
 
 /** Pause de frappe après laquelle la détection part, en millisecondes. */
@@ -36,6 +40,18 @@ export const LONGUEUR_MIN_DETECTION = 2;
 /** Message sous le champ quand la détection échoue : la saisie continue. */
 export const MESSAGE_DETECTION_INDISPONIBLE =
   "La détection ne répond pas pour l'instant. Entrée ajoute toujours le mot.";
+
+/** Image retenue dans le panneau : le Mot qu'elle illustre et l'Image. */
+export interface ChoixImage {
+  readonly motId: string;
+  readonly forme: string;
+  readonly imageId: string;
+}
+
+/** Geste du clavier transmis par le Champ de saisie rapide : ↓, ↑ ou Échap. */
+export type Navigation = 'suivant' | 'precedent' | 'annuler';
+
+let prochainNumero = 0;
 
 type Etat =
   | { readonly nom: 'masque' }
@@ -90,8 +106,16 @@ export function libelleSens(mot: DetectionMotDto): string | null {
  * `DELAI_SUGGESTIONS_MS` (ARASAAC n'est pas interrogé pour chaque fragment).
  *
  * Seul un résumé (l'en-tête de chaque Mot, ou le message d'échec) est annoncé, par une région `aria-live` polie ;
- * le panneau ne contient rien de focalisable : le focus reste dans le champ. Les
- * Images ne sont pas encore cliquables (partie 2). Un échec affiche un message court, sans bloquer la saisie.
+ * le panneau ne contient rien de focalisable : le focus reste dans le champ. Un échec affiche un message court, sans
+ * bloquer la saisie.
+ *
+ * Retenir une Image (story 2.7, partie 2) : les Images sont les options d'une liste (`role="listbox"`, un groupe par
+ * Mot, nommé par son en-tête, ses Sens et ses Albums, texte masqué dans la liste) que le Champ de saisie rapide pilote
+ * en combobox ARIA 1.2 (`idListe`, `idActif`, `deplie`) ; les Mots sans Image et leurs suggestions ARASAAC restent hors
+ * de la liste. Aucune n'est choisie d'emblée ; ↓ choisit la première, ↓ ↑ parcourent les Images de tous les Mots dans
+ * l'ordre, sans boucler ; ↑ sur la première et Échap retirent le choix (`naviguer`), qui tombe aussi à chaque frappe et
+ * à chaque nouveau résultat. Tant que la détection d'une nouvelle saisie est attendue, rien n'est proposé. La page lit `choix()` à l'Entrée. Un clic sur une Image émet `retenir`, sans prendre le
+ * focus du champ.
  */
 @Component({
   selector: 'app-panneau-detection',
@@ -105,7 +129,109 @@ export function libelleSens(mot: DetectionMotDto): string | null {
       @case ('resultat') {
         @if (resultat(); as resultat) {
           <div class="detection">
-            @for (mot of resultat.mots; track mot.motId) {
+            @if (motsIllustres().length > 0) {
+              <p class="detection__ligne">Images de votre section en premier.</p>
+              <!-- Dans la liste, seuls groupes et options sont exposés : le texte de chaque Mot devient le nom du groupe. -->
+              <div
+                class="detection__liste"
+                [id]="idListe"
+                [attr.role]="deplie() ? 'listbox' : null"
+                [attr.aria-label]="deplie() ? 'Images proposées' : null"
+              >
+                @for (mot of motsIllustres(); track mot.motId) {
+                  <section
+                    class="detection__bloc"
+                    [attr.role]="deplie() ? 'group' : null"
+                    [attr.aria-label]="deplie() ? nomGroupe(mot) : null"
+                  >
+                    <div class="detection__textes" [attr.aria-hidden]="deplie() ? 'true' : null">
+                      <p class="detection__entete">
+                        <span class="detection__mot">{{ mot.forme }}</span
+                        >&ngsp;
+                        <span>— {{ etatMot(mot) }}</span>
+                      </p>
+                      @if (sensMot(mot); as sens) {
+                        <p class="detection__ligne">Sens : {{ sens }}</p>
+                      }
+                      @if (mot.albums.length > 0) {
+                        <p class="detection__ligne">Albums : {{ titresAlbums(mot) }}</p>
+                      }
+                    </div>
+                    <ul class="detection__images" role="presentation">
+                      @for (vignette of vignettes(mot); track vignette.image.id) {
+                        <li
+                          class="vignette"
+                          [id]="idOption(vignette.image.id)"
+                          [attr.role]="deplie() ? 'option' : null"
+                          [attr.aria-selected]="
+                            deplie() ? vignette.image.id === imageChoisie() : null
+                          "
+                          [attr.aria-label]="nomOption(mot, vignette.image)"
+                          [class.vignette--premiere]="
+                            imageChoisie() === null && vignette.image.id === premiereImageId()
+                          "
+                          [class.vignette--choisie]="vignette.image.id === imageChoisie()"
+                          (mousedown)="$event.preventDefault()"
+                          (click)="retenirParClic(mot, vignette.image)"
+                        >
+                          @if (vignette.image.id === imageChoisie()) {
+                            <span class="vignette__coche" aria-hidden="true">
+                              <mat-icon svgIcon="coche" />
+                            </span>
+                          }
+                          <span class="vignette__photo">
+                            @if (echecs().has(vignette.image.id)) {
+                              <mat-icon
+                                class="vignette__repli"
+                                svgIcon="image"
+                                aria-hidden="true"
+                              />
+                            } @else {
+                              <img
+                                class="vignette__image"
+                                [appImageSecurisee]="vignette.charger"
+                                [alt]="mot.forme + ', ' + vignette.image.sens.libelle"
+                                (echec)="signalerEchec(vignette.image.id)"
+                              />
+                            }
+                          </span>
+                          <span class="vignette__infos">
+                            <span class="vignette__rangee">
+                              @for (section of vignette.image.sections; track section) {
+                                <app-repere-section [section]="section" />
+                              }
+                              <app-badge-type-image [type]="vignette.image.typeImage" />
+                            </span>
+                            <span class="vignette__origine">
+                              @if (vignette.image.albumOrigine) {
+                                <mat-icon svgIcon="livre" aria-hidden="true" />
+                              }
+                              {{ origine(vignette.image) }}
+                            </span>
+                            @if (vignette.image.dejaUtilisee || mot.sens.length > 1) {
+                              <span class="vignette__rangee">
+                                @if (vignette.image.dejaUtilisee) {
+                                  <span class="vignette__marque">
+                                    <mat-icon svgIcon="historique" aria-hidden="true" />
+                                    déjà utilisée
+                                  </span>
+                                }
+                                @if (mot.sens.length > 1) {
+                                  <span class="vignette__sens">{{
+                                    vignette.image.sens.libelle
+                                  }}</span>
+                                }
+                              </span>
+                            }
+                          </span>
+                        </li>
+                      }
+                    </ul>
+                  </section>
+                }
+              </div>
+            }
+            @for (mot of motsSansImage(); track mot.motId) {
               <section class="detection__bloc">
                 <p class="detection__entete">
                   <span class="detection__mot">{{ mot.forme }}</span
@@ -118,63 +244,12 @@ export function libelleSens(mot: DetectionMotDto): string | null {
                 @if (mot.albums.length > 0) {
                   <p class="detection__ligne">Albums : {{ titresAlbums(mot) }}</p>
                 }
-                @if (mot.images.length > 0) {
-                  <p class="detection__ligne">Images de votre section en premier.</p>
-                  <ul class="detection__images">
-                    @for (vignette of vignettes(mot); track vignette.image.id) {
-                      <li
-                        class="vignette"
-                        [class.vignette--premiere]="vignette.image.id === premiereImageId()"
-                      >
-                        <span class="vignette__photo">
-                          @if (echecs().has(vignette.image.id)) {
-                            <mat-icon class="vignette__repli" svgIcon="image" aria-hidden="true" />
-                          } @else {
-                            <img
-                              class="vignette__image"
-                              [appImageSecurisee]="vignette.charger"
-                              [alt]="mot.forme + ', ' + vignette.image.sens.libelle"
-                              (echec)="signalerEchec(vignette.image.id)"
-                            />
-                          }
-                        </span>
-                        <span class="vignette__infos">
-                          <span class="vignette__rangee">
-                            @for (section of vignette.image.sections; track section) {
-                              <app-repere-section [section]="section" />
-                            }
-                            <app-badge-type-image [type]="vignette.image.typeImage" />
-                          </span>
-                          <span class="vignette__origine">
-                            @if (vignette.image.albumOrigine) {
-                              <mat-icon svgIcon="livre" aria-hidden="true" />
-                            }
-                            {{ origine(vignette.image) }}
-                          </span>
-                          @if (vignette.image.dejaUtilisee || mot.sens.length > 1) {
-                            <span class="vignette__rangee">
-                              @if (vignette.image.dejaUtilisee) {
-                                <span class="vignette__marque">
-                                  <mat-icon svgIcon="historique" aria-hidden="true" />
-                                  déjà utilisée
-                                </span>
-                              }
-                              @if (mot.sens.length > 1) {
-                                <span class="vignette__sens">{{
-                                  vignette.image.sens.libelle
-                                }}</span>
-                              }
-                            </span>
-                          }
-                        </span>
-                      </li>
-                    }
-                  </ul>
-                } @else if (suggestionsPermises()) {
+                @if (suggestionsPermises()) {
                   <app-suggestions-arasaac [mot]="mot.forme" />
                 }
               </section>
-            } @empty {
+            }
+            @if (resultat.mots.length === 0) {
               <section class="detection__bloc">
                 <p class="detection__entete">
                   <span class="detection__mot">{{ resultat.forme }}</span
@@ -201,9 +276,18 @@ export class PanneauDetection {
   /** Saisie en cours du Champ de saisie rapide. */
   readonly saisie = input('');
 
+  /** Image retenue d'un clic : la page l'ajoute aussitôt. */
+  readonly retenir = output<ChoixImage>();
+
   private readonly api = inject(Api);
   private readonly annuaire = inject(Annuaire);
   private readonly compteCourant = inject(CompteCourant);
+
+  private readonly hote = inject<ElementRef<HTMLElement>>(ElementRef);
+  private readonly numero = prochainNumero++;
+
+  /** Identifiant de la liste des Images, cible de `aria-controls` du Champ de saisie rapide. */
+  readonly idListe = `panneau-detection-${this.numero}`;
 
   protected readonly messageIndisponible = MESSAGE_DETECTION_INDISPONIBLE;
   protected readonly etat = signal<Etat>({ nom: 'masque' });
@@ -228,6 +312,46 @@ export class PanneauDetection {
       );
     }
     return parMot;
+  });
+
+  /** Mots du résultat qui proposent des Images (dans la liste), puis ceux qui n'en ont pas (hors de la liste). */
+  protected readonly motsIllustres = computed(() =>
+    (this.resultat()?.mots ?? []).filter((mot) => mot.images.length > 0),
+  );
+  protected readonly motsSansImage = computed(() =>
+    (this.resultat()?.mots ?? []).filter((mot) => mot.images.length === 0),
+  );
+
+  /** Saisie dont le résultat est affiché : une autre saisie attend sa détection. */
+  private readonly saisieDuResultat = signal<string | null>(null);
+
+  /**
+   * Images proposées, de tous les Mots, dans l'ordre affiché : celui que ↓ et ↑ parcourent. Aucune tant qu'une détection
+   * est attendue pour une saisie différente du résultat affiché : Entrée ne retiendrait pas l'Image d'un autre Mot.
+   */
+  private readonly options = computed<readonly ChoixImage[]>(() =>
+    this.saisie().trim() !== this.saisieDuResultat()
+      ? []
+      : this.motsIllustres().flatMap((mot) =>
+          mot.images.map((image) => ({ motId: mot.motId, forme: mot.forme, imageId: image.id })),
+        ),
+  );
+
+  /** Vrai quand le panneau propose au moins une Image (`aria-expanded` du champ). */
+  readonly deplie = computed(() => this.options().length > 0);
+
+  /** Image choisie au clavier, `null` si aucune. */
+  protected readonly imageChoisie = signal<string | null>(null);
+
+  /** Image choisie, avec son Mot ; `null` si aucune : Entrée ajoute alors le Mot « à illustrer ». */
+  readonly choix = computed(
+    () => this.options().find((option) => option.imageId === this.imageChoisie()) ?? null,
+  );
+
+  /** Identifiant de l'option choisie, cible de `aria-activedescendant` du champ. */
+  readonly idActif = computed(() => {
+    const choix = this.choix();
+    return choix === null ? null : this.idOption(choix.imageId);
   });
 
   /** Première proposition, mise en avant : la première Image du premier Mot qui en a. */
@@ -264,7 +388,10 @@ export class PanneauDetection {
       const saisie = this.saisie().trim();
       const preparationId = this.preparationId();
       const numero = ++this.derniereFrappe;
-      untracked(() => this.suggestionsPermises.set(false));
+      untracked(() => {
+        this.suggestionsPermises.set(false);
+        this.imageChoisie.set(null);
+      });
       if (saisie.length < LONGUEUR_MIN_DETECTION) {
         untracked(() => this.etat.set({ nom: 'masque' }));
         return;
@@ -282,6 +409,68 @@ export class PanneauDetection {
         clearTimeout(minuteurSuggestions);
       });
     });
+    // L'option choisie reste visible quand la liste défile.
+    afterRenderEffect(() => {
+      const id = this.idActif();
+      if (id !== null) {
+        this.hote.nativeElement.querySelector(`#${id}`)?.scrollIntoView?.({ block: 'nearest' });
+      }
+    });
+  }
+
+  /** ↓ choisit l'Image suivante (la première sans choix), sans boucler ; ↑ la précédente ou aucune ; Échap aucune. */
+  naviguer(navigation: Navigation): void {
+    const options = this.options();
+    const index = options.findIndex((option) => option.imageId === this.imageChoisie());
+    if (navigation === 'annuler' || (navigation === 'precedent' && index <= 0)) {
+      this.imageChoisie.set(null);
+    } else if (navigation === 'precedent') {
+      this.imageChoisie.set(options[index - 1].imageId);
+    } else if (options.length > 0) {
+      this.imageChoisie.set(options[Math.min(index + 1, options.length - 1)].imageId);
+    }
+  }
+
+  protected retenirParClic(mot: DetectionMotDto, image: DetectionImageDto): void {
+    this.imageChoisie.set(image.id);
+    this.retenir.emit({ motId: mot.motId, forme: mot.forme, imageId: image.id });
+  }
+
+  /** Nom d'un groupe de la liste : le texte du Mot, masqué dans la liste. */
+  protected nomGroupe(mot: DetectionMotDto): string {
+    const sens = libelleSens(mot);
+    return [
+      `${mot.forme} — ${libelleEtatMot(mot)}.`,
+      sens === null ? null : `Sens : ${sens}.`,
+      mot.albums.length === 0 ? null : `Albums : ${this.titresAlbums(mot)}.`,
+    ]
+      .filter((partie) => partie !== null)
+      .join(' ');
+  }
+
+  protected idOption(imageId: string): string {
+    return `${this.idListe}-image-${imageId}`;
+  }
+
+  /**
+   * Nom accessible d'une Image proposée : Mot, Sens, propriétaire, puis ce que la vignette montre (« déjà utilisée »,
+   * Sections, type, album d'origine).
+   */
+  protected nomOption(mot: DetectionMotDto, image: DetectionImageDto): string {
+    const sens = image.sens.categorie
+      ? `${image.sens.libelle} (${image.sens.categorie})`
+      : image.sens.libelle;
+    return [
+      mot.forme,
+      sens,
+      this.proprietaire(image.proprietaireId),
+      image.dejaUtilisee ? 'déjà utilisée' : null,
+      image.sections.map((section) => LIBELLES_SECTION[section]).join(' ') || null,
+      LIBELLES_TYPE_IMAGE[image.typeImage],
+      image.albumOrigine ? `album ${image.albumOrigine.titre}` : null,
+    ]
+      .filter((partie) => partie !== null)
+      .join(', ');
   }
 
   protected etatMot(mot: DetectionMotDto): string {
@@ -327,6 +516,8 @@ export class PanneauDetection {
       const resultat = await this.api.invoke(detecterMotPreparation, { id: preparationId, saisie });
       if (numero === this.derniereFrappe) {
         this.echecs.set(new Set());
+        this.imageChoisie.set(null);
+        this.saisieDuResultat.set(saisie);
         this.etat.set({ nom: 'resultat', resultat });
         const moi = this.compteCourant.compte()?.id;
         if (resultat.mots.some((mot) => mot.images.some((image) => image.proprietaireId !== moi))) {

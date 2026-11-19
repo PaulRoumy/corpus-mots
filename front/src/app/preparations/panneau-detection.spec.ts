@@ -159,8 +159,8 @@ describe('PanneauDetection', () => {
     expect(annonce()).toBe('farine — existe déjà · 2 images, dans 1 album');
     expect(racine.querySelector('[aria-live] .vignette, [aria-live] .detection__ligne')).toBeNull();
     expect(textes('.detection__ligne')).toEqual([
-      'Albums : La petite poule rousse',
       'Images de votre section en premier.',
+      'Albums : La petite poule rousse',
     ]);
     const vignettes = [...racine.querySelectorAll('.vignette')];
     expect(vignettes).toHaveLength(2);
@@ -286,9 +286,8 @@ describe('PanneauDetection', () => {
     expect(textes('.detection__mot')).toEqual(['côte', 'côté']);
     expect(annonce()).toBe('côte — existe déjà · 1 image ; côté — existe déjà · 1 image');
     expect(textes('.detection__ligne')).toEqual([
+      'Images de votre section en premier.',
       'Sens : animal (nom), méchant',
-      'Images de votre section en premier.',
-      'Images de votre section en premier.',
     ]);
     expect(textes('.vignette__sens')).toEqual(['méchant']);
     expect(racine.querySelectorAll('.vignette--premiere')).toHaveLength(1);
@@ -322,6 +321,186 @@ describe('PanneauDetection', () => {
       .flush({ code: 'requete.invalide' }, { status: 400, statusText: 'Bad Request' });
     await stabiliser();
     expect(racine.textContent?.trim()).toBe('');
+  });
+
+  describe('retenir une Image (story 2.7, partie 2)', () => {
+    const panneau = () => fixture.componentInstance;
+    const options = () => [...racine.querySelectorAll<HTMLElement>('[role="option"]')];
+    const choisies = () =>
+      options().map((option) => option.getAttribute('aria-selected') === 'true');
+
+    async function afficher(resultat: DetectionPreparationDto = FARINE) {
+      await taper('farine');
+      serveur.expectOne(url('farine')).flush(resultat);
+      await stabiliser();
+      serveur.match('/api/enseignants').forEach((requete) =>
+        requete.flush([
+          { id: PAUL, nomAffiche: 'Paul', statut: 'actif' },
+          { id: ZOE, nomAffiche: 'Zoé', statut: 'actif' },
+        ]),
+      );
+      servirMiniatures();
+      await stabiliser();
+    }
+
+    async function naviguer(...gestes: ('suivant' | 'precedent' | 'annuler')[]) {
+      for (const geste of gestes) {
+        panneau().naviguer(geste);
+      }
+      await fixture.whenStable();
+    }
+
+    it('liste d’options, aucune choisie d’emblée ; la première reste mise en avant', async () => {
+      await afficher();
+
+      const liste = racine.querySelector('[role="listbox"]')!;
+      expect(liste.id).toBe(panneau().idListe);
+      expect(liste.getAttribute('aria-label')).toBe('Images proposées');
+      // Dans la liste, seuls groupes et options sont exposés : le texte du Mot nomme le groupe.
+      const groupe = liste.querySelector('[role="group"]')!;
+      expect(groupe.getAttribute('aria-label')).toBe(
+        'farine — existe déjà · 2 images, dans 1 album. Albums : La petite poule rousse.',
+      );
+      expect(
+        [...liste.querySelectorAll('.detection__entete, .detection__ligne')].every(
+          (element) => element.closest('[aria-hidden="true"]') !== null,
+        ),
+      ).toBe(true);
+      expect(liste.querySelector('app-suggestions-arasaac')).toBeNull();
+      expect(
+        [...racine.querySelectorAll('.detection__ligne')]
+          .find((ligne) => ligne.textContent?.trim() === 'Images de votre section en premier.')
+          ?.closest('[role="listbox"]'),
+      ).toBeNull();
+      expect(panneau().deplie()).toBe(true);
+      expect(panneau().choix()).toBeNull();
+      expect(panneau().idActif()).toBeNull();
+      expect(choisies()).toEqual([false, false]);
+      expect(options()[0].classList).toContain('vignette--premiere');
+      expect(options().map((option) => option.getAttribute('aria-label'))).toEqual([
+        "farine, à compléter, vous, déjà utilisée, MS GS, image d'album, album La petite poule rousse",
+        'farine, à compléter, Zoé, GS, image libre',
+      ]);
+      // Rien de focalisable : le focus reste dans le champ.
+      expect(racine.querySelector('a, button, input, [tabindex]')).toBeNull();
+    });
+
+    it('↓ choisit la première puis la suivante, sans boucler ; ↑ revient, puis retire le choix', async () => {
+      await afficher();
+
+      await naviguer('suivant');
+      expect(panneau().choix()).toEqual({ motId: 'mot-farine', forme: 'farine', imageId: 'i1' });
+      expect(panneau().idActif()).toBe(options()[0].id);
+      expect(choisies()).toEqual([true, false]);
+      expect(options()[0].classList).toContain('vignette--choisie');
+      expect(options()[0].querySelector('.vignette__coche mat-icon')).not.toBeNull();
+
+      await naviguer('suivant', 'suivant');
+      expect(panneau().choix()?.imageId).toBe('i2');
+      expect(choisies()).toEqual([false, true]);
+      // La mise en avant de la première disparaît quand une autre est choisie.
+      expect(options()[0].classList).not.toContain('vignette--premiere');
+      expect(racine.querySelectorAll('.vignette__coche')).toHaveLength(1);
+
+      await naviguer('precedent');
+      expect(panneau().choix()?.imageId).toBe('i1');
+      await naviguer('precedent');
+      expect(panneau().choix()).toBeNull();
+      expect(panneau().idActif()).toBeNull();
+      expect(options()[0].classList).toContain('vignette--premiere');
+      await naviguer('precedent');
+      expect(panneau().choix()).toBeNull();
+    });
+
+    it('Échap retire le choix', async () => {
+      await afficher();
+      await naviguer('suivant', 'annuler');
+      expect(panneau().choix()).toBeNull();
+      expect(choisies()).toEqual([false, false]);
+    });
+
+    it('le choix tombe à chaque frappe et à chaque nouveau résultat', async () => {
+      await afficher();
+      await naviguer('suivant');
+
+      fixture.componentRef.setInput('saisie', 'farines');
+      await fixture.whenStable();
+      expect(panneau().choix()).toBeNull();
+
+      await tour(DELAI_DETECTION_MS + 20);
+      await stabiliser();
+      serveur.expectOne(url('farines')).flush(FARINE);
+      await stabiliser();
+      serveur.match('/api/enseignants').forEach((requete) => requete.flush([]));
+      servirMiniatures();
+      expect(panneau().choix()).toBeNull();
+    });
+
+    it('détection attendue pour une autre saisie : l’ancien résultat reste affiché mais rien n’est proposé', async () => {
+      await afficher();
+
+      fixture.componentRef.setInput('saisie', 'farines');
+      await fixture.whenStable();
+      await naviguer('suivant');
+
+      expect(options()).toHaveLength(0);
+      expect(racine.querySelectorAll('.vignette')).toHaveLength(2);
+      expect(racine.querySelector('[role="listbox"]')).toBeNull();
+      expect(panneau().deplie()).toBe(false);
+      expect(panneau().choix()).toBeNull();
+      expect(panneau().idActif()).toBeNull();
+
+      await tour(DELAI_DETECTION_MS + 20);
+      await stabiliser();
+      serveur.expectOne(url('farines')).flush({ ...FARINE, forme: 'farines' });
+      await stabiliser();
+      serveur.match('/api/enseignants').forEach((requete) => requete.flush([]));
+      servirMiniatures();
+      await stabiliser();
+      expect(panneau().deplie()).toBe(true);
+      await naviguer('suivant');
+      expect(panneau().choix()?.imageId).toBe('i1');
+    });
+
+    it('clic : émet l’Image retenue avec son Mot, sans prendre le focus', async () => {
+      await afficher();
+      const retenues: unknown[] = [];
+      panneau().retenir.subscribe((choix) => retenues.push(choix));
+
+      const appui = new MouseEvent('mousedown', { bubbles: true, cancelable: true });
+      options()[1].dispatchEvent(appui);
+      options()[1].click();
+      await fixture.whenStable();
+
+      expect(appui.defaultPrevented).toBe(true);
+      expect(retenues).toEqual([{ motId: 'mot-farine', forme: 'farine', imageId: 'i2' }]);
+    });
+
+    it('plusieurs Mots : un groupe nommé par Mot, ↓ parcourt les Images de tous les Mots', async () => {
+      await afficher({
+        forme: 'cote',
+        mots: [mot('côte', { images: [image('i1')] }), mot('côté', { images: [image('i2')] })],
+      });
+
+      const groupes = [...racine.querySelectorAll('[role="listbox"] [role="group"]')];
+      expect(groupes.map((groupe) => groupe.getAttribute('aria-label'))).toEqual([
+        'côte — existe déjà · 1 image.',
+        'côté — existe déjà · 1 image.',
+      ]);
+      await naviguer('suivant', 'suivant');
+      expect(panneau().choix()).toEqual({ motId: 'mot-côté', forme: 'côté', imageId: 'i2' });
+    });
+
+    it('sans Image : pas de liste, rien à choisir', async () => {
+      await afficher({ forme: 'farine', mots: [] });
+      expect(racine.querySelector('[role="listbox"]')).toBeNull();
+      expect(panneau().deplie()).toBe(false);
+      await naviguer('suivant');
+      expect(panneau().choix()).toBeNull();
+      await attendreSuggestions();
+      serveur.expectOne('/api/arasaac/suggestions?mot=farine').flush([]);
+      await stabiliser();
+    });
   });
 
   it('libellés de l’en-tête et des Sens', () => {

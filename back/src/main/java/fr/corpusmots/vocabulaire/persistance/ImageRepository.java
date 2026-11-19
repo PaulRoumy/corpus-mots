@@ -22,6 +22,19 @@ public class ImageRepository implements PanacheRepositoryBase<Image, UUID> {
     }
 
     /**
+     * Sens, propriétaire et état de l'Image {@code id}, lus sans verrou et sans charger l'entité dans le contexte de
+     * persistance : une lecture verrouillée plus tard dans la même transaction relit l'Image en base. L'appelant décide
+     * de la visibilité par {@code VisibiliteImages} (AD-2).
+     */
+    public Optional<Object[]> sensProprietaireEtat(UUID id) {
+        return getEntityManager()
+                .createQuery("select i.sensId, i.proprietaireId, i.etat from Image i where i.id = :id", Object[].class)
+                .setParameter("id", id)
+                .getResultStream()
+                .findFirst();
+    }
+
+    /**
      * Images qui illustrent l'un de ces Sens, de tous les enseignants et à tous les états : l'appelant les filtre par
      * {@code VisibiliteImages} (AD-2).
      */

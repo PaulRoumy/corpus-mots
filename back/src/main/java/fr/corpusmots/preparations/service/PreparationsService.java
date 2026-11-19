@@ -59,6 +59,7 @@ public class PreparationsService {
     static final String CODE_MOT_DEJA_PRESENT = "preparation.mot_deja_present";
     static final String CODE_SENS_INVALIDE = "preparation.sens_invalide";
     static final String CODE_INTROUVABLE = "ressource.introuvable";
+    static final String CODE_IMAGE_INDISPONIBLE = "image.indisponible";
 
     /** Borne haute du Temps passé : 100 heures (contrainte {@code preparation_temps_passe_borne}). */
     static final int TEMPS_PASSE_MAXIMUM_MINUTES = 6000;
@@ -270,6 +271,46 @@ public class PreparationsService {
         ImageVue image = commande.imageId() == null ? null
                 : usages.lierImageSiPossible(new LierImageCommande(preparation.id(), ligne.id(), commande.imageId(),
                         preparation.albumId(), preparation.section(), OrigineLien.REUTILISEE)).orElse(null);
+        return vue(ligne, mot, sens, image);
+    }
+
+    /**
+     * Ajoute en fin de Préparation {@code id} de l'enseignant courant le Mot d'une Image existante retenue dans le
+     * Panneau de détection (story 2.7) : le Sens de l'Image devient le Sens retenu du Mot, le Thème est le Thème par
+     * défaut de la Préparation, et l'Image lui est liée avec l'origine {@code reutilisee}, sans copie (AD-5), par
+     * {@link Usages#lierImage} qui la verrouille et revérifie qu'elle est proposable et du Sens retenu. Une seule
+     * transaction : rien n'est ajouté en cas de refus.
+     *
+     * @throws ErreurMetier {@code 404 ressource.introuvable} si la Préparation n'existe pas ou appartient à un
+     *         collègue, ou si le Mot n'existe pas ; {@code 404 image.indisponible} si l'Image n'existe pas ou ne lui est
+     *         pas proposable ; {@code 400 preparation.sens_invalide} si l'Image illustre un autre Mot ;
+     *         {@code 409 preparation.mot_deja_present} si le Mot figure déjà dans la Préparation. Si l'Image change entre
+     *         la lecture de son Sens et son verrou, {@code 404 ressource.introuvable} ou {@code 400 image.sens_different}
+     *         ({@link Usages#lierImage})
+     */
+    @Transactional
+    public MotPreparationVue reutiliserImage(UUID id, ReutiliserImageCommande commande) {
+        Preparation preparation = verrouillee(id);
+        MotVue mot = commande.motId() == null ? null : lexique.mots(List.of(commande.motId())).get(commande.motId());
+        if (mot == null) {
+            throw new ErreurMetier(404, CODE_INTROUVABLE, "Aucun mot ne porte cet identifiant");
+        }
+        UUID sensId = usages.sensDImageProposable(commande.imageId())
+                .orElseThrow(() -> new ErreurMetier(404, CODE_IMAGE_INDISPONIBLE,
+                        "Aucune image proposable ne porte cet identifiant"));
+        if (lexique.sensDuMot(mot.id(), sensId).isEmpty()) {
+            throw new ErreurMetier(400, CODE_SENS_INVALIDE, "Cette image illustre un autre mot");
+        }
+        if (preparationMots.contient(preparation.id(), mot.id())) {
+            throw new ErreurMetier(409, CODE_MOT_DEJA_PRESENT, "Ce mot figure déjà dans la préparation");
+        }
+        PreparationMot ligne = PreparationMot.nouveau(preparationMots.nouvelIdentifiant(), preparation.id(), mot.id(),
+                preparationMots.dernierOrdre(preparation.id()) + 1, preparation.themeDefautId());
+        preparationMots.persistAndFlush(ligne);
+        SensVue sens = usages.retenirSens(new RetenirSensCommande(preparation.id(), ligne.id(), mot.id(),
+                preparation.albumId(), preparation.section(), sensId));
+        ImageVue image = usages.lierImage(new LierImageCommande(preparation.id(), ligne.id(), commande.imageId(),
+                preparation.albumId(), preparation.section(), OrigineLien.REUTILISEE));
         return vue(ligne, mot, sens, image);
     }
 

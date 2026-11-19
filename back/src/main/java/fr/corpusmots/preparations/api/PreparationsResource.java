@@ -151,6 +151,24 @@ public class PreparationsResource {
     }
 
     @POST
+    @Path("/{id}/mots/reutilisation")
+    @Consumes(MediaType.APPLICATION_JSON)
+    @ResponseStatus(201)
+    @Operation(operationId = "reutiliserImageMotPreparation",
+            summary = "Ajouter en fin de Préparation de l'enseignant connecté le Mot d'une Image existante, avec le Sens"
+                    + " de l'Image, et la lui lier sans copie (origine reutilisee)")
+    @APIResponse(responseCode = "201", description = "Mot ajouté, illustré par l'Image retenue",
+            content = @Content(mediaType = MediaType.APPLICATION_JSON,
+                    schema = @Schema(implementation = MotPreparationDto.class)))
+    public MotPreparationDto reutiliserImage(@PathParam("id") UUID id,
+            @RequestBody(required = true) ReutilisationImageMotPreparationDto reutilisation) {
+        if (reutilisation == null || reutilisation.motId() == null || reutilisation.imageId() == null) {
+            throw new ErreurMetier(400, "requete.invalide", "Le mot et l'image sont obligatoires");
+        }
+        return MotPreparationDto.de(preparations.reutiliserImage(id, reutilisation.enCommande()));
+    }
+
+    @POST
     @Path("/{id}/mots/{motPreparationId}/image")
     @Consumes(MediaType.MULTIPART_FORM_DATA)
     @ResponseStatus(201)

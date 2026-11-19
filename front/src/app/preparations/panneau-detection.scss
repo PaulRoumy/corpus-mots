@@ -23,6 +23,19 @@
   min-width: 0;
 }
 
+// Liste des Images proposées (Mots qui en ont) et texte de chaque Mot.
+.detection__liste {
+  display: flex;
+  flex-direction: column;
+  gap: var(--cm-espace-4);
+}
+
+.detection__textes {
+  display: flex;
+  flex-direction: column;
+  gap: var(--cm-espace-1);
+}
+
 .detection__entete {
   display: flex;
   flex-wrap: wrap;
@@ -60,9 +73,11 @@
   color: var(--mat-sys-on-surface-variant);
 }
 
-// Vignette d'Image (`.choice`).
+// Vignette d'Image (`.choice`) : option de la liste, choisie au clavier ou d'un clic.
 .vignette {
+  position: relative;
   display: flex;
+  cursor: pointer;
   flex-direction: column;
   box-sizing: border-box;
   width: var(--cm-largeur-vignette-detection);
@@ -73,9 +88,29 @@
   background: var(--mat-sys-surface-container-low);
 }
 
-.vignette--premiere {
+.vignette--premiere,
+.vignette--choisie {
   border-color: var(--mat-sys-primary);
   background: var(--mat-sys-primary-container);
+}
+
+// Image choisie : la coche s'ajoute à l'anneau, pour ne pas dire le choix par la seule couleur.
+.vignette__coche {
+  position: absolute;
+  top: var(--cm-espace-1);
+  right: var(--cm-espace-1);
+  display: grid;
+  place-items: center;
+  width: var(--cm-hauteur-badge);
+  height: var(--cm-hauteur-badge);
+  border-radius: var(--cm-arrondi-plein);
+  background: var(--mat-sys-primary);
+  color: var(--mat-sys-on-primary);
+
+  mat-icon {
+    width: var(--cm-taille-icone-badge);
+    height: var(--cm-taille-icone-badge);
+  }
 }
 
 .vignette__photo {

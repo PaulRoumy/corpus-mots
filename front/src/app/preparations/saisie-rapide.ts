@@ -13,6 +13,7 @@ import { FormControl, ReactiveFormsModule } from '@angular/forms';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatInputModule } from '@angular/material/input';
 import { LONGUEUR_MAX_MOT, LONGUEUR_MAX_SAISIE } from './longueurs-mot';
+import type { Navigation } from './panneau-detection';
 
 export { LONGUEUR_MAX_MOT, LONGUEUR_MAX_SAISIE };
 
@@ -29,6 +30,10 @@ let prochainNumero = 0;
  *
  * Chaque changement de la valeur est émis par `saisieModifiee`, sans validation : la page la donne au Panneau de
  * détection (story 2.7), qui ne prend jamais le focus.
+ *
+ * Retenir une Image (story 2.7, partie 2) : le champ est un combobox ARIA 1.2 dont la liste est celle du Panneau de
+ * détection (`idListe`, `deplie`, `idActif` pour `aria-activedescendant`). ↓, ↑ et Échap sont émis par `naviguer`, sans
+ * que le focus quitte le champ ; Entrée émet toujours `ajouter` et la page décide, selon l'Image choisie.
  */
 @Component({
   selector: 'app-saisie-rapide',
@@ -46,9 +51,17 @@ let prochainNumero = 0;
         enterkeyhint="enter"
         [maxlength]="longueurMax"
         [formControl]="saisie"
+        role="combobox"
+        aria-autocomplete="list"
+        [attr.aria-expanded]="deplie()"
+        [attr.aria-controls]="deplie() ? idListe() : null"
+        [attr.aria-activedescendant]="idActif()"
         [attr.aria-describedby]="erreur() ? idAide + ' ' + idErreur : idAide"
         (input)="erreur.set(null)"
         (keydown.enter)="$event.preventDefault(); envoyer()"
+        (keydown.arrowdown)="naviguerVers($event, 'suivant')"
+        (keydown.arrowup)="naviguerVers($event, 'precedent')"
+        (keydown.escape)="annulerChoix($event)"
       />
       <span matSuffix class="saisie-rapide__aide" [id]="idAide">Entrée pour ajouter</span>
     </mat-form-field>
@@ -61,8 +74,17 @@ export class SaisieRapide {
   /** Vrai pour prendre le focus à l'affichage (Préparation sans Mot). */
   readonly focusInitial = input(false);
 
+  /** Identifiant de la liste des propositions (Panneau de détection), cible de `aria-controls`. */
+  readonly idListe = input<string | null>(null);
+  /** Vrai quand la liste propose au moins une option (`aria-expanded`). */
+  readonly deplie = input(false);
+  /** Identifiant de l'option choisie, `null` sans choix (`aria-activedescendant`). */
+  readonly idActif = input<string | null>(null);
+
   /** Saisie rognée, non vide, à ajouter à la Préparation. */
   readonly ajouter = output<string>();
+  /** ↓, ↑ ou Échap dans le champ, pour parcourir les propositions. */
+  readonly naviguer = output<Navigation>();
 
   protected readonly longueurMax = LONGUEUR_MAX_SAISIE;
   private readonly numero = prochainNumero++;
@@ -94,6 +116,32 @@ export class SaisieRapide {
       this.saisie.setValue(saisie);
     }
     this.erreur.set(message);
+  }
+
+  /** Vide le champ après une Image retenue d'un clic, et lui rend le focus. */
+  vider(): void {
+    this.erreur.set(null);
+    this.saisie.setValue('');
+    this.focus();
+  }
+
+  /** ↓ ou ↑ : seulement quand des propositions sont dépliées ; le curseur ne bouge pas dans le champ. */
+  protected naviguerVers(evenement: Event, navigation: Navigation): void {
+    if (!this.deplie()) {
+      return;
+    }
+    evenement.preventDefault();
+    this.naviguer.emit(navigation);
+  }
+
+  /** Échap retire le choix ; il ne remonte pas (un panneau ouvert à côté ne se ferme pas pour autant). */
+  protected annulerChoix(evenement: Event): void {
+    if (this.idActif() === null) {
+      return;
+    }
+    evenement.preventDefault();
+    evenement.stopPropagation();
+    this.naviguer.emit('annuler');
   }
 
   protected envoyer(): void {
