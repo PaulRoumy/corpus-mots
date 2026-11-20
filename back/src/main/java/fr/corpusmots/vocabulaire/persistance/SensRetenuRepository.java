@@ -99,4 +99,14 @@ public class SensRetenuRepository implements PanacheRepositoryBase<SensRetenu, U
     public void supprimerDe(UUID preparationMotId) {
         delete("preparationMotId", preparationMotId);
     }
+
+    /** Sens retenus des Mots de cette Préparation. */
+    public List<SensRetenu> deLaPreparation(UUID preparationId) {
+        return list("preparationId", preparationId);
+    }
+
+    /** Supprime les Sens retenus de tous les Mots de cette Préparation. */
+    public void supprimerDeLaPreparation(UUID preparationId) {
+        delete("preparationId", preparationId);
+    }
 }

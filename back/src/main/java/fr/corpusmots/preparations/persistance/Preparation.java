@@ -40,6 +40,10 @@ public class Preparation {
     @Column(name = "temps_passe_minutes")
     private Integer tempsPasseMinutes;
 
+    /** Nom propre de la Préparation (story 2.10), {@code null} : le titre de l'Album s'affiche. */
+    @Column
+    private String nom;
+
     @Generated
     @Column(name = "cree_le", insertable = false, updatable = false)
     private OffsetDateTime creeLe;
@@ -58,6 +62,24 @@ public class Preparation {
         preparation.moduleId = moduleId;
         preparation.themeDefautId = themeDefautId;
         return preparation;
+    }
+
+    /**
+     * Copie de cette Préparation pour la Section {@code section} (duplication, story 2.10), d'identifiant {@code id} :
+     * même propriétaire, même Album, même Module, même Thème par défaut et même nom ; le Temps passé n'est pas copié.
+     */
+    public Preparation copie(UUID id, Section section) {
+        Preparation copie = nouvelle(id, proprietaireId, albumId, section, moduleId, themeDefautId);
+        copie.nom = nom;
+        return copie;
+    }
+
+    /**
+     * Remplace le nom ; {@code null} le retire. Le nettoyage et la longueur sont vérifiés par
+     * {@code preparations.service}.
+     */
+    public void renommer(String nom) {
+        this.nom = nom;
     }
 
     /**
@@ -97,6 +119,11 @@ public class Preparation {
     /** Temps passé en minutes, {@code null} s'il n'est pas renseigné. */
     public Integer tempsPasseMinutes() {
         return tempsPasseMinutes;
+    }
+
+    /** Nom propre, {@code null} s'il n'est pas renseigné. */
+    public String nom() {
+        return nom;
     }
 
     public OffsetDateTime creeLe() {

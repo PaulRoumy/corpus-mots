@@ -8,6 +8,7 @@ import org.eclipse.microprofile.openapi.annotations.media.Schema;
 /** Carte de Préparation de l'accueil. */
 public record CartePreparationDto(
         @Schema(required = true) UUID id,
+        @Schema(description = "Nom propre de la Préparation ; absent, le titre de l'Album s'affiche") String nom,
         @Schema(required = true) UUID albumId,
         @Schema(required = true) String titreAlbum,
         @Schema(required = true, enumeration = { "ps", "ms", "gs" }) String section,
@@ -18,7 +19,7 @@ public record CartePreparationDto(
         @Schema(required = true) OffsetDateTime creeLe) {
 
     static CartePreparationDto de(CartePreparationVue vue) {
-        return new CartePreparationDto(vue.id(), vue.albumId(), vue.titreAlbum(), vue.section().valeur(),
+        return new CartePreparationDto(vue.id(), vue.nom(), vue.albumId(), vue.titreAlbum(), vue.section().valeur(),
                 vue.moduleId(), vue.nomModule(), vue.nombreMots(), vue.nombreAIllustrer(), vue.creeLe());
     }
 }

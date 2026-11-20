@@ -1,0 +1,41 @@
+@use '../commun/repere-section/formes-section';
+
+:host {
+  display: block;
+  width: var(--cm-largeur-dialogue);
+  max-width: 100%;
+}
+
+.gerer-preparation {
+  display: flex;
+  flex-direction: column;
+  gap: var(--cm-espace-4);
+}
+
+.gerer-preparation__champ {
+  width: 100%;
+}
+
+.gerer-preparation__phrase {
+  margin: 0;
+  font: var(--cm-typo-body);
+}
+
+.gerer-preparation__etiquette {
+  font: var(--cm-typo-label);
+}
+
+.gerer-preparation__sections {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--cm-espace-4);
+}
+
+.gerer-preparation__section {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--cm-espace-2);
+  font: var(--cm-typo-label);
+}
+
+@include formes-section.formes;

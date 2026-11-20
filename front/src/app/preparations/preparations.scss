@@ -8,20 +8,39 @@
   list-style: none;
 }
 
+.echec-action {
+  display: block;
+  margin-bottom: var(--cm-espace-4);
+}
+
+// La Carte porte le lien vers la Préparation et, à côté et non dedans, le bouton de son menu (story 2.10).
 .carte {
-  display: flex;
-  flex-direction: column;
-  height: 100%;
-  overflow: hidden;
+  position: relative;
   border-radius: var(--cm-arrondi-lg);
   background: var(--mat-sys-surface);
   box-shadow: var(--cm-elevation-1);
-  color: var(--mat-sys-on-surface);
-  text-decoration: none;
 
   &:hover {
     box-shadow: var(--cm-elevation-2);
   }
+}
+
+.carte__lien {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  overflow: hidden;
+  border-radius: inherit;
+  color: var(--mat-sys-on-surface);
+  text-decoration: none;
+}
+
+// Bouton du menu, posé sur la couverture, en haut à droite.
+.carte__actions {
+  position: absolute;
+  top: var(--cm-espace-1);
+  right: var(--cm-espace-1);
+  color: var(--mat-sys-on-tertiary-container);
 }
 
 // Sans Image encore (story 2.3 et suivantes), la couverture montre le pictogramme de l'Album.

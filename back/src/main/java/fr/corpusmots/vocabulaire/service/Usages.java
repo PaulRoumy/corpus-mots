@@ -12,6 +12,7 @@ import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 import jakarta.transaction.Transactional;
 import java.util.Collection;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -330,5 +331,59 @@ public class Usages {
     public void libererPreparationMot(UUID preparationMotId) {
         liens.supprimerDe(preparationMotId);
         sensRetenus.supprimerDe(preparationMotId);
+    }
+
+    /**
+     * Libère la Préparation {@code preparationId} avant que {@code preparations} ne la supprime (story 2.10) : les Sens
+     * retenus et les liens d'Image de tous ses Mots sont supprimés. Aucune Image, aucun Mot ni aucun Sens n'est
+     * supprimé. L'appelant a verrouillé la Préparation et vérifié qu'elle est celle de l'enseignant courant.
+     */
+    @Transactional
+    public void libererPreparation(UUID preparationId) {
+        liens.supprimerDeLaPreparation(preparationId);
+        sensRetenus.supprimerDeLaPreparation(preparationId);
+    }
+
+    /**
+     * Copie les usages de la Préparation source vers sa copie (duplication, story 2.10) : pour chaque Mot de
+     * Préparation copié, son Sens retenu et, s'il en a un, son lien d'Image, vers la même Image, avec l'origine
+     * {@code reutilisee} (AD-14), l'enseignant courant, l'Album et la Section de la copie. L'Image n'est ni copiée ni
+     * revérifiée : une Image retirée ou devenue invisible est liée telle quelle, comme dans la source (décision de la
+     * story). Aucune ligne {@code image} n'est créée. L'appelant a verrouillé la source, vérifié qu'elle est celle de
+     * l'enseignant courant et créé les Mots de Préparation de la copie.
+     *
+     * @throws IllegalStateException si un Mot de Préparation de la source n'a pas de copie, ou si un Mot copié n'a
+     *         pas de Sens retenu dans la source
+     */
+    @Transactional
+    public void copierPreparation(CopierPreparationCommande commande) {
+        UUID enseignant = enseignantCourant.id();
+        Set<UUID> sourcesAvecSens = new HashSet<>();
+        for (SensRetenu retenu : sensRetenus.deLaPreparation(commande.sourceId())) {
+            sensRetenus.persist(SensRetenu.nouveau(sensRetenus.nouvelIdentifiant(), commande.cibleId(),
+                    copie(commande, retenu.preparationMotId()), retenu.sensId(), enseignant, commande.albumId(),
+                    commande.section()));
+            sourcesAvecSens.add(retenu.preparationMotId());
+        }
+        // Chaque Mot copié doit avoir un Sens retenu (invariant d'un Mot de Préparation).
+        if (!sourcesAvecSens.equals(commande.motsCopies().keySet())) {
+            throw new IllegalStateException("Mots de préparation copiés sans sens retenu, ou sens retenus sans copie,"
+                    + " dans la préparation " + commande.sourceId());
+        }
+        for (LienImage lien : liens.deLaPreparation(commande.sourceId())) {
+            liens.persist(LienImage.nouveau(liens.nouvelIdentifiant(), commande.cibleId(),
+                    copie(commande, lien.preparationMotId()), lien.imageId(), enseignant, commande.albumId(),
+                    commande.section(), OrigineLien.REUTILISEE.valeur()));
+        }
+        liens.flush();
+    }
+
+    /** Mot de Préparation de la copie qui copie {@code preparationMotId}. */
+    private static UUID copie(CopierPreparationCommande commande, UUID preparationMotId) {
+        UUID copie = commande.motsCopies().get(preparationMotId);
+        if (copie == null) {
+            throw new IllegalStateException("Mot de préparation " + preparationMotId + " sans copie");
+        }
+        return copie;
     }
 }

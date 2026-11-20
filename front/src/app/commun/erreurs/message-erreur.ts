@@ -37,6 +37,7 @@ export const MESSAGES_PAR_CODE: Readonly<Record<string, string>> = {
   'preparation.mot_deja_present': 'Ce mot est déjà dans la préparation.',
   'preparation.sens_invalide': "Ce sens n'appartient pas à ce mot.",
   'preparation.mot_deja_illustre': 'Ce mot a déjà une image dans la préparation.',
+  'preparation.nom_trop_long': 'Le nom ne doit pas dépasser 100 caractères.',
   'image.album_requis': "Album d'origine requis.",
   'image.album_introuvable': "Cet album n'existe plus. Choisissez-en un autre.",
   'image.mot_invalide': 'Saisissez un mot de 1 à 100 caractères.',

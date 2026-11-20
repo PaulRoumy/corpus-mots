@@ -74,6 +74,7 @@ import { ChampNomModule } from './champ-nom-module';
 import { map } from 'rxjs';
 import { ouvrirDialogueCorrigerAlbum } from './corriger-album-dialogue';
 import { EncartMotsDejaIllustres } from './encart-mots-deja-illustres';
+import { nomPreparation } from './nom-preparation';
 import { libelleMots } from './preparations';
 import type { PanneauChoixImage } from './panneau-choix-image';
 import { AjoutAvecSens, ChoixImage, PanneauDetection } from './panneau-detection';
@@ -450,7 +451,7 @@ type Source = 'module' | 'theme';
             <div class="entete__corps">
               <p class="entete__rubrique">Préparation</p>
               <div class="entete__ligne-titre">
-                <h1 id="entete-titre" class="entete__titre">{{ courante.titreAlbum }}</h1>
+                <h1 id="entete-titre" class="entete__titre">{{ nomPreparation(courante) }}</h1>
                 @if (albumCorrigeable(); as corrigeable) {
                   <button
                     #declencheurAlbum
@@ -658,6 +659,7 @@ export class Preparation {
   readonly id = input.required<string>();
 
   protected readonly libelleMots = libelleMots;
+  protected readonly nomPreparation = nomPreparation;
   protected readonly libelleIllustres = libelleIllustres;
   protected readonly messageTempsInvalide = MESSAGE_TEMPS_PASSE_INVALIDE;
   protected readonly optionNouveauModule = OPTION_NOUVEAU_MODULE;
@@ -938,7 +940,7 @@ export class Preparation {
         this.tempsPasse.reset(minutesEnHeures(preparation.tempsPasseMinutes));
         this.preparation.set(preparation);
         this.erreur.set(null);
-        this.titre.setTitle(`${preparation.titreAlbum} · corpus-mots`);
+        this.titre.setTitle(`${nomPreparation(preparation)} · corpus-mots`);
         void this.chargerListes(preparation.albumId);
         void this.chargerMots(preparation.id);
       }
@@ -1572,7 +1574,8 @@ export class Preparation {
     this.preparation.update((courante) =>
       courante?.albumId === corrige.id ? { ...courante, titreAlbum: corrige.titre } : courante,
     );
-    this.titre.setTitle(`${corrige.titre} · corpus-mots`);
+    const corrigee = this.preparation();
+    this.titre.setTitle(`${corrigee ? nomPreparation(corrigee) : corrige.titre} · corpus-mots`);
   }
 
   protected choisirModule(valeur: ValeurModule): void {

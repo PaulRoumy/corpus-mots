@@ -15,6 +15,7 @@ import fr.corpusmots.referentiels.service.ReferentielsService;
 import fr.corpusmots.referentiels.service.ThemeVue;
 import fr.corpusmots.vocabulaire.service.CategorieGrammaticale;
 import fr.corpusmots.vocabulaire.service.ChangerSensCommande;
+import fr.corpusmots.vocabulaire.service.CopierPreparationCommande;
 import fr.corpusmots.vocabulaire.service.CreerSensCommande;
 import fr.corpusmots.vocabulaire.service.DetectionMots;
 import fr.corpusmots.vocabulaire.service.DetectionVue;
@@ -32,9 +33,11 @@ import fr.corpusmots.vocabulaire.service.SensVue;
 import fr.corpusmots.vocabulaire.service.TeleverserImageCommande;
 import fr.corpusmots.vocabulaire.service.Usages;
 import jakarta.enterprise.context.ApplicationScoped;
+import jakarta.enterprise.event.Event;
 import jakarta.inject.Inject;
 import jakarta.transaction.Transactional;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
@@ -69,6 +72,16 @@ public class PreparationsService {
     static final String CODE_SENS_INVALIDE = "preparation.sens_invalide";
     static final String CODE_INTROUVABLE = "ressource.introuvable";
     static final String CODE_IMAGE_INDISPONIBLE = "image.indisponible";
+    static final String CODE_NOM_TROP_LONG = "preparation.nom_trop_long";
+
+    /** Longueur maximale du nom d'une Préparation, une fois nettoyé (contrainte {@code preparation_nom_longueur}). */
+    public static final int NOM_MAXIMUM = 100;
+
+    /**
+     * Espaces du nettoyage d'un nom : blancs, espaces Unicode (insécables comprises) et U+FEFF, le même ensemble que
+     * {@code \s} en JavaScript, pour que le front nettoie comme le back.
+     */
+    private static final String ESPACES = "[\\s\\p{Z}\\uFEFF]+";
 
     /** Borne haute du Temps passé : 100 heures (contrainte {@code preparation_temps_passe_borne}). */
     static final int TEMPS_PASSE_MAXIMUM_MINUTES = 6000;
@@ -102,6 +115,9 @@ public class PreparationsService {
 
     @Inject
     EnseignantCourant enseignantCourant;
+
+    @Inject
+    Event<PreparationSupprimee> preparationSupprimee;
 
     /**
      * Crée une Préparation de l'enseignant courant.
@@ -165,12 +181,8 @@ public class PreparationsService {
         Map<UUID, Integer> nombresIllustres = usages.nombresIllustres(ids);
         List<CartePreparationVue> cartes = page.stream().map(preparation -> {
             ModuleVue module = preparation.moduleId() == null ? null : modules.get(preparation.moduleId());
-            int nombreMots = nombresMots.getOrDefault(preparation.id(), 0);
-            int nombreIllustres = nombresIllustres.getOrDefault(preparation.id(), 0);
-            return new CartePreparationVue(preparation.id(), preparation.albumId(),
-                    albumDe(preparation, albums.get(preparation.albumId())).titre(), preparation.section(),
-                    module == null ? null : module.id(), module == null ? null : module.nom(), nombreMots,
-                    nombreMots - nombreIllustres, preparation.creeLe());
+            return carte(preparation, albumDe(preparation, albums.get(preparation.albumId())), module,
+                    nombresMots.getOrDefault(preparation.id(), 0), nombresIllustres.getOrDefault(preparation.id(), 0));
         }).toList();
         return new PageCartesPreparationVue(cartes, preparations.compterDuProprietaire(proprietaire));
     }
@@ -189,6 +201,82 @@ public class PreparationsService {
         ThemeVue theme = preparation.themeDefautId() == null ? null
                 : referentiels.theme(preparation.themeDefautId()).orElse(null);
         return vue(preparation, album, module, theme, nombreMots(preparation), nombreIllustres(preparation));
+    }
+
+    /**
+     * Renomme la Préparation {@code id} de l'enseignant courant (story 2.10). Le nom est nettoyé (espaces aux bords
+     * retirés, espaces consécutives réduites à une) ; un nom vide ou {@code null} l'efface, et le titre de l'Album
+     * s'affiche de nouveau. Rien n'est modifié en cas de refus.
+     *
+     * @return la Carte de la Préparation renommée
+     * @throws ErreurMetier {@code 404 ressource.introuvable} si la Préparation n'existe pas ou appartient à un
+     *         collègue ; {@code 400 preparation.nom_trop_long} si le nom nettoyé dépasse {@value #NOM_MAXIMUM} caractères
+     */
+    @Transactional
+    public CartePreparationVue renommer(UUID id, String nom) {
+        Preparation preparation = verrouillee(id);
+        String nettoye = nom == null ? "" : nom.replaceAll(ESPACES, " ").replaceAll("^ | $", "");
+        if (nettoye.length() > NOM_MAXIMUM) {
+            throw new ErreurMetier(400, CODE_NOM_TROP_LONG,
+                    "Le nom de la préparation compte " + NOM_MAXIMUM + " caractères au plus");
+        }
+        preparation.renommer(nettoye.isEmpty() ? null : nettoye);
+        preparations.flush();
+        return carte(preparation);
+    }
+
+    /**
+     * Duplique la Préparation {@code id} de l'enseignant courant pour la Section {@code section}, la même permise (une
+     * autre année), story 2.10 : la copie a le même Album, le même nom, le même Module et le même Thème par défaut, et
+     * pour chaque Mot sa place, son Thème et son Sens retenu ; chaque lien d'Image est copié vers la même Image avec
+     * l'origine {@code reutilisee} ({@link Usages#copierPreparation}, AD-14). Aucune Image n'est copiée. Le Temps passé
+     * et les Mots écartés de l'Encart ne sont pas copiés. Une seule transaction, Préparation source verrouillée.
+     *
+     * @return la Carte de la Préparation créée
+     * @throws ErreurMetier {@code 404 ressource.introuvable} si la Préparation n'existe pas ou appartient à un collègue
+     */
+    @Transactional
+    public CartePreparationVue dupliquer(UUID id, Section section) {
+        Objects.requireNonNull(section, "section");
+        Preparation source = verrouillee(id);
+        Preparation copie = source.copie(preparations.nouvelIdentifiant(), section);
+        preparations.persistAndFlush(copie);
+        Map<UUID, UUID> motsCopies = new HashMap<>();
+        for (PreparationMot ligne : preparationMots.deLaPreparation(source.id())) {
+            PreparationMot copieLigne = PreparationMot.nouveau(preparationMots.nouvelIdentifiant(), copie.id(),
+                    ligne.motId(), ligne.ordre(), ligne.themeId());
+            preparationMots.persist(copieLigne);
+            motsCopies.put(ligne.id(), copieLigne.id());
+        }
+        preparationMots.flush();
+        usages.copierPreparation(new CopierPreparationCommande(source.id(), copie.id(), motsCopies, copie.albumId(),
+                copie.section()));
+        return carte(copie);
+    }
+
+    /**
+     * Supprime la Préparation {@code id} de l'enseignant courant (story 2.10), Préparation verrouillée, dans une seule
+     * transaction : ses usages sont d'abord libérés ({@link Usages#libererPreparation}), puis
+     * {@link PreparationSupprimee} est émis de façon synchrone (AD-15), enfin sa ligne est supprimée, et avec elle, par
+     * cascade, ses Mots de Préparation et ses Mots écartés. Aucune Image, aucun Mot ni aucun Sens n'est supprimé.
+     *
+     * @throws ErreurMetier {@code 404 ressource.introuvable} si la Préparation n'existe pas ou appartient à un collègue
+     */
+    @Transactional
+    public void supprimer(UUID id) {
+        Preparation preparation = verrouillee(id);
+        usages.libererPreparation(preparation.id());
+        preparationSupprimee.fire(new PreparationSupprimee(preparation.id(), preparation.proprietaireId()));
+        preparations.delete(preparation);
+        preparations.flush();
+    }
+
+    /** Carte de cette Préparation, avec ses compteurs relus. */
+    private CartePreparationVue carte(Preparation preparation) {
+        AlbumVue album = albumDe(preparation, referentiels.album(preparation.albumId()).orElse(null));
+        ModuleVue module = preparation.moduleId() == null ? null
+                : referentiels.module(preparation.moduleId()).orElse(null);
+        return carte(preparation, album, module, nombreMots(preparation), nombreIllustres(preparation));
     }
 
     /**
@@ -702,10 +790,17 @@ public class PreparationsService {
 
     private static PreparationVue vue(Preparation preparation, AlbumVue album, ModuleVue module, ThemeVue theme,
             int nombreMots, int nombreIllustres) {
-        return new PreparationVue(preparation.id(), album.id(), album.titre(), preparation.section(),
+        return new PreparationVue(preparation.id(), preparation.nom(), album.id(), album.titre(), preparation.section(),
                 module == null ? null : module.id(), module == null ? null : module.nom(),
                 theme == null ? null : theme.id(), theme == null ? null : theme.nom(), preparation.tempsPasseMinutes(),
                 nombreMots, nombreIllustres, preparation.creeLe());
+    }
+
+    private static CartePreparationVue carte(Preparation preparation, AlbumVue album, ModuleVue module,
+            int nombreMots, int nombreIllustres) {
+        return new CartePreparationVue(preparation.id(), preparation.nom(), album.id(), album.titre(),
+                preparation.section(), module == null ? null : module.id(), module == null ? null : module.nom(),
+                nombreMots, nombreMots - nombreIllustres, preparation.creeLe());
     }
 
     /**

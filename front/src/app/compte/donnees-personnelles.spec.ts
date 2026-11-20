@@ -42,6 +42,7 @@ describe('TexteDonneesPersonnelles', () => {
       'sa date de création',
       'les Images que vous ajoutez, avec leur auteur',
       'vos Préparations et leurs Mots',
+      'vous pouvez supprimer une Préparation : ses Mots la quittent et leurs usages (sens retenus, images liées) sont effacés avec elle ; ses Images ne sont pas supprimées',
       "un Mot tapé rejoint le lexique de l'école, sans nom d'auteur",
       "Les Mots tapés restent dans le lexique de l'école, sans nom d'auteur.",
       "l'historique des Fiches",

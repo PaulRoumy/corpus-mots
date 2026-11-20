@@ -39,6 +39,10 @@ import { ChangeDetectionStrategy, Component } from '@angular/core';
             vos Préparations et leurs Mots ; un Mot tapé rejoint le lexique de l'école, sans nom
             d'auteur, et y reste après la suppression du compte ;
           </li>
+          <li>
+            vous pouvez supprimer une Préparation : ses Mots la quittent et leurs usages (sens
+            retenus, images liées) sont effacés avec elle ; ses Images ne sont pas supprimées ;
+          </li>
           <li>l'historique des Fiches que vous générez ;</li>
           <li>vos notifications ;</li>
           <li>les mois au cours desquels vous avez utilisé l'application.</li>

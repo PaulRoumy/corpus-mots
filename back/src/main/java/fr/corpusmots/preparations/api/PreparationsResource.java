@@ -23,6 +23,7 @@ import jakarta.ws.rs.core.MediaType;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.UUID;
 import org.eclipse.microprofile.openapi.annotations.Operation;
 import org.eclipse.microprofile.openapi.annotations.enums.SchemaType;
@@ -87,6 +88,49 @@ public class PreparationsResource {
     @Operation(operationId = "lirePreparation", summary = "Une Préparation de l'enseignant connecté")
     public PreparationDto lire(@PathParam("id") UUID id) {
         return PreparationDto.de(preparations.lire(id));
+    }
+
+    @PUT
+    @Path("/{id}/nom")
+    @Consumes(MediaType.APPLICATION_JSON)
+    @Operation(operationId = "renommerPreparation",
+            summary = "Renommer une Préparation de l'enseignant connecté ; un nom vide l'efface et le titre de l'Album"
+                    + " s'affiche de nouveau")
+    public CartePreparationDto renommer(@PathParam("id") UUID id,
+            @RequestBody(required = true) NomPreparationDto nom) {
+        if (nom == null) {
+            throw new ErreurMetier(400, "requete.invalide", "Le corps de la requête est obligatoire");
+        }
+        return CartePreparationDto.de(preparations.renommer(id, nom.nom()));
+    }
+
+    @POST
+    @Path("/{id}/duplication")
+    @Consumes(MediaType.APPLICATION_JSON)
+    @ResponseStatus(201)
+    @Operation(operationId = "dupliquerPreparation",
+            summary = "Dupliquer une Préparation de l'enseignant connecté pour une Section : mêmes Mots, Sens retenus et"
+                    + " Images liées (origine reutilisee), aucune Image copiée")
+    @APIResponse(responseCode = "201", description = "Carte de la Préparation créée",
+            content = @Content(mediaType = MediaType.APPLICATION_JSON,
+                    schema = @Schema(implementation = CartePreparationDto.class)))
+    public CartePreparationDto dupliquer(@PathParam("id") UUID id,
+            @RequestBody(required = true) DuplicationPreparationDto duplication) {
+        Section section = (duplication == null ? Optional.<Section>empty()
+                : Section.deValeur(duplication.section()))
+                .orElseThrow(() -> new ErreurMetier(400, "requete.invalide", "La section doit valoir ps, ms ou gs"));
+        return CartePreparationDto.de(preparations.dupliquer(id, section));
+    }
+
+    @DELETE
+    @Path("/{id}")
+    @ResponseStatus(204)
+    @Operation(operationId = "supprimerPreparation",
+            summary = "Supprimer une Préparation de l'enseignant connecté ; ses Mots la quittent, aucune Image n'est"
+                    + " supprimée")
+    @APIResponse(responseCode = "204", description = "Préparation supprimée")
+    public void supprimer(@PathParam("id") UUID id) {
+        preparations.supprimer(id);
     }
 
     @GET

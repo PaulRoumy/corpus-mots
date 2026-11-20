@@ -99,4 +99,14 @@ public class LienImageRepository implements PanacheRepositoryBase<LienImage, UUI
     public void supprimerDe(UUID preparationMotId) {
         delete("preparationMotId", preparationMotId);
     }
+
+    /** Liens d'Image des Mots de cette Préparation. */
+    public List<LienImage> deLaPreparation(UUID preparationId) {
+        return list("preparationId", preparationId);
+    }
+
+    /** Supprime les liens d'Image de tous les Mots de cette Préparation ; les Images restent. */
+    public void supprimerDeLaPreparation(UUID preparationId) {
+        delete("preparationId", preparationId);
+    }
 }

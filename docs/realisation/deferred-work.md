@@ -127,6 +127,7 @@
 - source_spec: `docs/realisation/spec-2-3-saisir-des-mots-en-serie.md`
   summary: Story 2.10 : supprimer une Préparation appelle d'abord `Usages.libererPreparation`, pour ne laisser aucun `sens_retenu` (ni `lien_image`) orphelin ; la cascade de `preparation_mot` ne touche pas les tables de `vocabulaire`.
   evidence: Revue de la story 2.3, partie 1, ligne 8 du journal de tri : des `sens_retenu` orphelins garderaient `enseignant_id` et continueraient d'alimenter le Sens « le plus récent ».
+  status: fait (`docs/realisation/spec-2-10-gerer-ses-preparations.md`).
 - source_spec: `docs/realisation/spec-2-3-saisir-des-mots-en-serie.md`
   summary: Epic 6 : la fusion d'Albums (`AlbumsFusionnes`) réécrit aussi `sens_retenu.album_id` (et `lien_image.album_id`), copiés depuis la Préparation.
   evidence: Revue de la story 2.3, partie 1, ligne 9 du journal de tri : seule la réécriture de `preparation.album_id` est prévue aujourd'hui.
@@ -227,3 +228,6 @@
   summary: Story 2.8, partie 3 : choisir le Sens d'un Mot existant dans le Panneau de détection (Images proposées limitées à ce Sens, Mot ajouté ou Image retenue avec ce Sens) et « Nouveau sens » avec la Création de Sens de la partie 2.
   evidence: Découpage de la story 2.8 en trois parties choisi par Paul.
   status: fait (`docs/realisation/spec-2-8-3-sens-dans-la-detection.md`).
+- source_spec: `docs/realisation/spec-2-10-gerer-ses-preparations.md`
+  summary: Epic 3 : un lien `reutilisee` peut viser une Image de l'enseignant lui-même (duplication d'une Préparation, reprise de sa propre Image dans la détection ou l'Encart) ; tout calcul « réutilisée par des collègues » (notifications de retrait, protection contre la suppression, indicateurs) filtre `lien_image.enseignant_id <> image.proprietaire_id`.
+  evidence: Revue de la story 2.10, ligne 8 du journal de tri.

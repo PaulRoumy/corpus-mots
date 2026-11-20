@@ -257,6 +257,10 @@ components:
       properties:
         id:
           $ref: "#/components/schemas/UUID"
+        nom:
+          type: string
+          description: "Nom propre de la Préparation ; absent, le titre de l'Album\
+            \ s'affiche"
         albumId:
           $ref: "#/components/schemas/UUID"
         titreAlbum:
@@ -579,6 +583,19 @@ components:
         aCompleter:
           type: boolean
           description: Vrai pour le Sens par défaut « à compléter »
+    DuplicationPreparationDto:
+      type: object
+      required:
+      - section
+      properties:
+        section:
+          type: string
+          description: "Section de la copie, la même que la Préparation dupliquée\
+            \ permise"
+          enum:
+          - ps
+          - ms
+          - gs
     EnseignantDto:
       type: object
       required:
@@ -777,6 +794,17 @@ components:
         nom:
           type: string
           maxLength: 200
+    NomPreparationDto:
+      type: object
+      properties:
+        nom:
+          type:
+          - string
+          - "null"
+          maxLength: 100
+          description: "Nom propre de la Préparation, 100 caractères au plus une fois\
+            \ nettoyé (espaces aux bords et doublées retirées) ; vide ou null l'efface,\
+            \ et le titre de l'Album s'affiche de nouveau"
     NomThemeDto:
       type: object
       required:
@@ -931,6 +959,10 @@ components:
       properties:
         id:
           $ref: "#/components/schemas/UUID"
+        nom:
+          type: string
+          description: "Nom propre de la Préparation ; absent, le titre de l'Album\
+            \ s'affiche"
         albumId:
           $ref: "#/components/schemas/UUID"
         titreAlbum:
@@ -1953,6 +1985,21 @@ paths:
       tags:
       - Preparations Resource
   /api/preparations/{id}:
+    delete:
+      summary: "Supprimer une Préparation de l'enseignant connecté ; ses Mots la quittent,\
+        \ aucune Image n'est supprimée"
+      operationId: supprimerPreparation
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          $ref: "#/components/schemas/UUID"
+      responses:
+        "204":
+          description: Préparation supprimée
+      tags:
+      - Preparations Resource
     get:
       summary: Une Préparation de l'enseignant connecté
       operationId: lirePreparation
@@ -1997,6 +2044,35 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/DetectionPreparationDto"
+      tags:
+      - Preparations Resource
+  /api/preparations/{id}/duplication:
+    post:
+      summary: "Dupliquer une Préparation de l'enseignant connecté pour une Section\
+        \ : mêmes Mots, Sens retenus et Images liées (origine reutilisee), aucune\
+        \ Image copiée"
+      operationId: dupliquerPreparation
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          $ref: "#/components/schemas/UUID"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/DuplicationPreparationDto"
+      responses:
+        "201":
+          description: Carte de la Préparation créée
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CartePreparationDto"
+        "400":
+          description: Bad Request
       tags:
       - Preparations Resource
   /api/preparations/{id}/ecartes/{motId}:
@@ -2365,6 +2441,34 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/MotPreparationDto"
+        "400":
+          description: Bad Request
+      tags:
+      - Preparations Resource
+  /api/preparations/{id}/nom:
+    put:
+      summary: Renommer une Préparation de l'enseignant connecté ; un nom vide l'efface
+        et le titre de l'Album s'affiche de nouveau
+      operationId: renommerPreparation
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          $ref: "#/components/schemas/UUID"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/NomPreparationDto"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CartePreparationDto"
         "400":
           description: Bad Request
       tags:

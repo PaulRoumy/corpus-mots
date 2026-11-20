@@ -49,6 +49,7 @@ describe('messageErreur', () => {
     [409, 'preparation.mot_deja_present', 'Ce mot est déjà dans la préparation.'],
     [400, 'preparation.sens_invalide', "Ce sens n'appartient pas à ce mot."],
     [409, 'preparation.mot_deja_illustre', 'Ce mot a déjà une image dans la préparation.'],
+    [400, 'preparation.nom_trop_long', 'Le nom ne doit pas dépasser 100 caractères.'],
     // vocabulaire.service.Images, Usages
     [400, 'image.album_requis', "Album d'origine requis."],
     [400, 'image.album_introuvable', "Cet album n'existe plus. Choisissez-en un autre."],

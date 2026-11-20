@@ -560,6 +560,13 @@ describe('Preparation (En-tête)', () => {
     expect(TestBed.inject(Title).getTitle()).toBe(`${LOUP.titreAlbum} · corpus-mots`);
   });
 
+  it('Préparation renommée : l’En-tête et l’onglet affichent son nom plutôt que le titre de l’Album', async () => {
+    await ouvrir({ ...PREPARATION, nom: 'Galette des MS' });
+
+    expect(texte('h1')).toBe('Galette des MS');
+    expect(TestBed.inject(Title).getTitle()).toBe('Galette des MS · corpus-mots');
+  });
+
   it('un enregistrement de la Préparation quittée, répondu après l’ouverture de la nouvelle, n’écrit rien', async () => {
     await ouvrir();
     await choisir('Module', 'Module 2');
@@ -1611,6 +1618,26 @@ describe('Preparation (En-tête)', () => {
       // Ni la Préparation ni les listes ne sont relues.
       serveur.expectNone(`/api/preparations/${ID}`);
       serveur.expectNone(`/api/albums/${ALBUM}/modules`);
+    });
+
+    it('« Corriger l’album » d’une Préparation renommée : l’En-tête et l’onglet gardent son nom', async () => {
+      connecter();
+      const renommee = { ...PREPARATION, nom: 'Galette des MS' };
+      await ouvrir(renommee, MODULES, THEMES, albumDe(PREPARATION, MOI));
+
+      await ouvrirCorrection();
+      champDuDialogue('Titre').value = 'La Roule Galette corrigée';
+      champDuDialogue('Titre').dispatchEvent(new Event('input'));
+      await stabiliser();
+      boutonDuDialogue('Enregistrer').click();
+      await stabiliser();
+      serveur
+        .expectOne(URL_ALBUM)
+        .flush({ ...albumDe(PREPARATION, MOI), titre: 'La Roule Galette corrigée' });
+      await stabiliser();
+
+      expect(texte('h1')).toBe('Galette des MS');
+      expect(TestBed.inject(Title).getTitle()).toBe('Galette des MS · corpus-mots');
     });
 
     it('l’Album de la Préparation quittée, répondu après la nouvelle, n’écrit rien', async () => {

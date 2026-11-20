@@ -8,6 +8,7 @@ import org.eclipse.microprofile.openapi.annotations.media.Schema;
 /** Préparation de l'enseignant connecté, de quoi afficher son En-tête. */
 public record PreparationDto(
         @Schema(required = true) UUID id,
+        @Schema(description = "Nom propre de la Préparation ; absent, le titre de l'Album s'affiche") String nom,
         @Schema(required = true) UUID albumId,
         @Schema(required = true) String titreAlbum,
         @Schema(required = true, enumeration = { "ps", "ms", "gs" }) String section,
@@ -21,8 +22,8 @@ public record PreparationDto(
         @Schema(required = true) OffsetDateTime creeLe) {
 
     static PreparationDto de(PreparationVue vue) {
-        return new PreparationDto(vue.id(), vue.albumId(), vue.titreAlbum(), vue.section().valeur(), vue.moduleId(),
-                vue.nomModule(), vue.themeDefautId(), vue.nomThemeDefaut(), vue.tempsPasseMinutes(), vue.nombreMots(),
-                vue.nombreIllustres(), vue.creeLe());
+        return new PreparationDto(vue.id(), vue.nom(), vue.albumId(), vue.titreAlbum(), vue.section().valeur(),
+                vue.moduleId(), vue.nomModule(), vue.themeDefautId(), vue.nomThemeDefaut(), vue.tempsPasseMinutes(),
+                vue.nombreMots(), vue.nombreIllustres(), vue.creeLe());
     }
 }
