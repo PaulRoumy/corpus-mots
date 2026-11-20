@@ -15,14 +15,19 @@ import {
   untracked,
   viewChild,
 } from '@angular/core';
+import { FormControl, ReactiveFormsModule } from '@angular/forms';
 import { MatButtonModule } from '@angular/material/button';
+import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatIconModule } from '@angular/material/icon';
+import { MatSelect, MatSelectModule } from '@angular/material/select';
 import { Api } from '../api/api';
 import { fichierImage } from '../api/fn/images-resource/fichier-image';
+import { changerSensMotPreparation } from '../api/fn/preparations-resource/changer-sens-mot-preparation';
 import { choisirImageMotPreparation } from '../api/fn/preparations-resource/choisir-image-mot-preparation';
 import { proposerImagesMotPreparation } from '../api/fn/preparations-resource/proposer-images-mot-preparation';
 import { DetectionImageDto } from '../api/models/detection-image-dto';
 import { DetectionMotDto } from '../api/models/detection-mot-dto';
+import { DetectionSensDto } from '../api/models/detection-sens-dto';
 import { MotPreparationDto } from '../api/models/mot-preparation-dto';
 import { Annuaire } from '../commun/annuaire';
 import { BadgeTypeImage } from '../commun/badge-type-image/badge-type-image';
@@ -38,6 +43,18 @@ export const MESSAGE_IMAGE_INDISPONIBLE = "Cette image n'est plus disponible.";
 /** Message du panneau quand le Mot n'a aucune Image proposable. */
 export const MESSAGE_AUCUNE_IMAGE = 'Aucune image pour ce mot.';
 
+/** Valeur du champ Sens qui montre les Images de tous les Sens ; n'est pas un Sens et ne s'enregistre pas. */
+export const TOUS_LES_SENS = '*';
+
+/** Libellé du Sens par défaut d'un Mot, tel que le back le renvoie dans `SensPreparationDto`. */
+const LIBELLE_A_COMPLETER = 'à compléter';
+
+/** Message du panneau quand le Sens choisi n'est plus visible de l'enseignant : la liste est relue. */
+export const MESSAGE_SENS_INDISPONIBLE = "Ce sens n'est plus proposé pour ce mot.";
+
+/** Refus d'un Sens qui n'est plus visible (liste lue périmée) : la liste est relue. */
+const CODE_SENS_INVALIDE = 'preparation.sens_invalide';
+
 /** Refus qui signalent une Image devenue indisponible entre la lecture et le choix. */
 const CODES_IMAGE_INDISPONIBLE = new Set(['image.indisponible', 'preparation.sens_invalide']);
 
@@ -49,10 +66,18 @@ type Etat =
 /**
  * Panneau de choix d'Image (story 2.7, partie 3 ; UX-DR-28, UX-DR-29), ouvert à droite de la Grille par la vignette
  * d'une Carte de Mot, sur le patron du Panneau Carte d'identité : `aside` nommé « Choisir une image », bouton
- * « Fermer », puis le Mot en cursive et son Sens (en lecture, sa modification est l'affaire de la story 2.8), l'Image
- * actuelle avec le bouton « Carte d'identité » (qui ouvre à sa place le Panneau Carte d'identité), le Repère de
- * qualité, les Images proposables du Mot, de tous ses Sens, dans l'ordre du back (`GET …/propositions`, classement de
- * la détection), puis « Ajouter une image ».
+ * « Fermer », puis le Mot en cursive et son Sens, l'Image actuelle avec le bouton « Carte d'identité » (qui ouvre à sa
+ * place le Panneau Carte d'identité), le Repère de qualité, les Images proposables du Mot dans l'ordre du back
+ * (`GET …/propositions`, classement de la détection), puis « Ajouter une image ».
+ *
+ * Sens (story 2.8, partie 1) : un `mat-select` nommé « Sens » liste les Sens visibles du Mot renvoyés avec les
+ * propositions, plus le Sens retenu, chacun « libellé (catégorie) », « à compléter » en dernier et mis en avant (icône
+ * et texte, jamais la couleur seule). Il s'ouvre sur le Sens retenu et la liste se limite à ses Images (`sensId`) ; si
+ * le Sens retenu est « à compléter », il propose en plus « Tous les sens », choisi d'emblée, et la liste montre les
+ * Images de tous les Sens. Choisir un autre Sens l'enregistre aussitôt (`PUT …/sens`, champ désactivé pendant
+ * l'envoi) : le Mot renvoyé est émis par `sensChange` (la page met la Carte à jour, sans fermer le panneau), la liste
+ * est relue pour ce Sens et le focus reste sur le champ. En échec, le champ revient au Sens précédent et le message
+ * s'affiche dans le panneau. Choisir le Sens déjà retenu n'enregistre rien. Un seul Sens possible : texte en lecture.
  *
  * Les Images sont les options d'une liste (`role="listbox"`) qui prend le focus une fois chargée : ↑ ↓ déplacent le
  * choix (sans boucler), Entrée ou un clic retiennent l'Image, avec le même rendu et le même nom accessible que dans la
@@ -70,7 +95,10 @@ type Etat =
     BadgeTypeImage,
     ImageSecurisee,
     MatButtonModule,
+    MatFormFieldModule,
     MatIconModule,
+    MatSelectModule,
+    ReactiveFormsModule,
     Squelette,
     VignetteProposition,
   ],
@@ -95,7 +123,48 @@ type Etat =
       </div>
       <div class="choix-image__mot">
         <span class="choix-image__forme">{{ mot().forme }}</span>
-        <span class="choix-image__sens">Sens : {{ libelleSens() }}</span>
+        @if (champSensVisible()) {
+          <mat-form-field class="choix-image__champ-sens" subscriptSizing="dynamic">
+            <mat-label>Sens</mat-label>
+            <mat-select
+              class="choix-image__sens-choix"
+              [formControl]="champSens"
+              (selectionChange)="choisirSens($event.value)"
+            >
+              <mat-select-trigger>
+                @if (sensDuChamp(); as choisi) {
+                  @if (choisi.aCompleter) {
+                    <span class="choix-image__a-completer">
+                      <mat-icon svgIcon="crayon" aria-hidden="true" />
+                      à compléter
+                    </span>
+                  } @else {
+                    {{ libelle(choisi) }}
+                  }
+                } @else {
+                  Tous les sens
+                }
+              </mat-select-trigger>
+              @if (tousLesSensPropose()) {
+                <mat-option [value]="tousLesSens">Tous les sens</mat-option>
+              }
+              @for (choix of sensProposes(); track choix.id) {
+                <mat-option [value]="choix.id">
+                  @if (choix.aCompleter) {
+                    <span class="choix-image__a-completer">
+                      <mat-icon svgIcon="crayon" aria-hidden="true" />
+                      à compléter
+                    </span>
+                  } @else {
+                    {{ libelle(choix) }}
+                  }
+                </mat-option>
+              }
+            </mat-select>
+          </mat-form-field>
+        } @else {
+          <span class="choix-image__sens">Sens : {{ libelleSens() }}</span>
+        }
       </div>
       @if (mot().image; as image) {
         <div class="choix-image__actuelle">
@@ -184,6 +253,8 @@ export class PanneauChoixImage {
   readonly mot = input.required<MotPreparationDto>();
   /** Image liée au Mot, renvoyé par le back. */
   readonly choisi = output<MotPreparationDto>();
+  /** Sens retenu changé dans le panneau : le Mot renvoyé par le back (Image éventuellement déliée). */
+  readonly sensChange = output<MotPreparationDto>();
   readonly fermer = output<void>();
   readonly ouvrirCarteIdentite = output<void>();
   /** « Ajouter une image », avec son bouton, auquel le focus revient si le dialogue est fermé sans rien enregistrer. */
@@ -195,6 +266,13 @@ export class PanneauChoixImage {
   private readonly injecteur = inject(Injector);
 
   protected readonly messageAucuneImage = MESSAGE_AUCUNE_IMAGE;
+  protected readonly tousLesSens = TOUS_LES_SENS;
+  /** Champ Sens : un identifiant de Sens, ou `TOUS_LES_SENS`. Désactivé pendant un envoi. */
+  protected readonly champSens = new FormControl<string>(TOUS_LES_SENS, { nonNullable: true });
+  /** Valeur du champ Sens, en signal : Sens dont les Images sont montrées, ou `TOUS_LES_SENS`. */
+  private readonly filtre = signal<string>(TOUS_LES_SENS);
+  /** Sens visibles du Mot, lus avec les dernières propositions ; gardés pendant une relecture. */
+  private readonly sensVisibles = signal<readonly DetectionSensDto[]>([]);
   protected readonly etat = signal<Etat>({ nom: 'chargement' });
   /** Message affiché dans le panneau : échec de lecture ou de choix. */
   protected readonly message = signal<string | null>(null);
@@ -204,6 +282,35 @@ export class PanneauChoixImage {
 
   private readonly panneau = viewChild.required('panneau', { read: ElementRef<HTMLElement> });
   private readonly liste = viewChild('liste', { read: ElementRef<HTMLElement> });
+  private readonly selectSens = viewChild(MatSelect);
+
+  /** Vrai si le Sens retenu du Mot est le Sens par défaut « à compléter ». */
+  private readonly retenuACompleter = computed(
+    () => this.mot().sens.libelle === LIBELLE_A_COMPLETER,
+  );
+  /** Sens du champ : les Sens visibles, plus le Sens retenu s'il n'y figure pas ; « à compléter » en dernier. */
+  protected readonly sensProposes = computed<readonly DetectionSensDto[]>(() => {
+    const visibles = this.sensVisibles();
+    const retenu = this.mot().sens;
+    if (visibles.length === 0 || visibles.some((sens) => sens.id === retenu.id)) {
+      return visibles;
+    }
+    const sensRetenu: DetectionSensDto = {
+      id: retenu.id,
+      libelle: retenu.libelle,
+      categorie: retenu.categorie ?? null,
+      aCompleter: this.retenuACompleter(),
+    };
+    return [...visibles, sensRetenu].sort((a, b) => Number(a.aCompleter) - Number(b.aCompleter));
+  });
+  /** Plusieurs Sens possibles : le Sens devient un champ ; sinon il reste en lecture. */
+  protected readonly champSensVisible = computed(() => this.sensProposes().length > 1);
+  /** « Tous les sens » n'est proposé que si le Sens retenu est « à compléter ». */
+  protected readonly tousLesSensPropose = computed(() => this.retenuACompleter());
+  /** Sens choisi dans le champ, `null` pour « Tous les sens ». */
+  protected readonly sensDuChamp = computed(
+    () => this.sensProposes().find((sens) => sens.id === this.filtre()) ?? null,
+  );
 
   protected readonly images = computed<readonly DetectionImageDto[]>(() => {
     const etat = this.etat();
@@ -247,7 +354,11 @@ export class PanneauChoixImage {
         // Un choix envoyé pour le Mot précédent ne concerne plus ce panneau.
         this.envoiCourant++;
         this.envoiEnCours.set(false);
+        this.champSens.enable({ emitEvent: false });
         this.message.set(null);
+        this.sensVisibles.set([]);
+        // Le champ s'ouvre sur le Sens retenu ; « Tous les sens » si celui-ci est « à compléter ».
+        this.definirFiltre(this.retenuACompleter() ? TOUS_LES_SENS : this.mot().sens.id);
         void this.lire(preparationId, motId);
         afterNextRender(() => this.focus(), { injector: this.injecteur });
       });
@@ -321,6 +432,8 @@ export class PanneauChoixImage {
     const numero = ++this.envoiCourant;
     const motId = this.mot().id;
     this.envoiEnCours.set(true);
+    // Pas de changement de Sens ni de filtre pendant le choix d'une Image.
+    this.champSens.disable({ emitEvent: false });
     this.message.set(null);
     try {
       const mot = await this.api.invoke(choisirImageMotPreparation, {
@@ -345,8 +458,80 @@ export class PanneauChoixImage {
     } finally {
       if (numero === this.envoiCourant) {
         this.envoiEnCours.set(false);
+        this.champSens.enable({ emitEvent: false });
       }
     }
+  }
+
+  /** « fruit (nom) » ; le libellé seul sans catégorie. */
+  protected libelle(sens: DetectionSensDto): string {
+    return sens.categorie ? `${sens.libelle} (${sens.categorie})` : sens.libelle;
+  }
+
+  /**
+   * Sens choisi dans le champ : « Tous les sens » ou le Sens déjà retenu limitent seulement la liste ; un autre Sens est
+   * enregistré aussitôt comme Sens retenu, puis la liste est relue pour lui. En échec, le champ revient au Sens
+   * précédent et le message s'affiche dans le panneau.
+   */
+  protected async choisirSens(valeur: string): Promise<void> {
+    const precedent = this.filtre();
+    if (valeur === precedent) {
+      return;
+    }
+    if (valeur === TOUS_LES_SENS || valeur === this.mot().sens.id) {
+      this.definirFiltre(valeur);
+      void this.lire(this.preparationId(), this.mot().id);
+      return;
+    }
+    if (this.envoiEnCours()) {
+      this.definirFiltre(precedent);
+      return;
+    }
+    const numero = ++this.envoiCourant;
+    const motId = this.mot().id;
+    this.envoiEnCours.set(true);
+    this.champSens.disable({ emitEvent: false });
+    this.message.set(null);
+    try {
+      const mot = await this.api.invoke(changerSensMotPreparation, {
+        id: this.preparationId(),
+        motPreparationId: motId,
+        body: { sensId: valeur },
+      });
+      if (numero !== this.envoiCourant || motId !== this.mot().id) {
+        // Panneau passé à un autre Mot : la Carte de l'ancien prend quand même le Mot enregistré, rien d'autre ne change.
+        this.sensChange.emit(mot);
+        return;
+      }
+      this.definirFiltre(valeur);
+      this.sensChange.emit(mot);
+      void this.lire(this.preparationId(), motId);
+    } catch (erreur) {
+      if (numero !== this.envoiCourant || motId !== this.mot().id) {
+        return;
+      }
+      this.definirFiltre(precedent);
+      if (codeErreur(erreur) === CODE_SENS_INVALIDE) {
+        // Liste des Sens périmée : elle est relue, le Sens refusé n'y figure plus.
+        this.message.set(MESSAGE_SENS_INDISPONIBLE);
+        void this.lire(this.preparationId(), motId);
+      } else {
+        this.message.set(messageErreur(erreur));
+      }
+    } finally {
+      if (numero === this.envoiCourant) {
+        this.envoiEnCours.set(false);
+        this.champSens.enable({ emitEvent: false });
+        // Le focus reste sur le champ après l'enregistrement.
+        afterNextRender(() => this.selectSens()?.focus(), { injector: this.injecteur });
+      }
+    }
+  }
+
+  /** Pose la valeur du champ Sens et le filtre des Images, sans relire. */
+  private definirFiltre(valeur: string): void {
+    this.filtre.set(valeur);
+    this.champSens.setValue(valeur, { emitEvent: false });
   }
 
   protected fermerParEchap(evenement: Event): void {
@@ -359,13 +544,16 @@ export class PanneauChoixImage {
     this.etat.set({ nom: 'chargement' });
     this.imageActive.set(null);
     try {
+      const filtre = this.filtre();
       const propositions = await this.api.invoke(proposerImagesMotPreparation, {
         id: preparationId,
         motPreparationId,
+        ...(filtre === TOUS_LES_SENS ? {} : { sensId: filtre }),
       });
       if (numero !== this.derniereLecture) {
         return;
       }
+      this.sensVisibles.set(propositions.sens);
       this.etat.set({ nom: 'charge', propositions });
       const moi = this.compteCourant.compte()?.id;
       if (propositions.images.some((image) => image.proprietaireId !== moi)) {

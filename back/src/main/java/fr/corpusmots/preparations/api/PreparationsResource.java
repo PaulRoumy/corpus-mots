@@ -194,11 +194,28 @@ public class PreparationsResource {
     @GET
     @Path("/{id}/mots/{motPreparationId}/propositions")
     @Operation(operationId = "proposerImagesMotPreparation",
-            summary = "Images proposables d'un Mot d'une Préparation de l'enseignant connecté, de tous ses Sens,"
-                    + " classées comme la détection ; rien n'est écrit")
+            summary = "Images proposables d'un Mot d'une Préparation de l'enseignant connecté, de tous ses Sens ou"
+                    + " d'un seul, classées comme la détection ; rien n'est écrit")
     public DetectionMotDto propositions(@PathParam("id") UUID id,
-            @PathParam("motPreparationId") UUID motPreparationId) {
-        return DetectionMotDto.de(preparations.propositions(id, motPreparationId), true);
+            @PathParam("motPreparationId") UUID motPreparationId,
+            @Parameter(description = "Sens dont montrer les Images ; absent, les Images de tous les Sens. La liste des"
+                    + " Sens visibles reste complète") @QueryParam("sensId") UUID sensId) {
+        return DetectionMotDto.de(preparations.propositions(id, motPreparationId, sensId), true);
+    }
+
+    @PUT
+    @Path("/{id}/mots/{motPreparationId}/sens")
+    @Consumes(MediaType.APPLICATION_JSON)
+    @Operation(operationId = "changerSensMotPreparation",
+            summary = "Changer le Sens retenu d'un Mot d'une Préparation de l'enseignant connecté, parmi ses Sens"
+                    + " visibles ; l'Image liée d'un autre Sens est seulement déliée")
+    public MotPreparationDto changerSens(@PathParam("id") UUID id,
+            @PathParam("motPreparationId") UUID motPreparationId,
+            @RequestBody(required = true) ChoixSensMotPreparationDto choix) {
+        if (choix == null || choix.sensId() == null) {
+            throw new ErreurMetier(400, "requete.invalide", "Le sens est obligatoire");
+        }
+        return MotPreparationDto.de(preparations.changerSens(id, motPreparationId, choix.sensId()));
     }
 
     @PUT

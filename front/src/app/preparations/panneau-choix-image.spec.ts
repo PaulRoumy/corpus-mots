@@ -1,6 +1,7 @@
-import { provideHttpClient } from '@angular/common/http';
+import { HttpRequest, provideHttpClient } from '@angular/common/http';
 import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
+import { MATERIAL_ANIMATIONS } from '@angular/material/core';
 import { DetectionImageDto } from '../api/models/detection-image-dto';
 import { DetectionMotDto } from '../api/models/detection-mot-dto';
 import { MotPreparationDto } from '../api/models/mot-preparation-dto';
@@ -10,6 +11,7 @@ import { provideIcones } from '../commun/icones';
 import {
   MESSAGE_AUCUNE_IMAGE,
   MESSAGE_IMAGE_INDISPONIBLE,
+  MESSAGE_SENS_INDISPONIBLE,
   PanneauChoixImage,
 } from './panneau-choix-image';
 
@@ -77,6 +79,14 @@ const PROPOSITIONS: DetectionMotDto = {
 
 const URL_PROPOSITIONS = '/api/preparations/p1/mots/mp1/propositions';
 const URL_IMAGE = '/api/preparations/p1/mots/mp1/image';
+const URL_SENS = '/api/preparations/p1/mots/mp1/sens';
+const A_COMPLETER = { id: 's0', libelle: 'à compléter', categorie: null, aCompleter: true };
+
+/** Lecture des propositions du Mot de Préparation `motId`, quel que soit le filtre `sensId`. */
+const lecture =
+  (motId = 'mp1') =>
+  (requete: HttpRequest<unknown>) =>
+    requete.url === `/api/preparations/p1/mots/${motId}/propositions`;
 
 describe('PanneauChoixImage', () => {
   let fixture: ComponentFixture<PanneauChoixImage>;
@@ -100,7 +110,7 @@ describe('PanneauChoixImage', () => {
   async function ouvrir(propositions: DetectionMotDto = PROPOSITIONS, mot = AVOCAT) {
     fixture.componentRef.setInput('mot', mot);
     await stabiliser();
-    serveur.expectOne(URL_PROPOSITIONS).flush(propositions);
+    serveur.expectOne(lecture()).flush(propositions);
     await stabiliser();
     serveur.match('/api/enseignants');
   }
@@ -109,7 +119,12 @@ describe('PanneauChoixImage', () => {
     URL.createObjectURL = vi.fn(() => 'blob:http://localhost/1');
     URL.revokeObjectURL = vi.fn();
     TestBed.configureTestingModule({
-      providers: [provideHttpClient(), provideHttpClientTesting(), provideIcones()],
+      providers: [
+        provideHttpClient(),
+        provideHttpClientTesting(),
+        provideIcones(),
+        { provide: MATERIAL_ANIMATIONS, useValue: { animationsDisabled: true } },
+      ],
     });
     serveur = TestBed.inject(HttpTestingController);
     TestBed.inject(CompteCourant).mettreAJour({
@@ -140,7 +155,7 @@ describe('PanneauChoixImage', () => {
       racine.querySelector(`[id="${panneau.getAttribute('aria-labelledby')}"]`)?.textContent,
     ).toBe('Choisir une image');
     expect(texte('.choix-image__forme')).toBe('avocat');
-    expect(texte('.choix-image__sens')).toBe('Sens : fruit (nom)');
+    expect(texte('.choix-image__champ-sens mat-label')).toBe('Sens');
     expect(texte('.choix-image__libelle')).toBe('Image actuelle');
     expect(texte('.choix-image__carte-identite')).toBe("Carte d'identité");
     expect(texte('.choix-image__repere')).toBe('simple, claire, peu de détails');
@@ -228,7 +243,7 @@ describe('PanneauChoixImage', () => {
 
     expect(texte('.choix-image__message')).toBe(MESSAGE_IMAGE_INDISPONIBLE);
     expect(racine.querySelector('.choix-image__message')?.getAttribute('role')).toBe('alert');
-    serveur.expectOne(URL_PROPOSITIONS).flush({ ...PROPOSITIONS, images: [image('i1')] });
+    serveur.expectOne(lecture()).flush({ ...PROPOSITIONS, images: [image('i1')] });
     await stabiliser();
     expect(options()).toHaveLength(1);
     expect(document.activeElement).toBe(liste());
@@ -246,7 +261,7 @@ describe('PanneauChoixImage', () => {
     fixture.componentRef.setInput('mot', AUTRE);
     await stabiliser();
     serveur
-      .expectOne('/api/preparations/p1/mots/mp2/propositions')
+      .expectOne(lecture('mp2'))
       .flush({ ...PROPOSITIONS, forme: 'avoine', images: [image('i9')] });
     await stabiliser();
     ancienne.flush(
@@ -256,7 +271,7 @@ describe('PanneauChoixImage', () => {
     await stabiliser();
 
     expect(racine.querySelector('.choix-image__message')).toBeNull();
-    serveur.expectNone('/api/preparations/p1/mots/mp2/propositions');
+    serveur.expectNone(lecture('mp2'));
     options()[0].click();
     await stabiliser();
     const nouvelle = serveur.expectOne('/api/preparations/p1/mots/mp2/image');
@@ -276,7 +291,7 @@ describe('PanneauChoixImage', () => {
 
     fixture.componentRef.setInput('mot', { ...AVOCAT, id: 'mp2', forme: 'avoine', image: null });
     await stabiliser();
-    serveur.expectOne('/api/preparations/p1/mots/mp2/propositions').flush(PROPOSITIONS);
+    serveur.expectOne(lecture('mp2')).flush(PROPOSITIONS);
     await stabiliser();
     ancienne.flush(AVOCAT);
     await stabiliser();
@@ -312,10 +327,286 @@ describe('PanneauChoixImage', () => {
   it('échec de lecture : message dans le panneau', async () => {
     fixture.componentRef.setInput('mot', AVOCAT);
     await stabiliser();
-    serveur.expectOne(URL_PROPOSITIONS).error(new ProgressEvent('error'));
+    serveur.expectOne(lecture()).error(new ProgressEvent('error'));
     await stabiliser();
 
     expect(texte('.choix-image__message')).toBe(MESSAGE_RESEAU);
     expect(racine.querySelector('[role="listbox"]')).toBeNull();
+  });
+
+  describe('Sens (story 2.8)', () => {
+    const declencheurSens = () =>
+      racine.querySelector<HTMLElement>('.choix-image__champ-sens .mat-mdc-select-trigger')!;
+    const valeurSens = () => texte('.choix-image__champ-sens .mat-mdc-select-value');
+    const optionsSens = () => [
+      ...document.querySelectorAll<HTMLElement>('.cdk-overlay-pane mat-option'),
+    ];
+    async function ouvrirSens() {
+      declencheurSens().click();
+      await stabiliser();
+    }
+    async function choisirSens(libelle: string) {
+      await ouvrirSens();
+      optionsSens()
+        .find((option) => option.textContent?.replace(/\s+/g, ' ').trim() === libelle)!
+        .click();
+      await stabiliser();
+    }
+    const AVOCAT_METIER: MotPreparationDto = {
+      ...AVOCAT,
+      sens: { id: 's2', libelle: 'métier', categorie: 'nom' },
+      illustre: false,
+      image: null,
+    };
+
+    it('ouverture : le champ est sur le Sens retenu et la liste se limite à ses Images', async () => {
+      fixture.componentRef.setInput('mot', AVOCAT);
+      await stabiliser();
+      const requete = serveur.expectOne(lecture());
+      expect(requete.request.params.get('sensId')).toBe('s1');
+      requete.flush({ ...PROPOSITIONS, images: [image('i1'), image('i3')] });
+      await stabiliser();
+      serveur.match('/api/enseignants');
+
+      expect(racine.querySelector('mat-select')).not.toBeNull();
+      expect(valeurSens()).toBe('fruit (nom)');
+      expect(options()).toHaveLength(2);
+      await ouvrirSens();
+      // « Tous les sens » n'est proposé que pour un Sens retenu « à compléter ».
+      expect(optionsSens().map((option) => option.textContent?.trim())).toEqual([
+        'fruit (nom)',
+        'métier (nom)',
+      ]);
+      optionsSens()[0].click();
+      await stabiliser();
+    });
+
+    it('Sens retenu « à compléter » : champ sur « Tous les sens », toutes les Images, « à compléter » en dernier', async () => {
+      const aCompleter: MotPreparationDto = {
+        ...AVOCAT,
+        sens: { id: 's0', libelle: 'à compléter' },
+        illustre: false,
+        image: null,
+      };
+      fixture.componentRef.setInput('mot', aCompleter);
+      await stabiliser();
+      const requete = serveur.expectOne(lecture());
+      expect(requete.request.params.has('sensId')).toBe(false);
+      requete.flush({ ...PROPOSITIONS, sens: [FRUIT, METIER, A_COMPLETER] });
+      await stabiliser();
+      serveur.match('/api/enseignants');
+
+      expect(valeurSens()).toBe('Tous les sens');
+      expect(options()).toHaveLength(3);
+      await ouvrirSens();
+      const libelles = optionsSens().map((option) =>
+        option.textContent?.replace(/\s+/g, ' ').trim(),
+      );
+      expect(libelles).toEqual(['Tous les sens', 'fruit (nom)', 'métier (nom)', 'à compléter']);
+      // « à compléter » est mis en avant par une icône et son libellé, pas par la couleur seule.
+      expect(optionsSens()[3].querySelector('.choix-image__a-completer mat-icon')).not.toBeNull();
+      optionsSens()[0].click();
+      await stabiliser();
+      serveur.expectNone(URL_SENS);
+    });
+
+    it('changer : enregistré aussitôt, Mot émis, liste relue pour ce Sens, panneau ouvert, focus sur le champ', async () => {
+      await ouvrir();
+      const changes: MotPreparationDto[] = [];
+      const choisis: MotPreparationDto[] = [];
+      let fermetures = 0;
+      fixture.componentInstance.sensChange.subscribe((mot) => changes.push(mot));
+      fixture.componentInstance.choisi.subscribe((mot) => choisis.push(mot));
+      fixture.componentInstance.fermer.subscribe(() => fermetures++);
+
+      await choisirSens('métier (nom)');
+      const requete = serveur.expectOne(URL_SENS);
+      expect(requete.request.method).toBe('PUT');
+      expect(requete.request.body).toEqual({ sensId: 's2' });
+      expect(racine.querySelector('mat-select')?.getAttribute('aria-disabled')).toBe('true');
+      requete.flush(AVOCAT_METIER);
+      await stabiliser();
+
+      expect(changes).toEqual([AVOCAT_METIER]);
+      fixture.componentRef.setInput('mot', AVOCAT_METIER);
+      await stabiliser();
+      const relecture = serveur.expectOne(lecture());
+      expect(relecture.request.params.get('sensId')).toBe('s2');
+      relecture.flush({ ...PROPOSITIONS, images: [PROPOSITIONS.images[0]] });
+      await stabiliser();
+
+      expect(valeurSens()).toBe('métier (nom)');
+      expect(options()).toHaveLength(1);
+      expect(racine.querySelector('mat-select')?.getAttribute('aria-disabled')).toBe('false');
+      expect(racine.querySelector('mat-select')?.contains(document.activeElement)).toBe(true);
+      expect(choisis).toEqual([]);
+      expect(fermetures).toBe(0);
+    });
+
+    it('après un Sens changé, choisir une Image la lie avec ce Sens', async () => {
+      await ouvrir();
+      const choisis: MotPreparationDto[] = [];
+      fixture.componentInstance.choisi.subscribe((mot) => choisis.push(mot));
+      await choisirSens('métier (nom)');
+      serveur.expectOne(URL_SENS).flush(AVOCAT_METIER);
+      await stabiliser();
+      fixture.componentRef.setInput('mot', AVOCAT_METIER);
+      await stabiliser();
+      serveur.expectOne(lecture()).flush({ ...PROPOSITIONS, images: [PROPOSITIONS.images[0]] });
+      await stabiliser();
+      serveur.match('/api/enseignants');
+
+      options()[0].click();
+      await stabiliser();
+      const requete = serveur.expectOne(URL_IMAGE);
+      expect(requete.request.body).toEqual({ imageId: 'i2' });
+      const lie = { ...AVOCAT_METIER, illustre: true, image: AVOCAT.image };
+      requete.flush(lie);
+      await stabiliser();
+      expect(choisis).toEqual([lie]);
+    });
+
+    it('choisir le Sens déjà retenu n’enregistre rien', async () => {
+      await ouvrir();
+
+      await choisirSens('fruit (nom)');
+
+      serveur.expectNone(URL_SENS);
+      serveur.expectNone(lecture());
+      expect(valeurSens()).toBe('fruit (nom)');
+    });
+
+    it('un seul Sens : texte en lecture, sans champ', async () => {
+      await ouvrir({ ...PROPOSITIONS, sens: [FRUIT], images: [image('i1')] });
+
+      expect(racine.querySelector('mat-select')).toBeNull();
+      expect(texte('.choix-image__sens')).toBe('Sens : fruit (nom)');
+    });
+
+    it('échec : le champ revient au Sens précédent, message dans le panneau', async () => {
+      await ouvrir();
+      const changes: MotPreparationDto[] = [];
+      fixture.componentInstance.sensChange.subscribe((mot) => changes.push(mot));
+
+      await choisirSens('métier (nom)');
+      serveur.expectOne(URL_SENS).error(new ProgressEvent('error'));
+      await stabiliser();
+
+      expect(valeurSens()).toBe('fruit (nom)');
+      expect(texte('.choix-image__message')).toBe(MESSAGE_RESEAU);
+      expect(racine.querySelector('.choix-image__message')?.getAttribute('role')).toBe('alert');
+      expect(racine.querySelector('mat-select')?.getAttribute('aria-disabled')).toBe('false');
+      expect(changes).toEqual([]);
+      serveur.expectNone(lecture());
+    });
+
+    it('Sens qui n’est plus proposé : message dédié, champ revenu, liste relue pour le Sens précédent', async () => {
+      await ouvrir();
+      const changes: MotPreparationDto[] = [];
+      fixture.componentInstance.sensChange.subscribe((mot) => changes.push(mot));
+
+      await choisirSens('métier (nom)');
+      serveur
+        .expectOne(URL_SENS)
+        .flush(
+          { status: 400, code: 'preparation.sens_invalide' },
+          { status: 400, statusText: 'Bad Request' },
+        );
+      await stabiliser();
+
+      expect(texte('.choix-image__message')).toBe(MESSAGE_SENS_INDISPONIBLE);
+      expect(valeurSens()).toBe('fruit (nom)');
+      const relectures = serveur.match(lecture());
+      expect(relectures).toHaveLength(1);
+      expect(relectures[0].request.params.get('sensId')).toBe('s1');
+      relectures[0].flush({ ...PROPOSITIONS, sens: [FRUIT] });
+      await stabiliser();
+      expect(changes).toEqual([]);
+    });
+
+    it('« à compléter » puis « Tous les sens » limitent seulement la liste, sans enregistrement', async () => {
+      const aCompleter: MotPreparationDto = {
+        ...AVOCAT,
+        sens: { id: 's0', libelle: 'à compléter' },
+        illustre: false,
+        image: null,
+      };
+      const avecACompleter = { ...PROPOSITIONS, sens: [FRUIT, METIER, A_COMPLETER] };
+      fixture.componentRef.setInput('mot', aCompleter);
+      await stabiliser();
+      serveur.expectOne(lecture()).flush(avecACompleter);
+      await stabiliser();
+      serveur.match('/api/enseignants');
+
+      await choisirSens('à compléter');
+      serveur.expectNone(URL_SENS);
+      const limitee = serveur.match(lecture());
+      expect(limitee).toHaveLength(1);
+      expect(limitee[0].request.params.get('sensId')).toBe('s0');
+      limitee[0].flush({ ...avecACompleter, images: [] });
+      await stabiliser();
+
+      await choisirSens('Tous les sens');
+      serveur.expectNone(URL_SENS);
+      const toutes = serveur.match(lecture());
+      expect(toutes).toHaveLength(1);
+      expect(toutes[0].request.params.has('sensId')).toBe(false);
+      toutes[0].flush(avecACompleter);
+      await stabiliser();
+      expect(valeurSens()).toBe('Tous les sens');
+    });
+
+    it('pendant le choix d’une Image, le champ Sens est désactivé', async () => {
+      await ouvrir();
+
+      options()[0].click();
+      await stabiliser();
+      const requete = serveur.expectOne(URL_IMAGE);
+      expect(racine.querySelector('mat-select')?.getAttribute('aria-disabled')).toBe('true');
+      requete.flush(
+        { status: 404, code: 'image.indisponible' },
+        { status: 404, statusText: 'Not Found' },
+      );
+      await stabiliser();
+      serveur.expectOne(lecture()).flush(PROPOSITIONS);
+      await stabiliser();
+      expect(racine.querySelector('mat-select')?.getAttribute('aria-disabled')).toBe('false');
+    });
+
+    it('pendant l’enregistrement du Sens, la liste est occupée et ses Images ne se choisissent pas', async () => {
+      await ouvrir();
+
+      await choisirSens('métier (nom)');
+      const requete = serveur.expectOne(URL_SENS);
+      expect(liste().getAttribute('aria-busy')).toBe('true');
+      options()[0].click();
+      await stabiliser();
+      serveur.expectNone(URL_IMAGE);
+      requete.flush(AVOCAT_METIER);
+      await stabiliser();
+      serveur.match(lecture());
+    });
+
+    it('passé à un autre Mot pendant l’enregistrement réussi : le Mot est émis, le panneau courant reste intact', async () => {
+      await ouvrir();
+      const changes: MotPreparationDto[] = [];
+      fixture.componentInstance.sensChange.subscribe((mot) => changes.push(mot));
+      await choisirSens('métier (nom)');
+      const ancienne = serveur.expectOne(URL_SENS);
+
+      const AUTRE: MotPreparationDto = { ...AVOCAT, id: 'mp2', forme: 'avoine', image: null };
+      fixture.componentRef.setInput('mot', AUTRE);
+      await stabiliser();
+      serveur.expectOne(lecture('mp2')).flush({ ...PROPOSITIONS, forme: 'avoine' });
+      await stabiliser();
+      ancienne.flush(AVOCAT_METIER);
+      await stabiliser();
+
+      expect(changes).toEqual([AVOCAT_METIER]);
+      serveur.expectNone(lecture());
+      serveur.expectNone(lecture('mp2'));
+      expect(valeurSens()).toBe('fruit (nom)');
+      expect(racine.querySelector('mat-select')?.getAttribute('aria-disabled')).toBe('false');
+    });
   });
 });

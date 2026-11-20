@@ -12,6 +12,7 @@ import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 import jakarta.transaction.Transactional;
 import java.util.Collection;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
@@ -49,6 +50,9 @@ public class Usages {
 
     @Inject
     Lexique lexique;
+
+    @Inject
+    DetectionMots detection;
 
     @Inject
     EnseignantCourant enseignantCourant;
@@ -200,6 +204,43 @@ public class Usages {
                 commande.origine().valeur()));
         liens.flush();
         return Images.vue(image, enseignant, visibilite);
+    }
+
+    /**
+     * Change le Sens retenu pour le Mot de Préparation de l'enseignant courant (Panneau de choix d'Image, story 2.8) : le
+     * Sens de la commande doit être un Sens du même Mot, visible de l'enseignant selon la règle de la détection
+     * ({@link DetectionMots#sensVisible}, AD-2). La ligne {@code sens_retenu} existante est mise à jour ; si l'Image liée
+     * n'illustre pas ce Sens, son lien est supprimé et le Mot redevient « à illustrer » (invariant : Sens de l'Image =
+     * Sens retenu, AD-5). L'Image déliée n'est ni supprimée ni modifiée. Choisir le Sens déjà retenu n'écrit rien. Aucun
+     * Sens n'est créé ni modifié (AD-19). L'appelant a verrouillé la Préparation et vérifié que ce Mot est le sien.
+     *
+     * @return le Sens retenu après le changement
+     * @throws ErreurMetier {@code 400 preparation.sens_invalide} si le Sens n'existe pas, est celui d'un autre Mot ou
+     *         n'est pas visible de l'enseignant
+     * @throws IllegalStateException si le Mot de Préparation n'a pas de Sens retenu
+     */
+    @Transactional
+    public SensVue changerSens(ChangerSensCommande commande) {
+        SensRetenu retenu = sensRetenus.de(commande.preparationMotId())
+                .orElseThrow(() -> new IllegalStateException("Sens retenu du mot de préparation "
+                        + commande.preparationMotId() + " introuvable"));
+        SensVue actuel = lexique.sens(retenu.sensId())
+                .orElseThrow(() -> new IllegalStateException("Sens " + retenu.sensId() + " introuvable"));
+        if (actuel.id().equals(commande.sensId())) {
+            return actuel;
+        }
+        SensVue nouveau = (commande.sensId() == null ? Optional.<SensVue>empty()
+                : lexique.sensDuMot(actuel.motId(), commande.sensId()))
+                .filter(trouve -> detection.sensVisible(actuel.motId(), trouve.id()))
+                .orElseThrow(() -> new ErreurMetier(400, CODE_SENS_INVALIDE,
+                        "Ce sens n'est pas un sens visible de ce mot"));
+        retenu.changerSens(nouveau.id());
+        sensRetenus.flush();
+        Image liee = liens.imagesDe(List.of(commande.preparationMotId())).get(commande.preparationMotId());
+        if (liee != null && !liee.sensId().equals(nouveau.id())) {
+            liens.supprimerDe(commande.preparationMotId());
+        }
+        return nouveau;
     }
 
     /** Image {@code imageId}, verrouillée, si elle existe et est proposable à l'enseignant. */

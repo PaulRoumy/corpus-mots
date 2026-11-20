@@ -816,6 +816,7 @@ export class Preparation {
         panneau.location.nativeElement.classList.add('disposition__panneau');
         panneau.instance.fermer.subscribe(() => this.fermerChoixImage());
         panneau.instance.choisi.subscribe((change) => this.appliquerChoixImage(change));
+        panneau.instance.sensChange.subscribe((change) => this.appliquerChangementSens(change));
         panneau.instance.ouvrirCarteIdentite.subscribe(() => {
           const courant = this.motChoixImage();
           if (courant !== null) {
@@ -1253,6 +1254,23 @@ export class Preparation {
     this.choixOuvert.set(null);
     this.annoncer(`Image de « ${change.forme} » changée.`);
     this.rendreFocusVignette(change.id);
+  }
+
+  /**
+   * Sens changé dans le Panneau de choix d'Image : la Carte prend le Mot renvoyé (Sens, « à illustrer » si l'Image a été
+   * déliée), le panneau reste ouvert et le changement est annoncé.
+   */
+  protected appliquerChangementSens(change: MotPreparationDto): void {
+    const avant = this.mots()?.find((mot) => mot.id === change.id);
+    this.mots.update((mots) =>
+      mots === null ? mots : mots.map((autre) => (autre.id === change.id ? change : autre)),
+    );
+    const imageRetiree = !!avant?.image && !change.image;
+    // Même format que le champ Sens : « libellé (catégorie) ».
+    const sens = change.sens.categorie
+      ? `${change.sens.libelle} (${change.sens.categorie})`
+      : change.sens.libelle;
+    this.annoncer(`Sens de « ${change.forme} » : ${sens}.${imageRetiree ? ' Image retirée.' : ''}`);
   }
 
   /**

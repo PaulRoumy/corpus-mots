@@ -96,19 +96,20 @@ public class DetectionMots {
         if (enseignant == null || trouves.isEmpty()) {
             return new DetectionVue(forme, List.of());
         }
-        return new DetectionVue(forme, detectes(trouves, albumId, section, enseignant, false));
+        return new DetectionVue(forme, detectes(trouves, albumId, section, enseignant, false, null));
     }
 
     /**
      * Propositions d'Images pour le Mot {@code motId}, qui figure dans une Préparation de l'enseignant courant de
      * l'Album {@code albumId} et de la Section {@code section} (Panneau de choix d'Image, story 2.7) : ses Sens visibles,
-     * ses Albums et ses Images {@link VisibiliteImages#proposable proposables}, de tous ses Sens, classées comme la
-     * détection. Lecture seule. L'appelant a vérifié que le Mot est celui d'une Préparation de l'enseignant courant.
+     * ses Albums et ses Images {@link VisibiliteImages#proposable proposables}, classées comme la détection : celles du
+     * Sens {@code sensId} seulement s'il est donné (story 2.8), sinon celles de tous ses Sens. La liste des Sens visibles
+     * reste complète. Lecture seule. L'appelant a vérifié que le Mot est celui d'une Préparation de l'enseignant courant.
      *
      * @throws IllegalArgumentException si le Mot n'existe pas
      */
     @Transactional
-    public MotDetecteVue propositions(UUID motId, UUID albumId, Section section) {
+    public MotDetecteVue propositions(UUID motId, UUID albumId, Section section, UUID sensId) {
         UUID enseignant = enseignantCourant.id();
         List<Mot> trouves = motId == null ? List.of() : mots.lire(List.of(motId));
         if (trouves.isEmpty()) {
@@ -118,16 +119,47 @@ public class DetectionMots {
             Mot mot = trouves.get(0);
             return new MotDetecteVue(new MotVue(mot.id(), mot.forme()), List.of(), List.of(), List.of());
         }
-        return detectes(trouves, albumId, section, enseignant, true).get(0);
+        return detectes(trouves, albumId, section, enseignant, true, sensId).get(0);
+    }
+
+    /**
+     * Vrai si {@code sensId} est un Sens du Mot {@code motId} visible de l'enseignant courant, selon la règle de la
+     * détection ({@link #sensVisibles}) : il porte une Image {@link VisibiliteImages#proposable proposable} ou
+     * l'enseignant l'a retenu dans l'une de ses Préparations (AD-2). Lecture seule.
+     */
+    @Transactional
+    public boolean sensVisible(UUID motId, UUID sensId) {
+        UUID enseignant = enseignantCourant.id();
+        if (enseignant == null || motId == null || sensId == null
+                || sens.deMots(List.of(motId)).stream().noneMatch(duMot -> sensId.equals(duMot.id()))) {
+            return false;
+        }
+        List<Image> proposables = images.deSensAvecSections(Set.of(sensId)).stream()
+                .filter(image -> visibilite.proposable(image, enseignant))
+                .toList();
+        List<SensRetenu> retenus = sensRetenus.deMots(enseignant, List.of(motId));
+        return sensVisibles(proposables, retenus).contains(sensId);
+    }
+
+    /**
+     * Règle unique des Sens visibles d'un Mot (AD-2) : les Sens de ses Images proposables à l'enseignant, puis ceux qu'il
+     * a retenus dans ses Préparations.
+     */
+    private static Set<UUID> sensVisibles(List<Image> imagesProposables, List<SensRetenu> retenus) {
+        Set<UUID> visibles = new LinkedHashSet<>();
+        imagesProposables.forEach(image -> visibles.add(image.sensId()));
+        retenus.forEach(retenu -> visibles.add(retenu.sensId()));
+        return visibles;
     }
 
     /**
      * Calcul commun de la détection et des propositions : pour chacun de ces Mots, par forme, ses Sens visibles, ses
      * Albums et ses Images proposables classées. Un Mot sans Image proposable ni Sens retenu par l'enseignant est omis,
-     * sauf si {@code garderTous}.
+     * sauf si {@code garderTous}. Si {@code sensFiltre} est donné, seules les Images de ce Sens sont montrées ; Sens
+     * visibles et Albums restent complets.
      */
     private List<MotDetecteVue> detectes(List<Mot> trouves, UUID albumId, Section section, UUID enseignant,
-            boolean garderTous) {
+            boolean garderTous, UUID sensFiltre) {
         List<UUID> motIds = trouves.stream().map(Mot::id).toList();
         Map<UUID, Sens> sensParId = sens.deMots(motIds).stream()
                 .collect(Collectors.toMap(Sens::id, Function.identity()));
@@ -163,10 +195,7 @@ public class DetectionMots {
             if (!garderTous && imagesDuMot.isEmpty() && retenusDuMot.isEmpty()) {
                 continue;
             }
-            Set<UUID> sensVisibles = new LinkedHashSet<>();
-            imagesDuMot.forEach(image -> sensVisibles.add(image.sensId()));
-            retenusDuMot.forEach(retenu -> sensVisibles.add(retenu.sensId()));
-            List<SensProposeVue> sensDuMot = sensVisibles.stream()
+            List<SensProposeVue> sensDuMot = sensVisibles(imagesDuMot, retenusDuMot).stream()
                     .map(id -> propose(sensParId.get(id)))
                     .sorted(Comparator.comparing(SensProposeVue::aCompleter)
                             .thenComparing(propose -> propose.sens().libelle(), collation)
@@ -181,6 +210,7 @@ public class DetectionMots {
                     .sorted(Comparator.comparing(AlbumVue::titre, collation).thenComparing(AlbumVue::id))
                     .toList();
             List<ImageDetecteeVue> imagesMontrees = imagesDuMot.stream()
+                    .filter(image -> sensFiltre == null || sensFiltre.equals(image.sensId()))
                     .map(image -> new ImageDetecteeVue(Images.vue(image, enseignant, visibilite),
                             image.sections().stream().sorted().toList(),
                             albumDOrigine(image) == null ? null : albums.get(albumDOrigine(image)),

@@ -12,6 +12,7 @@ import fr.corpusmots.referentiels.service.AlbumVue;
 import fr.corpusmots.referentiels.service.ModuleVue;
 import fr.corpusmots.referentiels.service.ReferentielsService;
 import fr.corpusmots.referentiels.service.ThemeVue;
+import fr.corpusmots.vocabulaire.service.ChangerSensCommande;
 import fr.corpusmots.vocabulaire.service.DetectionMots;
 import fr.corpusmots.vocabulaire.service.DetectionVue;
 import fr.corpusmots.vocabulaire.service.ImageVue;
@@ -352,18 +353,39 @@ public class PreparationsService {
 
     /**
      * Images proposées pour le Mot de Préparation {@code motPreparationId} de la Préparation {@code id} de l'enseignant
-     * courant (Panneau de choix d'Image, story 2.7) : toutes les Images proposables du Mot, quel que soit leur Sens,
-     * classées par {@code vocabulaire} comme la détection ({@link DetectionMots#propositions}). Lecture seule, sans
-     * verrou.
+     * courant (Panneau de choix d'Image, stories 2.7 et 2.8) : les Images proposables du Mot, de tous ses Sens ou du seul
+     * Sens {@code sensId} s'il est donné, classées par {@code vocabulaire} comme la détection
+     * ({@link DetectionMots#propositions}) ; la liste des Sens visibles reste complète. Lecture seule, sans verrou.
      *
      * @throws ErreurMetier {@code 404 ressource.introuvable} si la Préparation n'existe pas ou appartient à un
      *         collègue, ou si le Mot de Préparation n'existe pas ou appartient à une autre Préparation
      */
     @Transactional
-    public MotDetecteVue propositions(UUID id, UUID motPreparationId) {
+    public MotDetecteVue propositions(UUID id, UUID motPreparationId, UUID sensId) {
         Preparation preparation = mienne(id);
         PreparationMot ligne = deLaPreparation(preparation, motPreparationId);
-        return detectionMots.propositions(ligne.motId(), preparation.albumId(), preparation.section());
+        return detectionMots.propositions(ligne.motId(), preparation.albumId(), preparation.section(), sensId);
+    }
+
+    /**
+     * Change le Sens retenu pour le Mot de Préparation {@code motPreparationId} de la Préparation {@code id} de
+     * l'enseignant courant (Panneau de choix d'Image, story 2.8), par {@link Usages#changerSens} : le Sens doit être un
+     * Sens visible du même Mot ; l'Image liée qui n'est pas de ce Sens est déliée et le Mot redevient « à illustrer ».
+     * Choisir le Sens déjà retenu ne change rien. Une seule transaction, Préparation verrouillée : rien n'est modifié en
+     * cas de refus.
+     *
+     * @throws ErreurMetier {@code 404 ressource.introuvable} si la Préparation n'existe pas ou appartient à un
+     *         collègue, ou si le Mot de Préparation n'existe pas ou appartient à une autre Préparation ;
+     *         {@code 400 preparation.sens_invalide} si le Sens n'existe pas, appartient à un autre Mot ou n'est pas
+     *         visible de l'enseignant
+     */
+    @Transactional
+    public MotPreparationVue changerSens(UUID id, UUID motPreparationId, UUID sensId) {
+        Preparation preparation = verrouillee(id);
+        PreparationMot ligne = deLaPreparation(preparation, motPreparationId);
+        SensVue sens = usages.changerSens(new ChangerSensCommande(ligne.id(), sensId));
+        MotVue mot = motDe(ligne, lexique.mots(List.of(ligne.motId())));
+        return vue(ligne, mot, sens, usages.imagesLiees(List.of(ligne.id())).get(ligne.id()));
     }
 
     /**

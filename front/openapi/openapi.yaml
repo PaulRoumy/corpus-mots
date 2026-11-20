@@ -294,6 +294,15 @@ components:
             \ le Sens retenu, il le devient"
           type: string
           $ref: "#/components/schemas/UUID"
+    ChoixSensMotPreparationDto:
+      type: object
+      required:
+      - sensId
+      properties:
+        sensId:
+          description: Sens visible du Mot ; l'Image liée d'un autre Sens est déliée
+          type: string
+          $ref: "#/components/schemas/UUID"
     ClassementImageDto:
       type: object
       required:
@@ -2067,7 +2076,8 @@ paths:
   /api/preparations/{id}/mots/{motPreparationId}/propositions:
     get:
       summary: "Images proposables d'un Mot d'une Préparation de l'enseignant connecté\
-        , de tous ses Sens, classées comme la détection ; rien n'est écrit"
+        , de tous ses Sens ou d'un seul, classées comme la détection ; rien n'est\
+        \ écrit"
       operationId: proposerImagesMotPreparation
       parameters:
       - name: id
@@ -2080,6 +2090,12 @@ paths:
         required: true
         schema:
           $ref: "#/components/schemas/UUID"
+      - description: "Sens dont montrer les Images ; absent, les Images de tous les\
+          \ Sens. La liste des Sens visibles reste complète"
+        name: sensId
+        in: query
+        schema:
+          $ref: "#/components/schemas/UUID"
       responses:
         "200":
           description: OK
@@ -2087,6 +2103,40 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/DetectionMotDto"
+      tags:
+      - Preparations Resource
+  /api/preparations/{id}/mots/{motPreparationId}/sens:
+    put:
+      summary: "Changer le Sens retenu d'un Mot d'une Préparation de l'enseignant\
+        \ connecté, parmi ses Sens visibles ; l'Image liée d'un autre Sens est seulement\
+        \ déliée"
+      operationId: changerSensMotPreparation
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          $ref: "#/components/schemas/UUID"
+      - name: motPreparationId
+        in: path
+        required: true
+        schema:
+          $ref: "#/components/schemas/UUID"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ChoixSensMotPreparationDto"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MotPreparationDto"
+        "400":
+          description: Bad Request
       tags:
       - Preparations Resource
   /api/preparations/{id}/mots/{motPreparationId}/theme:

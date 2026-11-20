@@ -1,5 +1,5 @@
 import { BreakpointObserver } from '@angular/cdk/layout';
-import { provideHttpClient } from '@angular/common/http';
+import { HttpRequest, provideHttpClient } from '@angular/common/http';
 import {
   HttpTestingController,
   provideHttpClientTesting,
@@ -93,6 +93,9 @@ const MODULES_LOUP: ModuleDto[] = [
 
 const URL_REGLAGES = `/api/preparations/${ID}/reglages`;
 const URL_MOTS = `/api/preparations/${ID}/mots`;
+
+/** Lecture des propositions à `url`, quel que soit le filtre `sensId` du Panneau de choix d'Image. */
+const lecturePropositions = (url: string) => (requete: HttpRequest<unknown>) => requete.url === url;
 
 /** Mot de la Préparation, « à illustrer », avec le Sens par défaut. */
 function motPreparation(forme: string, ordre: number): MotPreparationDto {
@@ -3169,7 +3172,7 @@ describe('Preparation (En-tête)', () => {
       const mot = MOTS[forme];
       vignette(forme).click();
       await stabiliser();
-      serveur.expectOne(`${URL_MOTS}/${mot.id}/propositions`).flush({
+      serveur.expectOne(lecturePropositions(`${URL_MOTS}/${mot.id}/propositions`)).flush({
         motId: mot.motId,
         forme,
         dejaDansLaPreparation: true,
@@ -3491,7 +3494,7 @@ describe('Preparation (En-tête)', () => {
     async function ouvrirChoix(propositions: DetectionMotDto = PROPOSITIONS) {
       vignette('farine').click();
       await stabiliser();
-      serveur.expectOne(URL_PROPOSITIONS).flush(propositions);
+      serveur.expectOne(lecturePropositions(URL_PROPOSITIONS)).flush(propositions);
       await stabiliser();
     }
 
@@ -3528,7 +3531,7 @@ describe('Preparation (En-tête)', () => {
         )!
         .click();
       await stabiliser();
-      serveur.expectOne(`${URL_MOTS}/${GALETTE.id}/propositions`).flush({
+      serveur.expectOne(lecturePropositions(`${URL_MOTS}/${GALETTE.id}/propositions`)).flush({
         motId: GALETTE.motId,
         forme: 'galette',
         dejaDansLaPreparation: true,
@@ -3577,6 +3580,46 @@ describe('Preparation (En-tête)', () => {
       expect(texte('p[aria-live="polite"]')).toBe('Image de « farine » changée.');
     });
 
+    it('Sens changé dans le panneau : Carte « à illustrer », annonce, panneau ouvert et liste relue', async () => {
+      const CHUTE = {
+        id: '0190f0a0-0000-7000-8000-0000000d0099',
+        libelle: 'chute',
+        categorie: 'nom',
+      };
+      await ouvrirGrille();
+      await ouvrirChoix({
+        ...PROPOSITIONS,
+        sens: [...PROPOSITIONS.sens, { ...CHUTE, aCompleter: false }],
+      });
+
+      panneau()!.querySelector<HTMLElement>('.mat-mdc-select-trigger')!.click();
+      await stabiliser();
+      [...document.querySelectorAll<HTMLElement>('.cdk-overlay-pane mat-option')]
+        .find((option) => option.textContent?.trim() === 'chute (nom)')!
+        .click();
+      await stabiliser();
+      const requete = serveur.expectOne(`${URL_MOTS}/${FARINE.id}/sens`);
+      expect(requete.request.method).toBe('PUT');
+      expect(requete.request.body).toEqual({ sensId: CHUTE.id });
+      requete.flush({ ...FARINE, sens: CHUTE, illustre: false, image: null });
+      await stabiliser();
+
+      const relecture = serveur.expectOne(lecturePropositions(URL_PROPOSITIONS));
+      expect(relecture.request.params.get('sensId')).toBe(CHUTE.id);
+      relecture.flush({ ...PROPOSITIONS, images: [] });
+      await stabiliser();
+
+      expect(panneau()).not.toBeNull();
+      expect(
+        [...racine.querySelectorAll('.mots__element')].map((element) =>
+          element.classList.contains('mots__element--a-illustrer'),
+        ),
+      ).toEqual([true, true]);
+      expect(texte('p[aria-live="polite"]')).toBe(
+        'Sens de « farine » : chute (nom). Image retirée.',
+      );
+    });
+
     it('un clic sur une Image la lie ; une Carte « à illustrer » devient illustrée', async () => {
       await ouvrirGrille();
       racine
@@ -3585,7 +3628,7 @@ describe('Preparation (En-tête)', () => {
         )!
         .click();
       await stabiliser();
-      serveur.expectOne(`${URL_MOTS}/${GALETTE.id}/propositions`).flush({
+      serveur.expectOne(lecturePropositions(`${URL_MOTS}/${GALETTE.id}/propositions`)).flush({
         ...PROPOSITIONS,
         motId: GALETTE.motId,
         forme: 'galette',
@@ -3656,7 +3699,7 @@ describe('Preparation (En-tête)', () => {
         "Cette image n'est plus disponible.",
       );
       serveur
-        .expectOne(URL_PROPOSITIONS)
+        .expectOne(lecturePropositions(URL_PROPOSITIONS))
         .flush({ ...PROPOSITIONS, images: [proposition(IMAGE_X)] });
       await stabiliser();
       expect(options()).toHaveLength(1);
@@ -3674,7 +3717,7 @@ describe('Preparation (En-tête)', () => {
 
       expect(panneau()).not.toBeNull();
       expect(panneau()!.querySelector('.choix-image__message')?.textContent).toBe(MESSAGE_RESEAU);
-      serveur.expectNone(URL_PROPOSITIONS);
+      serveur.expectNone(lecturePropositions(URL_PROPOSITIONS));
     });
 
     it('le Panneau Carte d’identité ouvert, la vignette d’une autre Carte n’affiche que le Panneau de choix', async () => {
@@ -3700,7 +3743,7 @@ describe('Preparation (En-tête)', () => {
       vignette('potiron').click();
       await stabiliser();
       serveur
-        .expectOne(`${URL_MOTS}/${POTIRON.id}/propositions`)
+        .expectOne(lecturePropositions(`${URL_MOTS}/${POTIRON.id}/propositions`))
         .flush({ ...PROPOSITIONS, motId: POTIRON.motId, forme: 'potiron', images: [] });
       await stabiliser();
 
@@ -3741,7 +3784,7 @@ describe('Preparation (En-tête)', () => {
       await stabiliser();
 
       expect(document.activeElement).toBe(panneau());
-      serveur.expectNone(URL_PROPOSITIONS);
+      serveur.expectNone(lecturePropositions(URL_PROPOSITIONS));
     });
 
     it('deux changements de la même Image : l’annonce est vidée puis répétée', async () => {
@@ -3853,7 +3896,7 @@ describe('Preparation (Carte d’identité sous 600 px)', () => {
       .querySelector<HTMLButtonElement>(`button[aria-label="Changer l'image de « citrouille »"]`)!
       .click();
     await stabiliser();
-    serveur.expectOne(`${URL_MOTS}/${CITROUILLE.id}/propositions`).flush({
+    serveur.expectOne(lecturePropositions(`${URL_MOTS}/${CITROUILLE.id}/propositions`)).flush({
       motId: CITROUILLE.motId,
       forme: 'citrouille',
       dejaDansLaPreparation: true,

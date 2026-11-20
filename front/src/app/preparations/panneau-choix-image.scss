@@ -65,6 +65,30 @@
   color: var(--mat-sys-primary);
 }
 
+.choix-image__champ-sens {
+  margin-top: var(--cm-espace-2);
+}
+
+// « à compléter » : couleur, icône crayon et libellé (jamais la couleur seule), comme dans la Carte d'identité.
+.choix-image__a-completer {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--cm-espace-1);
+  height: var(--cm-hauteur-badge);
+  padding: 0 var(--cm-espace-2);
+  border-radius: var(--cm-arrondi-sm);
+  background: var(--cm-etat-a-illustrer-fond);
+  color: var(--cm-etat-a-illustrer-texte);
+  font: var(--cm-typo-label-sm);
+  white-space: nowrap;
+
+  mat-icon {
+    flex: none;
+    width: var(--cm-taille-icone-badge);
+    height: var(--cm-taille-icone-badge);
+  }
+}
+
 .choix-image__sens,
 .choix-image__repere,
 .choix-image__vide {
