@@ -4,6 +4,7 @@ import fr.corpusmots.commun.api.ErreurMetier;
 import fr.corpusmots.commun.service.EnseignantCourant;
 import fr.corpusmots.commun.service.Pagination;
 import fr.corpusmots.commun.service.Section;
+import fr.corpusmots.preparations.persistance.MotEcarteRepository;
 import fr.corpusmots.preparations.persistance.Preparation;
 import fr.corpusmots.preparations.persistance.PreparationMot;
 import fr.corpusmots.preparations.persistance.PreparationMotRepository;
@@ -21,6 +22,7 @@ import fr.corpusmots.vocabulaire.service.ImageVue;
 import fr.corpusmots.vocabulaire.service.Images;
 import fr.corpusmots.vocabulaire.service.Lexique;
 import fr.corpusmots.vocabulaire.service.LierImageCommande;
+import fr.corpusmots.vocabulaire.service.MotDejaIllustreVue;
 import fr.corpusmots.vocabulaire.service.MotDetecteVue;
 import fr.corpusmots.vocabulaire.service.MotVue;
 import fr.corpusmots.vocabulaire.service.OrigineLien;
@@ -32,6 +34,8 @@ import fr.corpusmots.vocabulaire.service.Usages;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 import jakarta.transaction.Transactional;
+import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -77,6 +81,9 @@ public class PreparationsService {
 
     @Inject
     PreparationMotRepository preparationMots;
+
+    @Inject
+    MotEcarteRepository motsEcartes;
 
     @Inject
     ReferentielsService referentiels;
@@ -273,6 +280,8 @@ public class PreparationsService {
         usages.libererPreparationMot(ligne.id());
         preparationMots.delete(ligne);
         preparationMots.flush();
+        // Un Mot retiré redevient candidat de l'Encart « mots déjà illustrés » (story 2.9), même s'il avait été écarté.
+        motsEcartes.retirer(preparation.id(), ligne.motId());
         return retire;
     }
 
@@ -355,6 +364,94 @@ public class PreparationsService {
         ImageVue image = usages.lierImage(new LierImageCommande(preparation.id(), ligne.id(), commande.imageId(),
                 preparation.albumId(), preparation.section(), OrigineLien.REUTILISEE));
         return vue(ligne, mot, sens, image);
+    }
+
+    /**
+     * Mots déjà illustrés pour l'Album de la Préparation {@code id} de l'enseignant courant (Encart, story 2.9), calculés
+     * par {@code vocabulaire} seul ({@link DetectionMots#motsDejaIllustres}, AD-2), sans les Mots déjà dans la
+     * Préparation ni ceux qui en ont été écartés. Lecture seule, sans verrou : rien n'est écrit.
+     *
+     * @throws ErreurMetier {@code 404 ressource.introuvable} si la Préparation n'existe pas ou appartient à un collègue
+     */
+    @Transactional
+    public List<MotDejaIllustreVue> reprises(UUID id) {
+        Preparation preparation = mienne(id);
+        return detectionMots.motsDejaIllustres(preparation.albumId(), preparation.section(), preparation.id(),
+                exclusDesReprises(preparation));
+    }
+
+    /**
+     * « Tout reprendre » (Encart, story 2.9) : parmi les Mots {@code motIds}, ceux qui sont encore candidats
+     * ({@link #reprises}) sont ajoutés en fin de Préparation {@code id} de l'enseignant courant, dans l'ordre de l'Encart,
+     * chacun avec le Sens de son Image proposée, recalculée, et cette Image liée avec l'origine {@code reutilisee}, comme
+     * {@link #reutiliserImage}. Les autres (déjà présents, plus candidats, écartés) sont ignorés, ainsi qu'un Mot dont
+     * l'Image cesse d'être proposable sous verrou. Une seule transaction, Préparation verrouillée.
+     *
+     * @return les Mots ajoutés, dans l'ordre
+     * @throws ErreurMetier {@code 404 ressource.introuvable} si la Préparation n'existe pas ou appartient à un collègue
+     */
+    @Transactional
+    public List<MotPreparationVue> reprendre(UUID id, Set<UUID> motIds) {
+        Preparation preparation = verrouillee(id);
+        List<MotPreparationVue> ajoutes = new ArrayList<>();
+        for (MotDejaIllustreVue candidat : detectionMots.motsDejaIllustres(preparation.albumId(),
+                preparation.section(), preparation.id(), exclusDesReprises(preparation))) {
+            if (!motIds.contains(candidat.mot().id())) {
+                continue;
+            }
+            PreparationMot ligne = PreparationMot.nouveau(preparationMots.nouvelIdentifiant(), preparation.id(),
+                    candidat.mot().id(), preparationMots.dernierOrdre(preparation.id()) + 1,
+                    preparation.themeDefautId());
+            preparationMots.persistAndFlush(ligne);
+            SensVue sens = usages.retenirSens(new RetenirSensCommande(preparation.id(), ligne.id(),
+                    candidat.mot().id(), preparation.albumId(), preparation.section(), candidat.sens().id()));
+            Optional<ImageVue> image = usages.lierImageSiPossible(new LierImageCommande(preparation.id(), ligne.id(),
+                    candidat.image().image().id(), preparation.albumId(), preparation.section(),
+                    OrigineLien.REUTILISEE));
+            if (image.isEmpty()) {
+                usages.libererPreparationMot(ligne.id());
+                preparationMots.delete(ligne);
+                preparationMots.flush();
+                continue;
+            }
+            ajoutes.add(vue(ligne, candidat.mot(), sens, image.get()));
+        }
+        return ajoutes;
+    }
+
+    /**
+     * Écarte le Mot {@code motId} de l'Encart « mots déjà illustrés » de la Préparation {@code id} de l'enseignant
+     * courant (story 2.9) ; sans effet s'il l'est déjà. Rien n'est supprimé de la banque. Préparation verrouillée, comme
+     * pour « Tout reprendre ».
+     *
+     * @throws ErreurMetier {@code 404 ressource.introuvable} si la Préparation n'existe pas ou appartient à un
+     *         collègue, ou si le Mot n'existe pas
+     */
+    @Transactional
+    public void ecarter(UUID id, UUID motId) {
+        Preparation preparation = verrouillee(id);
+        if (motId == null || !lexique.mots(List.of(motId)).containsKey(motId)) {
+            throw new ErreurMetier(404, CODE_INTROUVABLE, "Aucun mot ne porte cet identifiant");
+        }
+        motsEcartes.ecarter(preparation.id(), motId);
+    }
+
+    /**
+     * Rend le Mot {@code motId} à l'Encart « mots déjà illustrés » de la Préparation {@code id} de l'enseignant courant
+     * (« Annuler », story 2.9) ; sans effet s'il n'était pas écarté. Préparation verrouillée.
+     *
+     * @throws ErreurMetier {@code 404 ressource.introuvable} si la Préparation n'existe pas ou appartient à un collègue
+     */
+    @Transactional
+    public void annulerEcart(UUID id, UUID motId) {
+        motsEcartes.retirer(verrouillee(id).id(), motId);
+    }
+
+    /** Mots que l'Encart ne propose pas pour cette Préparation : ceux qui y figurent déjà et ceux qui en sont écartés. */
+    private Set<UUID> exclusDesReprises(Preparation preparation) {
+        Set<UUID> exclus = new HashSet<>(motsEcartes.de(preparation.id()));
+        preparationMots.deLaPreparation(preparation.id()).forEach(ligne -> exclus.add(ligne.motId()));
+        return exclus;
     }
 
     /**

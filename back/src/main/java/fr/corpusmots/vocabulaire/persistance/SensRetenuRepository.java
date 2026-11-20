@@ -53,6 +53,23 @@ public class SensRetenuRepository implements PanacheRepositoryBase<SensRetenu, U
                 .getResultList();
     }
 
+    /**
+     * Sens que l'enseignant a retenus dans ses Préparations de l'Album {@code albumId}, sauf la Préparation
+     * {@code saufPreparationId}, pour des Mots de Préparation qui portent une Image liée (story 2.9). Jamais ceux d'un
+     * collègue (AD-2).
+     */
+    public Set<UUID> sensIllustresDansLAlbum(UUID enseignantId, UUID albumId, UUID saufPreparationId) {
+        return Set.copyOf(getEntityManager().createQuery(
+                "select distinct r.sensId from SensRetenu r where r.enseignantId = :enseignant"
+                        + " and r.albumId = :album and r.preparationId <> :preparation"
+                        + " and exists (select 1 from LienImage l where l.preparationMotId = r.preparationMotId)",
+                UUID.class)
+                .setParameter("enseignant", enseignantId)
+                .setParameter("album", albumId)
+                .setParameter("preparation", saufPreparationId)
+                .getResultList());
+    }
+
     /** Sens retenu de chacun de ces Mots de Préparation ; ceux qui n'en ont pas sont absents. */
     public Map<UUID, Sens> sensDe(Collection<UUID> preparationMotIds) {
         if (preparationMotIds.isEmpty()) {

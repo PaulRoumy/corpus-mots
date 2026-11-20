@@ -1040,6 +1040,44 @@ components:
           minimum: 0
           description: "Temps passé en minutes, multiple de 30 (demi-heure), null\
             \ s'il n'est pas renseigné"
+    RepriseMotPreparationDto:
+      type: object
+      required:
+      - motId
+      - forme
+      - sens
+      - image
+      properties:
+        motId:
+          description: "Identifiant du Mot du Lexique, partagé par l'école"
+          type: string
+          $ref: "#/components/schemas/UUID"
+        forme:
+          type: string
+          description: "Première forme saisie dans l'école, sans article"
+        sens:
+          description: "Sens de l'Image proposée, retenu si le Mot est repris"
+          type: object
+          $ref: "#/components/schemas/SensPreparationDto"
+        image:
+          description: "Image proposée, la première selon le classement de la détection\
+            \ parmi les Images proposables d'un Sens lié à l'Album"
+          type: object
+          $ref: "#/components/schemas/DetectionImageDto"
+    RepriseMotsPreparationDto:
+      type: object
+      required:
+      - motIds
+      properties:
+        motIds:
+          type: array
+          items:
+            type: string
+            format: uuid
+            pattern: "[a-fA-F0-9]{8}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{12}"
+          description: "Identifiants des Mots du Lexique à reprendre, de 1 à 200"
+          maxItems: 200
+          minItems: 1
     RetablissementMotPreparationDto:
       type: object
       required:
@@ -1961,6 +1999,48 @@ paths:
                 $ref: "#/components/schemas/DetectionPreparationDto"
       tags:
       - Preparations Resource
+  /api/preparations/{id}/ecartes/{motId}:
+    put:
+      summary: "Écarter un Mot de l'Encart « mots déjà illustrés » d'une Préparation\
+        \ de l'enseignant connecté ; sans effet s'il l'est déjà, rien n'est supprimé\
+        \ de la banque"
+      operationId: ecarterMotPreparation
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          $ref: "#/components/schemas/UUID"
+      - name: motId
+        in: path
+        required: true
+        schema:
+          $ref: "#/components/schemas/UUID"
+      responses:
+        "204":
+          description: Mot écarté
+      tags:
+      - Preparations Resource
+    delete:
+      summary: Rendre à l'Encart « mots déjà illustrés » un Mot écarté d'une Préparation
+        de l'enseignant connecté ; sans effet s'il ne l'était pas
+      operationId: annulerEcartMotPreparation
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          $ref: "#/components/schemas/UUID"
+      - name: motId
+        in: path
+        required: true
+        schema:
+          $ref: "#/components/schemas/UUID"
+      responses:
+        "204":
+          description: Mot rendu à l'Encart
+      tags:
+      - Preparations Resource
   /api/preparations/{id}/mots:
     get:
       summary: "Mots d'une Préparation de l'enseignant connecté, dans l'ordre de saisie"
@@ -2313,6 +2393,59 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/PreparationDto"
+        "400":
+          description: Bad Request
+      tags:
+      - Preparations Resource
+  /api/preparations/{id}/reprises:
+    get:
+      summary: "Mots déjà illustrés pour l'Album d'une Préparation de l'enseignant\
+        \ connecté, chacun avec son Image proposée, par forme ; sans les Mots déjà\
+        \ présents ni écartés ; rien n'est écrit"
+      operationId: listerReprisesPreparation
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          $ref: "#/components/schemas/UUID"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/RepriseMotPreparationDto"
+      tags:
+      - Preparations Resource
+    post:
+      summary: "Ajouter en fin de Préparation de l'enseignant connecté ceux de ces\
+        \ Mots qui sont encore candidats, dans l'ordre de l'Encart, chacun avec son\
+        \ Image proposée (origine reutilisee) ; les autres sont ignorés"
+      operationId: reprendreMotsPreparation
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          $ref: "#/components/schemas/UUID"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RepriseMotsPreparationDto"
+      responses:
+        "200":
+          description: "Mots ajoutés, dans l'ordre ; vide si aucun n'était plus candidat"
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/MotPreparationDto"
         "400":
           description: Bad Request
       tags:

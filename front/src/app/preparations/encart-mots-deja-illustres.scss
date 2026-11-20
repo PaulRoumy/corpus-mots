@@ -1,0 +1,111 @@
+// Encart « mots déjà illustrés » (DESIGN.md › encart-mots-deja-illustres : `tertiary-container`, `on-tertiary-container`,
+// arrondi `lg`), sous le Champ de saisie rapide : titre et « Tout reprendre », puis une rangée par Mot avec sa vignette
+// de 56 px, sa forme en cursive, son Sens et ses boutons.
+:host {
+  display: flex;
+  flex-direction: column;
+  gap: var(--cm-espace-3);
+}
+
+.encart {
+  display: flex;
+  flex-direction: column;
+  gap: var(--cm-espace-3);
+  padding: var(--cm-espace-4);
+  border-radius: var(--cm-arrondi-lg);
+  background: var(--mat-sys-tertiary-container);
+  color: var(--mat-sys-on-tertiary-container);
+}
+
+.encart__tete {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--cm-espace-3);
+}
+
+.encart__titre {
+  display: flex;
+  align-items: center;
+  gap: var(--cm-espace-2);
+  margin: 0;
+  font: var(--cm-typo-title);
+
+  mat-icon {
+    flex: none;
+    width: var(--cm-taille-icone);
+    height: var(--cm-taille-icone);
+  }
+}
+
+.encart__liste {
+  display: flex;
+  flex-direction: column;
+  gap: var(--cm-espace-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.encart__mot {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--cm-espace-3);
+}
+
+.encart__photo {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: var(--cm-taille-vignette-encart);
+  height: var(--cm-taille-vignette-encart);
+  overflow: hidden;
+  border-radius: var(--cm-arrondi-sm);
+  background: var(--mat-sys-surface);
+  color: var(--mat-sys-on-surface-variant);
+}
+
+.encart__texte {
+  display: flex;
+  flex: 1 1 auto;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--cm-espace-1) var(--cm-espace-3);
+  min-width: 0;
+}
+
+.encart__forme {
+  overflow-wrap: anywhere;
+  font: var(--cm-typo-word-cursive);
+}
+
+.encart__sens {
+  font: var(--cm-typo-body-sm);
+}
+
+// Marque « déjà utilisée » : icône et texte, jamais la couleur seule.
+.encart__marque {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--cm-espace-1);
+  height: var(--cm-hauteur-badge);
+  padding: 0 var(--cm-espace-2);
+  border-radius: var(--cm-arrondi-sm);
+  background: var(--mat-sys-surface);
+  color: var(--mat-sys-on-surface);
+  font: var(--cm-typo-label-sm);
+  white-space: nowrap;
+
+  mat-icon {
+    width: var(--cm-taille-icone-badge);
+    height: var(--cm-taille-icone-badge);
+  }
+}
+
+.encart__actions {
+  display: flex;
+  flex: none;
+  gap: var(--cm-espace-2);
+}

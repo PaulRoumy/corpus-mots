@@ -39,4 +39,9 @@ public class SensRepository implements PanacheRepositoryBase<Sens, UUID> {
     public List<Sens> deMots(Collection<UUID> motIds) {
         return motIds.isEmpty() ? List.of() : list("motId in ?1", motIds);
     }
+
+    /** Sens de ces identifiants ; ceux qui n'existent pas sont absents. */
+    public List<Sens> lire(Collection<UUID> ids) {
+        return ids.isEmpty() ? List.of() : list("id in ?1", ids);
+    }
 }

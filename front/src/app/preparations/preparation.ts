@@ -73,6 +73,7 @@ import { CarteMot } from './carte-mot';
 import { ChampNomModule } from './champ-nom-module';
 import { map } from 'rxjs';
 import { ouvrirDialogueCorrigerAlbum } from './corriger-album-dialogue';
+import { EncartMotsDejaIllustres } from './encart-mots-deja-illustres';
 import { libelleMots } from './preparations';
 import type { PanneauChoixImage } from './panneau-choix-image';
 import { AjoutAvecSens, ChoixImage, PanneauDetection } from './panneau-detection';
@@ -330,6 +331,10 @@ type Source = 'module' | 'theme';
  * rendent le focus à la vignette ; retirer le Mot le ferme aussi. Sous 600 px de large, le panneau couvre l'écran et
  * la page dessous est inerte.
  *
+ * Sous le champ, l'Encart « mots déjà illustrés » (story 2.9, `EncartMotsDejaIllustres`) propose les Mots déjà
+ * illustrés pour l'Album ; les Mots qu'il reprend arrivent en fin de Grille et le compteur suit. Quand il disparaît
+ * après un geste, le focus revient au Champ de saisie rapide.
+ *
  * Le Temps passé est un champ texte en mode de saisie décimal plutôt qu'un `type="number"` : celui-ci, selon la langue
  * du navigateur, refuse la virgule sans le dire (sa valeur devient vide, comme un champ effacé).
  */
@@ -341,6 +346,7 @@ type Source = 'module' | 'theme';
     CarteMot,
     ChampNomModule,
     ChampThemes,
+    EncartMotsDejaIllustres,
     MatButtonModule,
     MatFormFieldModule,
     MatIconModule,
@@ -593,6 +599,13 @@ type Source = 'module' | 'theme';
               (retenir)="retenirImage($event)"
               (focusChamp)="rendreFocusChamp()"
             />
+            <app-encart-mots-deja-illustres
+              [preparationId]="courante.id"
+              [motsPresents]="motsPresents()"
+              (ajoutes)="ajouterReprises($event)"
+              (annonce)="annoncer($event)"
+              (focusChamp)="rendreFocusChamp()"
+            />
             @if (motsCharges.length > 0) {
               <section class="mots" aria-labelledby="mots-titre">
                 <h2 id="mots-titre" class="mots__titre">Mots de la préparation</h2>
@@ -751,7 +764,12 @@ export class Preparation {
       ? (this.preparation()?.nombreIllustres ?? 0)
       : mots.filter((mot) => mot.illustre).length;
   });
+  /** Mots du Lexique de la Grille : l'Encart « mots déjà illustrés » ne les propose plus. */
+  protected readonly motsPresents = computed(
+    () => new Set((this.mots() ?? []).map((mot) => mot.motId)) as ReadonlySet<string>,
+  );
   private readonly saisieRapide = viewChild(SaisieRapide);
+  private readonly encart = viewChild(EncartMotsDejaIllustres);
   private readonly panneauDetection = viewChild(PanneauDetection);
   /** Saisie en cours du Champ de saisie rapide, suivie par le Panneau de détection. */
   protected readonly saisieTapee = signal('');
@@ -1001,6 +1019,13 @@ export class Preparation {
       void this.envoyerAjouts();
     });
 
+  /** Mots repris depuis l'Encart « mots déjà illustrés » : ils arrivent à leur place, en fin de Grille. */
+  protected ajouterReprises(ajoutes: readonly MotPreparationDto[]): void {
+    this.mots.update((mots) =>
+      mots === null ? mots : ajoutes.reduce((grille, ajoute) => inserer(grille, ajoute), mots),
+    );
+  }
+
   /** Puce de Sens choisie ou Création de Sens repliée : le focus revient au Champ de saisie rapide. */
   protected rendreFocusChamp(): void {
     this.saisieRapide()?.focus();
@@ -1177,6 +1202,8 @@ export class Preparation {
         motPreparationId: mot.id,
       });
       if (numero === this.dernierChargement) {
+        // Le Mot retiré redevient candidat de l'Encart « mots déjà illustrés ».
+        void this.encart()?.recharger();
         this.bandeauAnnuler.afficher(
           `« ${retire.forme} » retiré de la préparation.`,
           () => void this.retablirMot(preparationId, retire, numero),
@@ -1217,6 +1244,7 @@ export class Preparation {
       });
       if (numero === this.dernierChargement) {
         this.mots.update((mots) => (mots === null ? mots : inserer(mots, retabli)));
+        void this.encart()?.recharger();
         // L'Image retirée qui n'est plus proposable ou a changé de Sens n'est pas reliée : le Mot revient « à illustrer ».
         this.annonce.set(
           retire.image && !retabli.image
@@ -1427,7 +1455,7 @@ export class Preparation {
    * Annonce `message` dans la région `aria-live` : vidée d'abord, puis remplie après le rendu, pour qu'un même message
    * (deuxième changement d'Image du même Mot) soit annoncé de nouveau.
    */
-  private annoncer(message: string): void {
+  protected annoncer(message: string): void {
     this.annonce.set('');
     afterNextRender(() => this.annonce.set(message), { injector: this.injecteur });
   }

@@ -20,9 +20,12 @@ import jakarta.ws.rs.PathParam;
 import jakarta.ws.rs.Produces;
 import jakarta.ws.rs.QueryParam;
 import jakarta.ws.rs.core.MediaType;
+import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Objects;
 import java.util.UUID;
 import org.eclipse.microprofile.openapi.annotations.Operation;
+import org.eclipse.microprofile.openapi.annotations.enums.SchemaType;
 import org.eclipse.microprofile.openapi.annotations.media.Content;
 import org.eclipse.microprofile.openapi.annotations.media.Schema;
 import org.eclipse.microprofile.openapi.annotations.parameters.Parameter;
@@ -37,6 +40,9 @@ import org.jboss.resteasy.reactive.ResponseStatus;
 @Path("/preparations")
 @Produces(MediaType.APPLICATION_JSON)
 public class PreparationsResource {
+
+    /** Nombre maximal de Mots d'un « Tout reprendre » (story 2.9). */
+    static final int REPRISES_MAXIMUM = 200;
 
     @Inject
     PreparationsService preparations;
@@ -182,6 +188,58 @@ public class PreparationsResource {
             throw new ErreurMetier(400, "requete.invalide", "Le mot et l'image sont obligatoires");
         }
         return MotPreparationDto.de(preparations.reutiliserImage(id, reutilisation.enCommande()));
+    }
+
+    @GET
+    @Path("/{id}/reprises")
+    @Operation(operationId = "listerReprisesPreparation",
+            summary = "Mots déjà illustrés pour l'Album d'une Préparation de l'enseignant connecté, chacun avec son"
+                    + " Image proposée, par forme ; sans les Mots déjà présents ni écartés ; rien n'est écrit")
+    public List<RepriseMotPreparationDto> reprises(@PathParam("id") UUID id) {
+        return preparations.reprises(id).stream().map(RepriseMotPreparationDto::de).toList();
+    }
+
+    @POST
+    @Path("/{id}/reprises")
+    @Consumes(MediaType.APPLICATION_JSON)
+    @Operation(operationId = "reprendreMotsPreparation",
+            summary = "Ajouter en fin de Préparation de l'enseignant connecté ceux de ces Mots qui sont encore"
+                    + " candidats, dans l'ordre de l'Encart, chacun avec son Image proposée (origine reutilisee) ; les"
+                    + " autres sont ignorés")
+    @APIResponse(responseCode = "200", description = "Mots ajoutés, dans l'ordre ; vide si aucun n'était plus candidat",
+            content = @Content(mediaType = MediaType.APPLICATION_JSON,
+                    schema = @Schema(type = SchemaType.ARRAY, implementation = MotPreparationDto.class)))
+    public List<MotPreparationDto> reprendre(@PathParam("id") UUID id,
+            @RequestBody(required = true) RepriseMotsPreparationDto reprise) {
+        if (reprise == null || reprise.motIds() == null || reprise.motIds().isEmpty()
+                || reprise.motIds().size() > REPRISES_MAXIMUM || reprise.motIds().stream().anyMatch(Objects::isNull)) {
+            throw new ErreurMetier(400, "requete.invalide",
+                    "La liste des mots doit compter de 1 à " + REPRISES_MAXIMUM + " identifiants");
+        }
+        return preparations.reprendre(id, new LinkedHashSet<>(reprise.motIds())).stream()
+                .map(MotPreparationDto::de).toList();
+    }
+
+    @PUT
+    @Path("/{id}/ecartes/{motId}")
+    @ResponseStatus(204)
+    @Operation(operationId = "ecarterMotPreparation",
+            summary = "Écarter un Mot de l'Encart « mots déjà illustrés » d'une Préparation de l'enseignant connecté ;"
+                    + " sans effet s'il l'est déjà, rien n'est supprimé de la banque")
+    @APIResponse(responseCode = "204", description = "Mot écarté")
+    public void ecarter(@PathParam("id") UUID id, @PathParam("motId") UUID motId) {
+        preparations.ecarter(id, motId);
+    }
+
+    @DELETE
+    @Path("/{id}/ecartes/{motId}")
+    @ResponseStatus(204)
+    @Operation(operationId = "annulerEcartMotPreparation",
+            summary = "Rendre à l'Encart « mots déjà illustrés » un Mot écarté d'une Préparation de l'enseignant"
+                    + " connecté ; sans effet s'il ne l'était pas")
+    @APIResponse(responseCode = "204", description = "Mot rendu à l'Encart")
+    public void annulerEcart(@PathParam("id") UUID id, @PathParam("motId") UUID motId) {
+        preparations.annulerEcart(id, motId);
     }
 
     @POST

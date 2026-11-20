@@ -56,6 +56,20 @@ public class ImageRepository implements PanacheRepositoryBase<Image, UUID> {
                 .getResultList();
     }
 
+    /**
+     * Images dont l'Album d'origine est {@code albumId} (images d'album seulement), avec leurs Sections chargées dans la
+     * même requête, de tous les enseignants et à tous les états : l'appelant les filtre par {@code VisibiliteImages}
+     * (AD-2).
+     */
+    public List<Image> dAlbumDOrigineAvecSections(UUID albumId, String typeImageAlbum) {
+        return getEntityManager().createQuery(
+                "select distinct i from Image i left join fetch i.sections where i.albumId = :album"
+                        + " and i.typeImage = :type", Image.class)
+                .setParameter("album", albumId)
+                .setParameter("type", typeImageAlbum)
+                .getResultList();
+    }
+
     /** Vrai si au moins une Image, de n'importe quel enseignant et à n'importe quel état, porte le Thème. */
     public boolean porteTheme(UUID themeId) {
         return (Boolean) getEntityManager()

@@ -16,6 +16,7 @@ import { DetectionMotDto } from '../api/models/detection-mot-dto';
 import { ModuleDto } from '../api/models/module-dto';
 import { MotPreparationDto } from '../api/models/mot-preparation-dto';
 import { PreparationDto } from '../api/models/preparation-dto';
+import { RepriseMotPreparationDto } from '../api/models/reprise-mot-preparation-dto';
 import { ThemeDto } from '../api/models/theme-dto';
 import { BandeauAnnuler } from '../commun/bandeau-annuler/bandeau-annuler';
 import { CompteCourant } from '../commun/compte-courant';
@@ -146,6 +147,9 @@ describe('Preparation (En-tête)', () => {
   afterEach(() => {
     // Chaque Carte « à illustrer » cherche ses suggestions ARASAAC (story 2.4) : vérifié par `suggestions-arasaac.spec`.
     serveur.match((requete) => requete.url.startsWith('/api/arasaac/'));
+    // L'Encart « mots déjà illustrés » lit ses candidats (story 2.9) : vérifié par `encart-mots-deja-illustres.spec`
+    // et par le bloc « Encart » ci-dessous.
+    serveur.match((requete) => requete.url.endsWith('/reprises'));
     serveur.verify();
   });
 
@@ -2803,6 +2807,192 @@ describe('Preparation (En-tête)', () => {
         serveur.expectNone(URL_MOTS);
         expect(document.activeElement).toBe(champSaisie());
       });
+    });
+  });
+
+  describe('Encart « mots déjà illustrés » (story 2.9)', () => {
+    const URL_REPRISES = `/api/preparations/${ID}/reprises`;
+    const champSaisie = () => racine.querySelector<HTMLInputElement>('app-saisie-rapide input')!;
+    const original = { creer: URL.createObjectURL, revoquer: URL.revokeObjectURL };
+
+    /** Candidat `forme` (identifiants sans accents), avec une Image d'album. */
+    function candidat(forme: string, index: number): RepriseMotPreparationDto {
+      const suffixe = String(index).padStart(4, '0');
+      return {
+        motId: `0190f0a0-0000-7000-8000-0000000a${suffixe}`,
+        forme,
+        sens: {
+          id: `0190f0a0-0000-7000-8000-0000000b${suffixe}`,
+          libelle: forme,
+          categorie: 'nom',
+        },
+        image: {
+          id: `0190f0a0-0000-7000-8000-0000000c${suffixe}`,
+          proprietaireId: MOI,
+          etat: 'privee',
+          aRemplacer: null,
+          reutilisable: true,
+          typeImage: 'image_album',
+          aCompleter: false,
+          sections: ['ms'],
+          albumOrigine: { id: ALBUM, titre: 'La Roule Galette' },
+          sens: {
+            id: `0190f0a0-0000-7000-8000-0000000b${suffixe}`,
+            libelle: forme,
+            categorie: 'nom',
+            aCompleter: false,
+          },
+          dejaUtilisee: false,
+        },
+      };
+    }
+
+    /** Mot ajouté par la reprise de `reprise`, à la place `ordre`, illustré par son Image. */
+    function repris(reprise: RepriseMotPreparationDto, ordre: number): MotPreparationDto {
+      return {
+        id: `mp-${reprise.motId}`,
+        motId: reprise.motId,
+        forme: reprise.forme,
+        ordre,
+        sens: reprise.sens,
+        illustre: true,
+        image: {
+          id: reprise.image.id,
+          proprietaireId: MOI,
+          etat: 'privee',
+          aRemplacer: null,
+          reutilisable: true,
+          typeImage: 'image_album',
+          aCompleter: false,
+        },
+      };
+    }
+
+    const NEUF = [
+      'chemin',
+      'etale',
+      'four',
+      'galette',
+      'lapin',
+      'loup',
+      'ours',
+      'renard',
+      'sentier',
+    ].map((forme, index) => candidat(forme, index + 1));
+
+    beforeEach(() => {
+      URL.createObjectURL = vi.fn(() => 'blob:http://localhost/1');
+      URL.revokeObjectURL = vi.fn();
+    });
+
+    afterEach(() => {
+      serveur.match((requete) => requete.url.startsWith('/api/images/'));
+      URL.createObjectURL = original.creer;
+      URL.revokeObjectURL = original.revoquer;
+    });
+
+    it('nouvelle Préparation avec 9 candidats : l’Encart s’affiche sous le champ', async () => {
+      await ouvrir();
+      serveur.expectOne(URL_REPRISES).flush(NEUF);
+      await stabiliser();
+
+      const saisie = racine.querySelector('app-saisie-rapide')!;
+      const encart = racine.querySelector('app-encart-mots-deja-illustres')!;
+      expect(
+        saisie.compareDocumentPosition(encart) & Node.DOCUMENT_POSITION_FOLLOWING,
+      ).toBeTruthy();
+      expect(texte('.encart__titre')).toBe('9 mots déjà illustrés pour cet album');
+    });
+
+    it('aucun candidat : pas d’Encart', async () => {
+      await ouvrir();
+      serveur.expectOne(URL_REPRISES).flush([]);
+      await stabiliser();
+
+      expect(racine.querySelector('section.encart')).toBeNull();
+    });
+
+    it('Tout reprendre : les 9 Mots arrivent dans la Grille avec leur Image, le compteur suit, l’Encart disparaît', async () => {
+      await ouvrir(PREPARATION, MODULES, THEMES, albumDe(PREPARATION), [MOT_CITROUILLE]);
+      serveur.expectOne(URL_REPRISES).flush(NEUF);
+      await stabiliser();
+
+      [...racine.querySelectorAll<HTMLButtonElement>('.encart button')]
+        .find((bouton) => bouton.textContent?.trim() === 'Tout reprendre')!
+        .click();
+      const requete = serveur.expectOne((r) => r.method === 'POST' && r.url === URL_REPRISES);
+      expect(requete.request.body).toEqual({ motIds: NEUF.map((reprise) => reprise.motId) });
+      requete.flush(NEUF.map((reprise, index) => repris(reprise, index + 2)));
+      await stabiliser();
+
+      expect(cartes()).toEqual(['citrouille', ...NEUF.map((reprise) => reprise.forme)]);
+      expect(texte('.entete__compteur')).toBe('10 mots, 9 déjà illustrés');
+      expect(racine.querySelector('section.encart')).toBeNull();
+      expect(document.activeElement).toBe(champSaisie());
+    });
+
+    it('Reprendre : le Mot arrive en fin de Grille, le titre passe à 8, un Mot saisi quitte l’Encart', async () => {
+      await ouvrir(PREPARATION, MODULES, THEMES, albumDe(PREPARATION), [MOT_CITROUILLE]);
+      serveur.expectOne(URL_REPRISES).flush(NEUF);
+      await stabiliser();
+
+      racine.querySelector<HTMLButtonElement>('button[aria-label="Reprendre « etale »"]')!.click();
+      const requete = serveur.expectOne(`${URL_MOTS}/reutilisation`);
+      expect(requete.request.body).toEqual({ motId: NEUF[1].motId, imageId: NEUF[1].image.id });
+      requete.flush(repris(NEUF[1], 2));
+      await stabiliser();
+
+      expect(cartes()).toEqual(['citrouille', 'etale']);
+      expect(texte('.entete__compteur')).toBe('2 mots, 1 déjà illustré');
+      expect(texte('.encart__titre')).toBe('8 mots déjà illustrés pour cet album');
+      expect(document.activeElement).toBe(
+        racine.querySelector('button[aria-label="Reprendre « four »"]'),
+      );
+
+      champSaisie().value = 'four';
+      champSaisie().dispatchEvent(new Event('input'));
+      champSaisie().dispatchEvent(
+        new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }),
+      );
+      await stabiliser();
+      serveur
+        .expectOne((r) => r.method === 'POST' && r.url === URL_MOTS)
+        .flush({ ...motPreparation('four', 3), motId: NEUF[2].motId });
+      await stabiliser();
+      serveur.match((r) => r.url.endsWith('/detection'));
+
+      expect(texte('.encart__titre')).toBe('7 mots déjà illustrés pour cet album');
+    });
+
+    it('un Mot retiré de la Grille revient dans l’Encart (relu après le retrait et après son « Annuler »)', async () => {
+      const afficher = vi.fn<(message: string, annuler: () => unknown) => void>();
+      vi.spyOn(TestBed.inject(BandeauAnnuler), 'afficher').mockImplementation(afficher);
+      const etale = repris(NEUF[1], 2);
+      await ouvrir(PREPARATION, MODULES, THEMES, albumDe(PREPARATION), [MOT_CITROUILLE, etale]);
+      serveur.expectOne(URL_REPRISES).flush([]);
+      await stabiliser();
+
+      racine
+        .querySelector<HTMLButtonElement>(
+          'app-carte-mot button[aria-label="Retirer « etale » de la préparation"]',
+        )!
+        .click();
+      await stabiliser();
+      serveur.expectOne(`${URL_MOTS}/${etale.id}`).flush(etale);
+      await stabiliser();
+      serveur.expectOne(URL_REPRISES).flush([NEUF[1]]);
+      await stabiliser();
+
+      expect(texte('.encart__titre')).toBe('1 mot déjà illustré pour cet album');
+
+      afficher.mock.calls[0][1]();
+      serveur.expectOne(`${URL_MOTS}/retablissement`).flush(etale);
+      await stabiliser();
+      serveur.expectOne(URL_REPRISES).flush([]);
+      await stabiliser();
+
+      expect(cartes()).toEqual(['citrouille', 'etale']);
+      expect(racine.querySelector('section.encart')).toBeNull();
     });
   });
 

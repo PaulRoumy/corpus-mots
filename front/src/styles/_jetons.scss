@@ -210,6 +210,8 @@ $typographie-material: (
   --cm-hauteur-photo-detection: 96px;
   --cm-taille-image-detection: 80px;
   --cm-epaisseur-anneau-proposition: 2px;
+  // Encart « mots déjà illustrés » (DESIGN.md › encart-mots-deja-illustres, story 2.9) : vignettes de 56 px.
+  --cm-taille-vignette-encart: 56px;
   // Bouton texte du Thème d'une Carte de Mot (story 2.3, partie 3) : cible de 24 px au moins (WCAG 2.5.8).
   --cm-hauteur-bouton-theme-mot: 24px;
 

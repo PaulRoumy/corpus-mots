@@ -20,6 +20,7 @@ import jakarta.transaction.Transactional;
 import java.text.Collator;
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -175,12 +176,7 @@ public class DetectionMots {
         retenus.stream().map(SensRetenu::albumId).forEach(albumIds::add);
         Map<UUID, AlbumVue> albums = referentiels.albums(albumIds);
 
-        Comparator<Image> classement = Comparator
-                .comparing((Image image) -> !image.sections().contains(section))
-                .thenComparing(image -> !lieesAilleurs.contains(image.id()))
-                .thenComparing(image -> !enseignant.equals(image.proprietaireId()))
-                .thenComparing(Image::creeLe, Comparator.nullsLast(Comparator.reverseOrder()))
-                .thenComparing(Image::id, Comparator.reverseOrder());
+        Comparator<Image> classement = classement(section, lieesAilleurs, enseignant);
         Collator collation = Collator.getInstance(Locale.FRENCH);
         List<MotDetecteVue> detectes = new ArrayList<>();
         for (Mot mot : trouves.stream()
@@ -211,15 +207,86 @@ public class DetectionMots {
                     .toList();
             List<ImageDetecteeVue> imagesMontrees = imagesDuMot.stream()
                     .filter(image -> sensFiltre == null || sensFiltre.equals(image.sensId()))
-                    .map(image -> new ImageDetecteeVue(Images.vue(image, enseignant, visibilite),
-                            image.sections().stream().sorted().toList(),
-                            albumDOrigine(image) == null ? null : albums.get(albumDOrigine(image)),
-                            propose(sensParId.get(image.sensId())), dejaUtilisees.contains(image.id())))
+                    .map(image -> imageDetectee(image, enseignant, albums, sensParId, dejaUtilisees))
                     .toList();
             detectes.add(new MotDetecteVue(new MotVue(mot.id(), mot.forme()), sensDuMot, albumsMontres,
                     imagesMontrees));
         }
         return detectes;
+    }
+
+    /**
+     * Mots déjà illustrés pour l'Album {@code albumId} (Encart de la Préparation {@code preparationId}, story 2.9), par
+     * forme. Les Sens liés à l'Album d'un Mot sont ceux de ses Images {@link VisibiliteImages#proposable proposables}
+     * dont l'Album d'origine est cet Album, et ceux que l'enseignant courant a retenus pour ce Mot dans ses autres
+     * Préparations de cet Album, quand ce Mot y porte une Image ; jamais ceux des Préparations d'un collègue (AD-2). Un
+     * Mot est candidat s'il a au moins une Image proposable d'un Sens lié ; son Image proposée est la première de
+     * celles-ci selon le classement de la détection pour la Section {@code section}. Les Mots de {@code exclus} (déjà
+     * dans la Préparation, écartés) sont omis. Lecture seule ; liste vide sans Album.
+     */
+    @Transactional
+    public List<MotDejaIllustreVue> motsDejaIllustres(UUID albumId, Section section, UUID preparationId,
+            Set<UUID> exclus) {
+        UUID enseignant = enseignantCourant.id();
+        if (enseignant == null || albumId == null) {
+            return List.of();
+        }
+        Set<UUID> sensLies = new HashSet<>();
+        images.dAlbumDOrigineAvecSections(albumId, TypeImage.IMAGE_ALBUM.valeur()).stream()
+                .filter(image -> albumId.equals(albumDOrigine(image)))
+                .filter(image -> visibilite.proposable(image, enseignant))
+                .forEach(image -> sensLies.add(image.sensId()));
+        sensLies.addAll(sensRetenus.sensIllustresDansLAlbum(enseignant, albumId, preparationId));
+        Map<UUID, Sens> sensParId = sens.lire(sensLies).stream()
+                .filter(lie -> !exclus.contains(lie.motId()))
+                .collect(Collectors.toMap(Sens::id, Function.identity()));
+        List<Image> proposables = images.deSensAvecSections(sensParId.keySet()).stream()
+                .filter(image -> visibilite.proposable(image, enseignant))
+                .toList();
+        if (proposables.isEmpty()) {
+            return List.of();
+        }
+        List<UUID> imageIds = proposables.stream().map(Image::id).toList();
+        Comparator<Image> classement = classement(section, liens.lieesHorsAlbum(imageIds, albumId), enseignant);
+        Map<UUID, Image> proposeeParMot = new HashMap<>();
+        proposables.forEach(image -> proposeeParMot.merge(sensParId.get(image.sensId()).motId(), image,
+                (une, autre) -> classement.compare(une, autre) <= 0 ? une : autre));
+        Set<UUID> dejaUtilisees = liens.lieesPar(imageIds, enseignant);
+        Set<UUID> albumIds = new HashSet<>();
+        proposeeParMot.values().stream().map(DetectionMots::albumDOrigine).filter(Objects::nonNull)
+                .forEach(albumIds::add);
+        Map<UUID, AlbumVue> albums = referentiels.albums(albumIds);
+        Collator collation = Collator.getInstance(Locale.FRENCH);
+        return mots.lire(proposeeParMot.keySet()).stream()
+                .sorted(Comparator.comparing(Mot::forme, collation).thenComparing(Mot::id))
+                .map(mot -> {
+                    Image image = proposeeParMot.get(mot.id());
+                    return new MotDejaIllustreVue(new MotVue(mot.id(), mot.forme()),
+                            Lexique.vue(sensParId.get(image.sensId())),
+                            imageDetectee(image, enseignant, albums, sensParId, dejaUtilisees));
+                })
+                .toList();
+    }
+
+    /**
+     * Classement des Images (FR-9), seul et partagé : Section {@code section} d'abord ; à Section égale, Images liées
+     * dans un autre Album ({@code lieesAilleurs}) ; puis celles de l'enseignant ; enfin les plus récentes.
+     */
+    private static Comparator<Image> classement(Section section, Set<UUID> lieesAilleurs, UUID enseignant) {
+        return Comparator
+                .comparing((Image image) -> !image.sections().contains(section))
+                .thenComparing(image -> !lieesAilleurs.contains(image.id()))
+                .thenComparing(image -> !enseignant.equals(image.proprietaireId()))
+                .thenComparing(Image::creeLe, Comparator.nullsLast(Comparator.reverseOrder()))
+                .thenComparing(Image::id, Comparator.reverseOrder());
+    }
+
+    private ImageDetecteeVue imageDetectee(Image image, UUID enseignant, Map<UUID, AlbumVue> albums,
+            Map<UUID, Sens> sensParId, Set<UUID> dejaUtilisees) {
+        UUID albumOrigine = albumDOrigine(image);
+        return new ImageDetecteeVue(Images.vue(image, enseignant, visibilite),
+                image.sections().stream().sorted().toList(), albumOrigine == null ? null : albums.get(albumOrigine),
+                propose(sensParId.get(image.sensId())), dejaUtilisees.contains(image.id()));
     }
 
     private static SensProposeVue propose(Sens sens) {
