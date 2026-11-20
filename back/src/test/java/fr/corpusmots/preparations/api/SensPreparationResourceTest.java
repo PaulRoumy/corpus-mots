@@ -32,7 +32,8 @@ import org.junit.jupiter.api.Test;
 
 /**
  * Sens modifiable dans le Panneau de choix d'Image (story 2.8, partie 1) :
- * {@code PUT /preparations/{id}/mots/{motPreparationId}/sens} et le paramètre {@code sensId} des propositions. Une
+ * {@code PUT /preparations/{id}/mots/{motPreparationId}/sens} et le paramètre {@code sensId} des propositions ;
+ * Création de Sens (partie 2) : {@code POST /preparations/{id}/mots/{motPreparationId}/sens}. Une
  * ligne de test par ligne back de la matrice de la spec ; tout refus ne change rien.
  */
 @QuarkusTest
@@ -260,6 +261,117 @@ class SensPreparationResourceTest {
         assertEquals(avant, nombres());
     }
 
+    // --- Création de Sens (story 2.8, partie 2) ---
+
+    @Test
+    void creerUnSensLeRetientEtDelieLImageDUnAutreSens() {
+        MotVue etale = mot("étalé");
+        UUID cuisine = sens(etale, "cuisine", "adjectif");
+        UUID x = image(PAUL, cuisine, "privee");
+        UUID motPreparation = UUID.fromString(reutiliser(etale.id(), x));
+        String ligneX = ligneImage(x);
+        long sensAvant = nombre("select count(*) from sens");
+
+        String chute = creer(preparation, motPreparation, "chute", "nom")
+                .statusCode(200)
+                .body("id", equalTo(motPreparation.toString()))
+                .body("forme", equalTo("étalé"))
+                .body("sens.libelle", equalTo("chute"))
+                .body("sens.categorie", equalTo("nom"))
+                .body("illustre", equalTo(false))
+                .body("image", nullValue())
+                .extract().path("sens.id");
+
+        assertEquals(sensAvant + 1, nombre("select count(*) from sens"));
+        assertEquals(UUID.fromString(chute), sensRetenu(motPreparation));
+        assertEquals("chute|nom|" + etale.id(), ligneSens(UUID.fromString(chute)));
+        assertNull(lienEnBase(motPreparation));
+        assertEquals(1L, nombre("select count(*) from sens_retenu"));
+        assertEquals(ligneX, ligneImage(x));
+    }
+
+    @Test
+    void unLibelleDejaConnuReutiliseCeSensEtSaCategorie() {
+        MotVue etale = mot("étalé");
+        UUID cuisine = sens(etale, "cuisine", "adjectif");
+        UUID chute = sens(etale, "chute", "nom");
+        UUID x = image(PAUL, cuisine, "privee");
+        UUID motPreparation = UUID.fromString(reutiliser(etale.id(), x));
+        long sensAvant = nombre("select count(*) from sens");
+
+        creer(preparation, motPreparation, "  Chute ", "verbe")
+                .statusCode(200)
+                .body("sens.id", equalTo(chute.toString()))
+                .body("sens.libelle", equalTo("chute"))
+                .body("sens.categorie", equalTo("nom"))
+                .body("image", nullValue());
+
+        assertEquals(sensAvant, nombre("select count(*) from sens"));
+        assertEquals(chute, sensRetenu(motPreparation));
+        assertNull(lienEnBase(motPreparation));
+    }
+
+    @Test
+    void creerLeSensDejaRetenuNEcritRien() {
+        MotVue farine = mot("farine");
+        UUID sensFarine = sens(farine, "poudre", "nom");
+        UUID x = image(PAUL, sensFarine, "privee");
+        UUID motPreparation = UUID.fromString(reutiliser(farine.id(), x));
+        String avant = etat(motPreparation);
+
+        creer(preparation, motPreparation, "Poudre", "nom")
+                .statusCode(200)
+                .body("sens.id", equalTo(sensFarine.toString()))
+                .body("image.id", equalTo(x.toString()));
+        assertEquals(avant, etat(motPreparation));
+    }
+
+    @Test
+    void unLibelleVideTropLongOuReserveEstRefuseSansCreerDeSens() {
+        MotVue farine = mot("farine");
+        UUID x = image(PAUL, sens(farine, "poudre", "nom"), "privee");
+        UUID motPreparation = UUID.fromString(reutiliser(farine.id(), x));
+        String avant = etat(motPreparation);
+
+        for (String libelle : new String[] { "", "   ", null, "a".repeat(41), "à compléter", " À  Compléter " }) {
+            refus(creer(preparation, motPreparation, libelle, "nom"), 400, "sens.libelle_invalide");
+        }
+        assertEquals(avant, etat(motPreparation));
+        creer(preparation, motPreparation, "b".repeat(40), "nom").statusCode(200);
+    }
+
+    @Test
+    void uneCategorieAbsenteOuHorsListeEstRefuseeSansCreerDeSens() {
+        MotVue farine = mot("farine");
+        UUID x = image(PAUL, sens(farine, "poudre", "nom"), "privee");
+        UUID motPreparation = UUID.fromString(reutiliser(farine.id(), x));
+        String avant = etat(motPreparation);
+
+        for (String categorie : new String[] { "pronom", "Nom", null }) {
+            refus(creer(preparation, motPreparation, "ingrédient", categorie), 400, "requete.invalide");
+        }
+        refus(given().contentType(ContentType.JSON)
+                .when().post("/api/preparations/" + preparation + "/mots/" + motPreparation + "/sens").then(),
+                400, "requete.invalide");
+        assertEquals(avant, etat(motPreparation));
+    }
+
+    @Test
+    void creerPourLaPreparationOuLeMotDUnCollegueEstIntrouvable() {
+        MotVue avocat = mot("avocat");
+        UUID x = image(PAUL, sens(avocat, "fruit", "nom"), "privee");
+        UUID motPreparation = UUID.fromString(reutiliser(avocat.id(), x));
+        UUID deZoe = preparation(ZOE);
+        UUID motDeZoe = motDePreparation(deZoe, avocat.id());
+        String avant = etat(motPreparation);
+
+        for (UUID[] cible : new UUID[][] { { deZoe, motDeZoe }, { UUID.randomUUID(), motPreparation },
+                { deZoe, motPreparation }, { preparation, motDeZoe }, { preparation, UUID.randomUUID() } }) {
+            refus(creer(cible[0], cible[1], "métier", "nom"), 404, "ressource.introuvable");
+        }
+        assertEquals(avant, etat(motPreparation));
+    }
+
     // --- Outils ---
 
     private static void refus(ValidatableResponse reponse, int statut, String code) {
@@ -274,6 +386,27 @@ class SensPreparationResourceTest {
         return given().contentType(ContentType.JSON).body(corps)
                 .when().put("/api/preparations/" + preparationId + "/mots/" + motPreparationId + "/sens")
                 .then();
+    }
+
+    private static ValidatableResponse creer(UUID preparationId, UUID motPreparationId, String libelle,
+            String categorie) {
+        Map<String, Object> corps = new HashMap<>();
+        corps.put("libelle", libelle);
+        corps.put("categorie", categorie);
+        return given().contentType(ContentType.JSON).body(corps)
+                .when().post("/api/preparations/" + preparationId + "/mots/" + motPreparationId + "/sens")
+                .then();
+    }
+
+    /** Sens en base : « libellé|catégorie|mot ». */
+    private String ligneSens(UUID sensId) {
+        return QuarkusTransaction.requiringNew().call(() -> {
+            Object[] ligne = (Object[]) entityManager.createNativeQuery(
+                    "select libelle, categorie, mot_id from sens where id = :id")
+                    .setParameter("id", sensId)
+                    .getSingleResult();
+            return ligne[0] + "|" + ligne[1] + "|" + ligne[2];
+        });
     }
 
     private String ajouter(String saisie) {

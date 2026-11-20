@@ -23,6 +23,7 @@ import { MatSelect, MatSelectModule } from '@angular/material/select';
 import { Api } from '../api/api';
 import { fichierImage } from '../api/fn/images-resource/fichier-image';
 import { changerSensMotPreparation } from '../api/fn/preparations-resource/changer-sens-mot-preparation';
+import { creerSensMotPreparation } from '../api/fn/preparations-resource/creer-sens-mot-preparation';
 import { choisirImageMotPreparation } from '../api/fn/preparations-resource/choisir-image-mot-preparation';
 import { proposerImagesMotPreparation } from '../api/fn/preparations-resource/proposer-images-mot-preparation';
 import { DetectionImageDto } from '../api/models/detection-image-dto';
@@ -32,6 +33,7 @@ import { MotPreparationDto } from '../api/models/mot-preparation-dto';
 import { Annuaire } from '../commun/annuaire';
 import { BadgeTypeImage } from '../commun/badge-type-image/badge-type-image';
 import { CompteCourant } from '../commun/compte-courant';
+import { CreationSens, NouveauSens } from '../commun/creation-sens/creation-sens';
 import { codeErreur, messageErreur } from '../commun/erreurs/message-erreur';
 import { ChargementImage, ImageSecurisee } from '../commun/image-securisee/image-securisee';
 import { Squelette } from '../commun/squelette/squelette';
@@ -79,6 +81,11 @@ type Etat =
  * est relue pour ce Sens et le focus reste sur le champ. En échec, le champ revient au Sens précédent et le message
  * s'affiche dans le panneau. Choisir le Sens déjà retenu n'enregistre rien. Un seul Sens possible : texte en lecture.
  *
+ * Création de Sens (story 2.8, partie 2) : « Nouveau sens », sous le Sens (champ ou texte), déplie la Création de Sens
+ * partagée (`CreationSens`), catégorie préremplie avec celle du Sens retenu. Le Sens créé ou réutilisé (`POST …/sens`)
+ * devient le Sens retenu comme un choix dans le champ (Mot émis par `sensChange`, liste relue pour ce Sens), puis le
+ * focus va au champ Sens.
+ *
  * Les Images sont les options d'une liste (`role="listbox"`) qui prend le focus une fois chargée : ↑ ↓ déplacent le
  * choix (sans boucler), Entrée ou un clic retiennent l'Image, avec le même rendu et le même nom accessible que dans la
  * détection (`VignetteProposition`). L'Image actuelle porte « actuelle » ; la retenir ferme le panneau sans requête.
@@ -93,6 +100,7 @@ type Etat =
   selector: 'app-panneau-choix-image',
   imports: [
     BadgeTypeImage,
+    CreationSens,
     ImageSecurisee,
     MatButtonModule,
     MatFormFieldModule,
@@ -165,6 +173,13 @@ type Etat =
         } @else {
           <span class="choix-image__sens">Sens : {{ libelleSens() }}</span>
         }
+        <app-creation-sens
+          class="choix-image__creation-sens"
+          [categorieInitiale]="mot().sens.categorie"
+          [desactive]="envoiEnCours()"
+          [envoyer]="creerSens"
+          (creee)="sensCree()"
+        />
       </div>
       @if (mot().image; as image) {
         <div class="choix-image__actuelle">
@@ -283,6 +298,7 @@ export class PanneauChoixImage {
   private readonly panneau = viewChild.required('panneau', { read: ElementRef<HTMLElement> });
   private readonly liste = viewChild('liste', { read: ElementRef<HTMLElement> });
   private readonly selectSens = viewChild(MatSelect);
+  private readonly creationSens = viewChild(CreationSens);
 
   /** Vrai si le Sens retenu du Mot est le Sens par défaut « à compléter ». */
   private readonly retenuACompleter = computed(
@@ -351,6 +367,8 @@ export class PanneauChoixImage {
       const preparationId = this.preparationId();
       const motId = this.motId();
       untracked(() => {
+        // La Création de Sens du Mot précédent est repliée et vidée.
+        this.creationSens()?.reinitialiser();
         // Un choix envoyé pour le Mot précédent ne concerne plus ce panneau.
         this.envoiCourant++;
         this.envoiEnCours.set(false);
@@ -526,6 +544,54 @@ export class PanneauChoixImage {
         afterNextRender(() => this.selectSens()?.focus(), { injector: this.injecteur });
       }
     }
+  }
+
+  /**
+   * Création de Sens (story 2.8, partie 2) : le Sens tapé est créé ou réutilisé et retenu (`POST …/sens`), comme un
+   * choix dans le champ : le Mot renvoyé est émis par `sensChange` (Image d'un autre Sens déliée), le champ passe sur ce
+   * Sens et la liste est relue pour lui. En échec, la promesse est rejetée : la Création de Sens affiche le message.
+   */
+  protected readonly creerSens = async (nouveau: NouveauSens): Promise<void> => {
+    const numero = ++this.envoiCourant;
+    const motId = this.mot().id;
+    this.envoiEnCours.set(true);
+    this.champSens.disable({ emitEvent: false });
+    this.message.set(null);
+    try {
+      const mot = await this.api.invoke(creerSensMotPreparation, {
+        id: this.preparationId(),
+        motPreparationId: motId,
+        body: nouveau,
+      });
+      // Même passé à un autre Mot, la Carte de l'ancien prend le Mot enregistré.
+      this.sensChange.emit(mot);
+      if (numero !== this.envoiCourant || motId !== this.mot().id) {
+        // Rien n'est sélectionné dans ce panneau : la Création de Sens ne se replie pas pour le nouveau Mot.
+        throw new Error('Création de Sens pour un Mot précédent');
+      }
+      this.definirFiltre(mot.sens.id);
+      void this.lire(this.preparationId(), motId);
+    } finally {
+      if (numero === this.envoiCourant) {
+        this.envoiEnCours.set(false);
+        this.champSens.enable({ emitEvent: false });
+      }
+    }
+  };
+
+  /** Sens créé : le focus va au champ Sens, ou à « Nouveau sens » si le Sens reste en lecture. */
+  protected sensCree(): void {
+    afterNextRender(
+      () => {
+        const select = this.selectSens();
+        if (select !== undefined) {
+          select.focus();
+        } else {
+          this.creationSens()?.focus();
+        }
+      },
+      { injector: this.injecteur },
+    );
   }
 
   /** Pose la valeur du champ Sens et le filtre des Images, sans relire. */

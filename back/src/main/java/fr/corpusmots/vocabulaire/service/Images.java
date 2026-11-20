@@ -228,6 +228,38 @@ public class Images {
     }
 
     /**
+     * Donne à l'Image {@code imageId}, par son seul propriétaire, le Sens qu'il vient de taper dans la Création de Sens
+     * (Carte d'identité, story 2.8) : obtenu ou créé par {@link Lexique#obtenirOuCreerSensSaisi} pour le Mot de l'Image,
+     * il devient le Sens de l'Image. Un libellé déjà connu pour ce Mot réutilise ce Sens, avec sa catégorie (AD-19).
+     * Mêmes verrou et refus que {@link #changerSens} : l'Image verrouillée ne doit avoir aucun lien. Rien n'est écrit en
+     * cas de refus, pas même le Sens.
+     *
+     * @return la Carte d'identité à jour
+     * @throws ErreurMetier {@code 404 ressource.introuvable} si l'Image n'existe pas ou n'est pas consultable par
+     *         l'enseignant courant ; {@code 403 image.reservee_au_proprietaire} s'il n'en est pas le propriétaire,
+     *         administrateur compris ; {@code 409 image.sens_non_modifiable} si l'Image a au moins un lien ;
+     *         {@code 400 sens.libelle_invalide} si le libellé est vide, trop long ou réservé
+     * @throws IllegalArgumentException si la catégorie manque : l'appelant la vérifie avant
+     */
+    @Transactional
+    public CarteIdentiteImageVue creerSens(UUID imageId, String libelle, CategorieGrammaticale categorie) {
+        UUID enseignantId = enseignantCourant.id();
+        Image image = imageDuProprietaire(imageId, enseignantId, true);
+        if (liens.existePourImage(image.id())) {
+            throw new ErreurMetier(409, CODE_SENS_NON_MODIFIABLE,
+                    "Cette image est utilisée dans une préparation : son sens ne peut plus changer");
+        }
+        SensVue actuel = lexique.sens(image.sensId())
+                .orElseThrow(() -> new IllegalStateException("Sens introuvable de l'Image " + image.id()));
+        SensVue nouveau = lexique.obtenirOuCreerSensSaisi(actuel.motId(), libelle, categorie);
+        if (!nouveau.id().equals(actuel.id())) {
+            image.changerSens(nouveau.id());
+            images.flush();
+        }
+        return carteIdentite(image, enseignantId);
+    }
+
+    /**
      * Sens du Mot de l'Image visibles de l'enseignant (AD-2) : ceux qui portent une Image qui lui est proposable, ceux
      * qu'il a retenus, et le Sens actuel de l'Image.
      */

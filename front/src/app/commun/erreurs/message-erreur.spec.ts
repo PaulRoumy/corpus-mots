@@ -72,6 +72,12 @@ describe('messageErreur', () => {
       'image.sens_non_modifiable',
       'Cette image est déjà utilisée dans une préparation : son sens ne peut plus changer. Pour un autre sens, ajoutez une nouvelle image.',
     ],
+    // vocabulaire.service.Lexique
+    [
+      400,
+      'sens.libelle_invalide',
+      'Le libellé du sens est obligatoire (40 caractères au plus) et ne peut pas valoir « à compléter ».',
+    ],
     // vocabulaire.service.SuggestionsArasaac
     [503, 'arasaac.indisponible', "ARASAAC ne répond pas pour l'instant."],
     // referentiels.service.ReferentielsService

@@ -36,6 +36,7 @@ import { listerModulesDeLAlbum } from '../../api/fn/albums-resource/lister-modul
 import { rechercherAlbums } from '../../api/fn/albums-resource/rechercher-albums';
 import { carteIdentiteImage } from '../../api/fn/images-resource/carte-identite-image';
 import { changerSensImage } from '../../api/fn/images-resource/changer-sens-image';
+import { creerSensImage } from '../../api/fn/images-resource/creer-sens-image';
 import { classerImage } from '../../api/fn/images-resource/classer-image';
 import { fichierImage } from '../../api/fn/images-resource/fichier-image';
 import { listerSensImage } from '../../api/fn/images-resource/lister-sens-image';
@@ -58,6 +59,7 @@ import { BadgeTypeImage } from '../badge-type-image/badge-type-image';
 import { BandeauErreur } from '../bandeau-erreur/bandeau-erreur';
 import { ChampThemes, themesParNom } from '../champ-themes/champ-themes';
 import { CompteCourant } from '../compte-courant';
+import { CreationSens, NouveauSens } from '../creation-sens/creation-sens';
 import { DialogueConfirmation } from '../dialogue-confirmation/dialogue-confirmation';
 import {
   codeErreur,
@@ -280,6 +282,11 @@ function texte(saisie: string): string | null {
  * la même file. La catégorie appartient au Sens : elle suit le Sens enregistré et reste en lecture. Image déjà liée :
  * Sens en lecture, avec l'explication dessous, sans aucune lecture des Sens. Un refus `409` (lien créé entre
  * l'ouverture et le choix) remet le Sens précédent, signale le champ et affiche le message dans le Bandeau.
+ *
+ * Création de Sens du propriétaire (story 2.8, partie 2) : sous le champ Sens, et seulement tant qu'il est modifiable,
+ * « Nouveau sens » déplie la Création de Sens partagée (`CreationSens`), catégorie préremplie avec celle du Sens de
+ * l'Image. Le Sens créé ou réutilisé (`POST /images/{id}/sens`, dans la même file) devient le Sens de l'Image et le
+ * focus va au champ Sens.
  */
 @Component({
   selector: 'app-carte-identite',
@@ -287,6 +294,7 @@ function texte(saisie: string): string | null {
     BadgeTypeImage,
     BandeauErreur,
     ChampThemes,
+    CreationSens,
     ImageSecurisee,
     MatAutocompleteModule,
     MatButtonModule,
@@ -385,6 +393,7 @@ function texte(saisie: string): string | null {
                 >
                   <mat-label>Sens</mat-label>
                   <mat-select
+                    #selectSens
                     class="carte-identite__sens-choix"
                     [formControl]="sens"
                     (selectionChange)="choisirSens($event.value)"
@@ -419,9 +428,16 @@ function texte(saisie: string): string | null {
                     <mat-error>{{ messageNonEnregistre }}</mat-error>
                   }
                 </mat-form-field>
+                <app-creation-sens
+                  class="carte-identite__creation-sens"
+                  [categorieInitiale]="carte.sens.categorie"
+                  [desactive]="sensEnAttente() > 0"
+                  [envoyer]="creerSens"
+                  (creee)="sensCree()"
+                />
               </div>
             } @else {
-              <p class="carte-identite__sens-fige">{{ messageSensFige }}</p>
+              <p #sensFige class="carte-identite__sens-fige" tabindex="-1">{{ messageSensFige }}</p>
             }
             <dl class="carte-identite__champs">
               <ng-container *ngTemplateOutlet="categorieAffichee; context: { $implicit: carte }" />
@@ -839,6 +855,10 @@ export class CarteIdentite {
   protected readonly erreurSens = signal<string | null>(null);
 
   private readonly selecteurs = viewChildren(MatSelect);
+  private readonly selectSens = viewChild('selectSens', { read: MatSelect });
+  private readonly sensFige = viewChild<ElementRef<HTMLElement>>('sensFige');
+  /** Nombre de changements de Sens en file ou en cours : la Création de Sens attend qu'ils soient enregistrés. */
+  protected readonly sensEnAttente = signal(0);
   private readonly declencheurs = viewChildren(MatAutocompleteTrigger);
   private readonly champThemes = viewChild(ChampThemes);
 
@@ -1209,6 +1229,60 @@ export class CarteIdentite {
     void this.enregistrer('sens');
   }
 
+  /**
+   * Création de Sens (story 2.8, partie 2) : le Sens tapé est créé ou réutilisé et donné à l'Image
+   * (`POST /images/{id}/sens`), dans la file des enregistrements. La Carte renvoyée est appliquée comme toute
+   * modification et le champ Sens passe sur ce Sens. Un lien créé depuis l'ouverture (`409`) fait passer le Sens en
+   * lecture, message dans le Bandeau ; toute autre erreur rejette la promesse et s'affiche dans la Création de Sens.
+   */
+  protected readonly creerSens = (nouveau: NouveauSens): Promise<void> => {
+    const travail = this.fileEnregistrements.then(() => this.envoyerCreationSens(nouveau));
+    this.fileEnregistrements = travail.catch(() => undefined);
+    return travail;
+  };
+
+  private async envoyerCreationSens(nouveau: NouveauSens): Promise<void> {
+    const carte = this.carte();
+    if (carte === null || !this.modifiable() || !carte.sensModifiable) {
+      // Rien n'est créé : la Création de Sens reste ouverte, ou disparaît avec le champ Sens.
+      throw new Error("Le sens de cette image ne peut plus changer");
+    }
+    const numero = this.derniereLecture;
+    try {
+      const maj = await this.api.invoke(creerSensImage, { id: carte.id, body: nouveau });
+      this.appliquer()?.(maj);
+      if (numero !== this.derniereLecture) {
+        return;
+      }
+      this.carte.set(maj);
+      this.sens.setValue(maj.sens.id);
+      this.sensChoisiId.set(maj.sens.id);
+      this.oublierSensLus();
+      if (this.champEnErreur() === 'sens') {
+        this.effacerErreur();
+      }
+    } catch (erreur) {
+      if (numero === this.derniereLecture && codeErreur(erreur) === CODE_SENS_NON_MODIFIABLE) {
+        // Lien créé depuis l'ouverture du panneau : le Sens passe en lecture, avec son explication, qui prend le focus.
+        this.carte.update((actuelle) => actuelle && { ...actuelle, sensModifiable: false });
+        this.oublierSensLus();
+        this.erreurEnregistrement.set({
+          message: messageErreur(erreur),
+          reessayable: erreurPassagere(erreur),
+        });
+        afterNextRender(() => this.sensFige()?.nativeElement.focus(), {
+          injector: this.injecteur,
+        });
+      }
+      throw erreur;
+    }
+  }
+
+  /** Sens créé : le focus va au champ Sens. */
+  protected sensCree(): void {
+    afterNextRender(() => this.selectSens()?.focus(), { injector: this.injecteur });
+  }
+
   /** Thèmes de l'école, lus une seule fois ; un échec est affiché sous le Champ et relu à la prochaine entrée. */
   protected chargerThemes(): void {
     if (this.themesEcole() !== null || this.lectureThemes !== null) {
@@ -1267,7 +1341,17 @@ export class CarteIdentite {
    * `champ` est signalé et un Bandeau d'erreur s'affiche dans le panneau.
    */
   protected enregistrer(champ: Champ): Promise<void> {
-    this.fileEnregistrements = this.fileEnregistrements.then(() => this.envoyer(champ));
+    const sens = champ === 'sens';
+    if (sens) {
+      this.sensEnAttente.update((nombre) => nombre + 1);
+    }
+    this.fileEnregistrements = this.fileEnregistrements
+      .then(() => this.envoyer(champ))
+      .finally(() => {
+        if (sens) {
+          this.sensEnAttente.update((nombre) => nombre - 1);
+        }
+      });
     return this.fileEnregistrements;
   }
 

@@ -5,6 +5,7 @@ import fr.corpusmots.commun.service.Pagination;
 import fr.corpusmots.commun.service.Section;
 import fr.corpusmots.preparations.service.PreparationsService;
 import fr.corpusmots.preparations.service.TeleverserImageMotCommande;
+import fr.corpusmots.vocabulaire.service.CategorieGrammaticale;
 import fr.corpusmots.vocabulaire.service.FichierTeleverseVue;
 import fr.corpusmots.vocabulaire.service.ReductionImages;
 import jakarta.inject.Inject;
@@ -216,6 +217,27 @@ public class PreparationsResource {
             throw new ErreurMetier(400, "requete.invalide", "Le sens est obligatoire");
         }
         return MotPreparationDto.de(preparations.changerSens(id, motPreparationId, choix.sensId()));
+    }
+
+    @POST
+    @Path("/{id}/mots/{motPreparationId}/sens")
+    @Consumes(MediaType.APPLICATION_JSON)
+    @Operation(operationId = "creerSensMotPreparation",
+            summary = "Créer un Sens (ou réutiliser celui de même libellé) pour un Mot d'une Préparation de l'enseignant"
+                    + " connecté et le retenir ; l'Image liée d'un autre Sens est seulement déliée")
+    @APIResponse(responseCode = "200", description = "Mot de Préparation avec son nouveau Sens retenu",
+            content = @Content(mediaType = MediaType.APPLICATION_JSON,
+                    schema = @Schema(implementation = MotPreparationDto.class)))
+    public MotPreparationDto creerSens(@PathParam("id") UUID id,
+            @PathParam("motPreparationId") UUID motPreparationId,
+            @RequestBody(required = true) NouveauSensMotPreparationDto nouveau) {
+        if (nouveau == null) {
+            throw new ErreurMetier(400, "requete.invalide", "Le corps de la requête est obligatoire");
+        }
+        CategorieGrammaticale categorie = CategorieGrammaticale.deValeur(nouveau.categorie())
+                .orElseThrow(() -> new ErreurMetier(400, "requete.invalide",
+                        "Catégorie grammaticale absente ou inconnue"));
+        return MotPreparationDto.de(preparations.creerSens(id, motPreparationId, nouveau.libelle(), categorie));
     }
 
     @PUT

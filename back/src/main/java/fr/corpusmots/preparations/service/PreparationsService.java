@@ -12,7 +12,9 @@ import fr.corpusmots.referentiels.service.AlbumVue;
 import fr.corpusmots.referentiels.service.ModuleVue;
 import fr.corpusmots.referentiels.service.ReferentielsService;
 import fr.corpusmots.referentiels.service.ThemeVue;
+import fr.corpusmots.vocabulaire.service.CategorieGrammaticale;
 import fr.corpusmots.vocabulaire.service.ChangerSensCommande;
+import fr.corpusmots.vocabulaire.service.CreerSensCommande;
 import fr.corpusmots.vocabulaire.service.DetectionMots;
 import fr.corpusmots.vocabulaire.service.DetectionVue;
 import fr.corpusmots.vocabulaire.service.ImageVue;
@@ -384,6 +386,27 @@ public class PreparationsService {
         Preparation preparation = verrouillee(id);
         PreparationMot ligne = deLaPreparation(preparation, motPreparationId);
         SensVue sens = usages.changerSens(new ChangerSensCommande(ligne.id(), sensId));
+        MotVue mot = motDe(ligne, lexique.mots(List.of(ligne.motId())));
+        return vue(ligne, mot, sens, usages.imagesLiees(List.of(ligne.id())).get(ligne.id()));
+    }
+
+    /**
+     * Crée ou réutilise le Sens tapé par l'enseignant dans la Création de Sens du Panneau de choix d'Image (story 2.8)
+     * pour le Mot de Préparation {@code motPreparationId} de la Préparation {@code id} de l'enseignant courant, et le
+     * retient par {@link Usages#creerSens} : l'Image liée d'un autre Sens est déliée et le Mot redevient « à illustrer ».
+     * Une seule transaction, Préparation verrouillée : rien n'est écrit en cas de refus, pas même le Sens.
+     *
+     * @throws ErreurMetier {@code 404 ressource.introuvable} si la Préparation n'existe pas ou appartient à un
+     *         collègue, ou si le Mot de Préparation n'existe pas ou appartient à une autre Préparation ;
+     *         {@code 400 sens.libelle_invalide} si le libellé est vide, trop long ou réservé
+     * @throws IllegalArgumentException si la catégorie manque : l'appelant la vérifie avant
+     */
+    @Transactional
+    public MotPreparationVue creerSens(UUID id, UUID motPreparationId, String libelle,
+            CategorieGrammaticale categorie) {
+        Preparation preparation = verrouillee(id);
+        PreparationMot ligne = deLaPreparation(preparation, motPreparationId);
+        SensVue sens = usages.creerSens(new CreerSensCommande(ligne.id(), libelle, categorie));
         MotVue mot = motDe(ligne, lexique.mots(List.of(ligne.motId())));
         return vue(ligne, mot, sens, usages.imagesLiees(List.of(ligne.id())).get(ligne.id()));
     }

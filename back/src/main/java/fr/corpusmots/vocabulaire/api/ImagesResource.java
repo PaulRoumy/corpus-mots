@@ -4,6 +4,7 @@ import fr.corpusmots.commun.api.ErreurMetier;
 import fr.corpusmots.commun.service.EnseignantCourant;
 import fr.corpusmots.commun.service.Section;
 import fr.corpusmots.vocabulaire.service.AjouterImageCommande;
+import fr.corpusmots.vocabulaire.service.CategorieGrammaticale;
 import fr.corpusmots.vocabulaire.service.ClasserImageCommande;
 import fr.corpusmots.vocabulaire.service.FichierImageVue;
 import fr.corpusmots.vocabulaire.service.FichierTeleverseVue;
@@ -47,7 +48,9 @@ import org.jboss.resteasy.reactive.ResponseStatus;
  * l'auteur et l'Album d'origine, par le seul propriétaire ({@code 403 image.reservee_au_proprietaire} pour les autres) ;
  * {@code PUT /images/{id}/classement} en remplace les Sections, le Module et les Thèmes, avec les mêmes refus ;
  * {@code GET /images/{id}/sens} liste au propriétaire les Sens qu'il peut lui donner et {@code PUT /images/{id}/sens}
- * en change le Sens, refusé en {@code 409 image.sens_non_modifiable} dès que l'Image a un lien.
+ * en change le Sens, refusé en {@code 409 image.sens_non_modifiable} dès que l'Image a un lien ;
+ * {@code POST /images/{id}/sens} lui donne un Sens tapé par le propriétaire, créé s'il n'existe pas, avec les mêmes
+ * refus.
  *
  * <p>Fichiers des Images (AD-23) : servis uniquement par {@link FichiersImages#lire}, qui applique la visibilité (AD-2).
  * Une Image que l'enseignant connecté ne peut pas consulter répond {@code 404 ressource.introuvable}, comme une Image
@@ -184,6 +187,27 @@ public class ImagesResource {
             throw new ErreurMetier(400, "requete.invalide", "Le sens est obligatoire");
         }
         return CarteIdentiteImageDto.de(images.changerSens(id, sens.sensId()));
+    }
+
+    @POST
+    @Path("/{id}/sens")
+    @Consumes(MediaType.APPLICATION_JSON)
+    @Produces(MediaType.APPLICATION_JSON)
+    @Operation(operationId = "creerSensImage",
+            summary = "Créer un Sens (ou réutiliser celui de même libellé) pour le Mot d'une Image et le lui donner (son"
+                    + " seul propriétaire), tant qu'elle n'est liée dans aucune Préparation")
+    @APIResponse(responseCode = "200", description = "Carte d'identité à jour de l'Image",
+            content = @Content(mediaType = MediaType.APPLICATION_JSON,
+                    schema = @Schema(implementation = CarteIdentiteImageDto.class)))
+    public CarteIdentiteImageDto creerSens(@PathParam("id") UUID id,
+            @RequestBody(required = true) NouveauSensImageDto nouveau) {
+        if (nouveau == null) {
+            throw new ErreurMetier(400, "requete.invalide", "Le corps de la requête est obligatoire");
+        }
+        CategorieGrammaticale categorie = CategorieGrammaticale.deValeur(nouveau.categorie())
+                .orElseThrow(() -> new ErreurMetier(400, "requete.invalide",
+                        "Catégorie grammaticale absente ou inconnue"));
+        return CarteIdentiteImageDto.de(images.creerSens(id, nouveau.libelle(), categorie));
     }
 
     @GET

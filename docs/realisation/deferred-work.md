@@ -222,6 +222,7 @@
 - source_spec: none
   summary: Story 2.8, partie 2 : Création de Sens dépliée sur place (libellé court obligatoire, Sélecteur de catégorie grammaticale prérempli avec la catégorie du Sens existant, Entrée ou « Créer le sens », Échap replie sans rien créer), par `Lexique.obtenirOuCreerSens` (libellé déjà connu réutilisé sans erreur, AD-19), dans le Panneau de choix d'Image et la Carte d'identité.
   evidence: Découpage de la story 2.8 en trois parties choisi par Paul ; la partie 1 rend le Sens modifiable dans le Panneau de choix d'Image.
+  status: fait (`docs/realisation/spec-2-8-2-creation-de-sens.md`).
 - source_spec: none
   summary: Story 2.8, partie 3 : choisir le Sens d'un Mot existant dans le Panneau de détection (Images proposées limitées à ce Sens, Mot ajouté ou Image retenue avec ce Sens) et « Nouveau sens » avec la Création de Sens de la partie 2.
   evidence: Découpage de la story 2.8 en trois parties choisi par Paul.

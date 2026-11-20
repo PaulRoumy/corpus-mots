@@ -864,6 +864,214 @@ describe('CarteIdentite', () => {
         await stabiliser();
         expect(racine.querySelector('.carte-identite__erreur-sens')).toBeNull();
       });
+
+      describe('Création de Sens (story 2.8, partie 2)', () => {
+        const FRUIT = {
+          id: '0190f0a0-0000-7000-8000-0000000d0003',
+          libelle: 'fruit',
+          categorie: 'nom',
+          aCompleter: false,
+        };
+        const CARTE_FRUIT: CarteIdentiteImageDto = { ...CARTE_A_COMPLETER, sens: FRUIT };
+        const bouton = (libelle: string) =>
+          [...racine.querySelectorAll<HTMLButtonElement>('button')].find(
+            (candidat) => candidat.textContent?.replace(/\s+/g, ' ').trim() === libelle,
+          );
+        const libelle = () => racine.querySelector<HTMLInputElement>('.creation-sens__libelle')!;
+
+        async function deplierEtSaisir(saisie: string) {
+          bouton('Nouveau sens')!.click();
+          await stabiliser();
+          libelle().value = saisie;
+          libelle().dispatchEvent(new Event('input'));
+          await stabiliser();
+        }
+
+        async function choisirCategorie(nom: string) {
+          racine
+            .querySelector<HTMLElement>('.creation-sens__categorie .mat-mdc-select-trigger')!
+            .click();
+          await stabiliser();
+          [...document.querySelectorAll<HTMLElement>('.cdk-overlay-pane mat-option')]
+            .find((option) => option.textContent?.trim() === nom)!
+            .click();
+          await stabiliser();
+        }
+
+        it('créer : Sens donné à l’Image, Carte appliquée, formulaire replié, focus sur le champ Sens', async () => {
+          await servir(CARTE_A_COMPLETER);
+          const emises: CarteIdentiteImageDto[] = [];
+          fixture.componentRef.setInput('appliquer', (carte: CarteIdentiteImageDto) =>
+            emises.push(carte),
+          );
+
+          await deplierEtSaisir('fruit');
+          expect(racine.querySelector('.carte-identite__sens form.creation-sens')).not.toBeNull();
+          // Sens « à compléter » : aucune catégorie à préremplir.
+          expect(texte('.creation-sens__categorie .mat-mdc-select-value')).toBe('');
+          await choisirCategorie('nom');
+          bouton('Créer le sens')!.click();
+          await stabiliser();
+
+          const requete = serveur.expectOne(URL_SENS);
+          expect(requete.request.method).toBe('POST');
+          expect(requete.request.body).toEqual({ libelle: 'fruit', categorie: 'nom' });
+          requete.flush(CARTE_FRUIT);
+          await stabiliser();
+
+          expect(emises).toEqual([CARTE_FRUIT]);
+          expect(racine.querySelector('form.creation-sens')).toBeNull();
+          expect(texte('.carte-identite__sens-choix')).toBe('fruit');
+          expect(champs()).toContain('Catégorie : nom');
+          expect(
+            racine.querySelector('.carte-identite__sens-choix')?.contains(document.activeElement),
+          ).toBe(true);
+          // Le champ Sens qui reçoit le focus lit les Sens du Mot, à jour du Sens créé.
+          serveur
+            .expectOne((r) => r.url === URL_SENS && r.method === 'GET')
+            .flush([A_COMPLETER, FRUIT]);
+          await stabiliser();
+        });
+
+        it('catégorie du Sens de l’Image préremplie', async () => {
+          await servir(CARTE);
+
+          await deplierEtSaisir('');
+
+          expect(document.activeElement).toBe(libelle());
+          expect(texte('.creation-sens__categorie .mat-mdc-select-value')).toBe('nom');
+        });
+
+        it('Image liée ou d’un collègue : « Nouveau sens » n’apparaît pas', async () => {
+          await servir({ ...CARTE, sensModifiable: false });
+          expect(bouton('Nouveau sens')).toBeUndefined();
+
+          fixture.componentRef.setInput('imageId', AUTRE);
+          await stabiliser();
+          await servir(
+            { ...CARTE, id: AUTRE, proprietaireId: ZOE, reutilisable: false, sensModifiable: false },
+            AUTRE,
+          );
+          expect(bouton('Nouveau sens')).toBeUndefined();
+        });
+
+        it('Échap : replié sans requête, panneau ouvert', async () => {
+          await servir(CARTE);
+          let fermetures = 0;
+          fixture.componentInstance.fermer.subscribe(() => fermetures++);
+          await deplierEtSaisir('fruit');
+
+          libelle().dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+          await stabiliser();
+
+          expect(racine.querySelector('form.creation-sens')).toBeNull();
+          expect(fermetures).toBe(0);
+          expect(document.activeElement).toBe(bouton('Nouveau sens'));
+          serveur.expectNone(URL_SENS);
+        });
+
+        it('409 : lien créé depuis l’ouverture, Sens en lecture, explication qui prend le focus, Bandeau', async () => {
+          await servir(CARTE);
+          await deplierEtSaisir('fruit');
+
+          bouton('Créer le sens')!.click();
+          await stabiliser();
+          serveur
+            .expectOne(URL_SENS)
+            .flush(
+              { status: 409, code: 'image.sens_non_modifiable' },
+              { status: 409, statusText: 'Conflict' },
+            );
+          await stabiliser();
+
+          expect(bouton('Nouveau sens')).toBeUndefined();
+          expect(champs()).toContain('Sens : légume');
+          expect(texte('.carte-identite__sens-fige')).toBe(MESSAGE_SENS_FIGE);
+          expect(bandeau()).toBe(MESSAGES_PAR_CODE['image.sens_non_modifiable']);
+          expect(document.activeElement).toBe(racine.querySelector('.carte-identite__sens-fige'));
+        });
+
+        it('400 sens.libelle_invalide : formulaire ouvert, message sous le libellé, rien d’appliqué', async () => {
+          await servir(CARTE);
+          const emises: CarteIdentiteImageDto[] = [];
+          fixture.componentRef.setInput('appliquer', (carte: CarteIdentiteImageDto) =>
+            emises.push(carte),
+          );
+          await deplierEtSaisir('banane');
+          bouton('Créer le sens')!.click();
+          await stabiliser();
+          serveur
+            .expectOne(URL_SENS)
+            .flush(
+              { status: 400, code: 'sens.libelle_invalide' },
+              { status: 400, statusText: 'Bad Request' },
+            );
+          await stabiliser();
+
+          expect(racine.querySelector('form.creation-sens')).not.toBeNull();
+          expect(texte('form.creation-sens mat-error')).toBe(
+            MESSAGES_PAR_CODE['sens.libelle_invalide'],
+          );
+          expect(emises).toEqual([]);
+          expect(texte('.carte-identite__sens-choix')).toBe('légume');
+        });
+
+        it('échec réseau : formulaire ouvert, message sous le formulaire, rien d’appliqué', async () => {
+          await servir(CARTE);
+          const emises: CarteIdentiteImageDto[] = [];
+          fixture.componentRef.setInput('appliquer', (carte: CarteIdentiteImageDto) =>
+            emises.push(carte),
+          );
+          await deplierEtSaisir('fruit');
+          bouton('Créer le sens')!.click();
+          await stabiliser();
+          serveur.expectOne(URL_SENS).error(new ProgressEvent('error'));
+          await stabiliser();
+
+          expect(racine.querySelector('form.creation-sens')).not.toBeNull();
+          expect(texte('.creation-sens__erreur')).toBe(MESSAGE_RESEAU);
+          expect(emises).toEqual([]);
+          expect(texte('.carte-identite__sens-choix')).toBe('légume');
+        });
+
+        it('échec arrivé après le passage à une autre Image : rien n’est appliqué ni replié', async () => {
+          await servir(CARTE);
+          await deplierEtSaisir('fruit');
+          const creation = fixture.componentInstance as unknown as {
+            creerSens: (sens: { libelle: string; categorie: 'nom' }) => Promise<void>;
+          };
+          bouton('Créer le sens')!.click();
+          await stabiliser();
+          const requete = serveur.expectOne(URL_SENS);
+
+          fixture.componentRef.setInput('imageId', AUTRE);
+          await stabiliser();
+          await servir({ ...CARTE, id: AUTRE }, AUTRE);
+          requete.error(new ProgressEvent('error'));
+          await stabiliser();
+
+          expect(texte('.carte-identite__sens-choix')).toBe('légume');
+          expect(bandeau()).toBeUndefined();
+          // Une création demandée sans champ Sens modifiable est rejetée sans requête.
+          fixture.componentRef.setInput('imageId', IMAGE);
+          await stabiliser();
+          await servir({ ...CARTE, sensModifiable: false });
+          await expect(creation.creerSens({ libelle: 'fruit', categorie: 'nom' })).rejects.toThrow();
+          serveur.expectNone(URL_SENS);
+        });
+
+        it('changement de Sens en cours : « Nouveau sens » désactivé jusqu’à son enregistrement', async () => {
+          await servir(CARTE_A_COMPLETER);
+          await ouvrirSens();
+          [...document.querySelectorAll<HTMLElement>('.cdk-overlay-pane mat-option')][1].click();
+          await stabiliser();
+
+          expect(bouton('Nouveau sens')!.disabled).toBe(true);
+          serveur.expectOne((r) => r.url === URL_SENS && r.method === 'PUT').flush(CARTE_ANIMAL);
+          await stabiliser();
+          expect(bouton('Nouveau sens')!.disabled).toBe(false);
+        });
+      });
     });
 
     describe('classement', () => {

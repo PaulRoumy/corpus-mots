@@ -234,13 +234,44 @@ public class Usages {
                 .filter(trouve -> detection.sensVisible(actuel.motId(), trouve.id()))
                 .orElseThrow(() -> new ErreurMetier(400, CODE_SENS_INVALIDE,
                         "Ce sens n'est pas un sens visible de ce mot"));
-        retenu.changerSens(nouveau.id());
-        sensRetenus.flush();
-        Image liee = liens.imagesDe(List.of(commande.preparationMotId())).get(commande.preparationMotId());
-        if (liee != null && !liee.sensId().equals(nouveau.id())) {
-            liens.supprimerDe(commande.preparationMotId());
+        retenir(retenu, nouveau, commande.preparationMotId());
+        return nouveau;
+    }
+
+    /**
+     * Retient pour le Mot de Préparation de l'enseignant courant le Sens qu'il vient de taper dans la Création de Sens
+     * (Panneau de choix d'Image, story 2.8) : le Sens est obtenu ou créé par {@link Lexique#obtenirOuCreerSensSaisi}
+     * pour le Mot du Sens retenu, puis devient le Sens retenu comme par {@link #changerSens}, sans contrôle de
+     * visibilité (AD-2 ne vise que les Sens montrés à l'enseignant) : l'Image liée d'un autre Sens est déliée, sans être
+     * supprimée ni modifiée. Un libellé déjà connu pour ce Mot réutilise ce Sens, avec sa catégorie (AD-19) ; s'il est
+     * déjà le Sens retenu, rien n'est écrit. L'appelant a verrouillé la Préparation et vérifié que ce Mot est le sien.
+     *
+     * @return le Sens retenu après le changement
+     * @throws ErreurMetier {@code 400 sens.libelle_invalide} si le libellé est vide, trop long ou réservé
+     * @throws IllegalStateException si le Mot de Préparation n'a pas de Sens retenu
+     */
+    @Transactional
+    public SensVue creerSens(CreerSensCommande commande) {
+        SensRetenu retenu = sensRetenus.de(commande.preparationMotId())
+                .orElseThrow(() -> new IllegalStateException("Sens retenu du mot de préparation "
+                        + commande.preparationMotId() + " introuvable"));
+        SensVue actuel = lexique.sens(retenu.sensId())
+                .orElseThrow(() -> new IllegalStateException("Sens " + retenu.sensId() + " introuvable"));
+        SensVue nouveau = lexique.obtenirOuCreerSensSaisi(actuel.motId(), commande.libelle(), commande.categorie());
+        if (!actuel.id().equals(nouveau.id())) {
+            retenir(retenu, nouveau, commande.preparationMotId());
         }
         return nouveau;
+    }
+
+    /** Le Sens {@code nouveau} devient le Sens retenu ; l'Image liée d'un autre Sens est déliée. */
+    private void retenir(SensRetenu retenu, SensVue nouveau, UUID preparationMotId) {
+        retenu.changerSens(nouveau.id());
+        sensRetenus.flush();
+        Image liee = liens.imagesDe(List.of(preparationMotId)).get(preparationMotId);
+        if (liee != null && !liee.sensId().equals(nouveau.id())) {
+            liens.supprimerDe(preparationMotId);
+        }
     }
 
     /** Image {@code imageId}, verrouillée, si elle existe et est proposable à l'enseignant. */

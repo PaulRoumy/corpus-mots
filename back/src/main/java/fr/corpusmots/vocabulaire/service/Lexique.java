@@ -1,5 +1,6 @@
 package fr.corpusmots.vocabulaire.service;
 
+import fr.corpusmots.commun.api.ErreurMetier;
 import fr.corpusmots.vocabulaire.persistance.Mot;
 import fr.corpusmots.vocabulaire.persistance.MotRepository;
 import fr.corpusmots.vocabulaire.persistance.Sens;
@@ -36,6 +37,11 @@ public class Lexique {
 
     /** Longueur maximale de la forme d'un Mot, une fois normalisée. */
     public static final int LONGUEUR_MAX_FORME = 100;
+
+    /** Longueur maximale du libellé d'un Sens créé par un enseignant, une fois nettoyé. */
+    public static final int LONGUEUR_MAX_LIBELLE_SENS = 40;
+
+    static final String CODE_LIBELLE_SENS_INVALIDE = "sens.libelle_invalide";
 
     private static final Pattern ESPACES = Pattern.compile("[\\s\\p{Z}\\x{FEFF}]+");
     private static final Pattern ARTICLE_INITIAL = Pattern.compile("^(?:(?:le|la|les|un|une|des) |l')",
@@ -107,6 +113,30 @@ public class Lexique {
         sens.insererSiAbsent(motId, nettoye, cle, categorie);
         return vue(sens.parCle(motId, cle)
                 .orElseThrow(() -> new IllegalStateException("Sens « " + cle + " » introuvable après son insertion")));
+    }
+
+    /**
+     * Sens que l'enseignant vient de taper dans la Création de Sens (story 2.8) : libellé nettoyé de 1 à
+     * {@value #LONGUEUR_MAX_LIBELLE_SENS} caractères, autre que « à compléter » (réservé au Sens par défaut), puis
+     * {@link #obtenirOuCreerSens}. Un libellé déjà connu pour ce Mot (même forme normalisée) réutilise ce Sens, avec sa
+     * catégorie (AD-19).
+     *
+     * @throws ErreurMetier {@code 400 sens.libelle_invalide} si le libellé est vide, trop long ou réservé
+     * @throws IllegalArgumentException si la catégorie manque : l'appelant la vérifie avant
+     */
+    @Transactional
+    public SensVue obtenirOuCreerSensSaisi(UUID motId, String libelle, CategorieGrammaticale categorie) {
+        if (categorie == null) {
+            throw new IllegalArgumentException("Catégorie grammaticale absente");
+        }
+        String nettoye = nettoyer(libelle);
+        if (nettoye.isEmpty() || nettoye.length() > LONGUEUR_MAX_LIBELLE_SENS
+                || cle(nettoye).equals(cle(Usages.LIBELLE_A_COMPLETER))) {
+            throw new ErreurMetier(400, CODE_LIBELLE_SENS_INVALIDE, "Le libellé du sens doit compter de 1 à "
+                    + LONGUEUR_MAX_LIBELLE_SENS + " caractères et ne pas valoir « " + Usages.LIBELLE_A_COMPLETER
+                    + " »");
+        }
+        return obtenirOuCreerSens(motId, nettoye, categorie.valeur());
     }
 
     /** Mots de ces identifiants, par identifiant ; les identifiants inconnus sont absents. */

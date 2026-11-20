@@ -1,0 +1,27 @@
+// Création de Sens (UX-DR-19, UX-DR-20) : formulaire en ligne déplié sous le champ Sens, jamais en dialogue.
+:host {
+  display: block;
+}
+
+.creation-sens {
+  display: flex;
+  flex-direction: column;
+  gap: var(--cm-espace-2);
+  padding: var(--cm-espace-3);
+  border-radius: var(--cm-arrondi-md);
+  background: var(--mat-sys-surface-container-low);
+}
+
+.creation-sens__champ {
+  width: 100%;
+}
+
+.creation-sens__erreur {
+  margin: 0;
+  font: var(--cm-typo-body-sm);
+  color: var(--mat-sys-error);
+}
+
+.creation-sens__creer {
+  align-self: flex-start;
+}

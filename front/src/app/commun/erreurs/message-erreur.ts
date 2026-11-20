@@ -50,6 +50,8 @@ export const MESSAGES_PAR_CODE: Readonly<Record<string, string>> = {
   'image.sens_invalide': "Ce sens n'est plus proposé pour ce mot. Choisissez-en un autre.",
   'image.sens_non_modifiable':
     'Cette image est déjà utilisée dans une préparation : son sens ne peut plus changer. Pour un autre sens, ajoutez une nouvelle image.',
+  'sens.libelle_invalide':
+    'Le libellé du sens est obligatoire (40 caractères au plus) et ne peut pas valoir « à compléter ».',
   'album.titre_invalide': 'Saisissez un titre de 1 à 200 caractères.',
   'album.auteur_invalide': 'Saisissez un auteur de 1 à 200 caractères.',
   'album.editeur_invalide': 'Saisissez un éditeur de 200 caractères au plus.',

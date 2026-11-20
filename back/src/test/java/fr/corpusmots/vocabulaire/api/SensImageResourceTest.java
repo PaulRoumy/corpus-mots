@@ -33,7 +33,8 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 /**
- * {@code GET} et {@code PUT /images/{id}/sens} (story 2.6, partie 4) : le propriétaire remplace le Sens de son Image
+ * {@code GET} et {@code PUT /images/{id}/sens} (story 2.6, partie 4), {@code POST /images/{id}/sens} (story 2.8,
+ * partie 2) : le propriétaire remplace le Sens de son Image
  * par un autre Sens visible du même Mot, tant qu'elle n'a aucun lien ; {@code 403} pour un autre enseignant qui voit
  * l'Image, administrateur compris, {@code 404} pour une Image non consultable. Une ligne de test par ligne back de la
  * matrice de la spec.
@@ -272,6 +273,105 @@ class SensImageResourceTest {
         assertEquals(aCompleter, images.sensId(image));
     }
 
+    // --- Créer un Sens (story 2.8, partie 2) ---
+
+    @Test
+    @TestSecurity(user = PAUL)
+    @OidcSecurity(claims = @Claim(key = "sub", value = PAUL))
+    void leProprietaireCreeLeSensDeSonImage() {
+        UUID image = imageDe(PAUL, aCompleter);
+        long sensAvant = nombreSens();
+
+        String fruit = creer(image, "fruit", "nom")
+                .statusCode(200)
+                .body("id", equalTo(image.toString()))
+                .body("forme", equalTo("loup"))
+                .body("sens.libelle", equalTo("fruit"))
+                .body("sens.categorie", equalTo("nom"))
+                .body("sens.aCompleter", equalTo(false))
+                .body("sensModifiable", equalTo(true))
+                .extract().path("sens.id");
+
+        assertEquals(sensAvant + 1, nombreSens());
+        assertEquals(UUID.fromString(fruit), images.sensId(image));
+    }
+
+    @Test
+    @TestSecurity(user = PAUL)
+    @OidcSecurity(claims = @Claim(key = "sub", value = PAUL))
+    void unLibelleDejaConnuDonneCeSensAvecSaCategorie() {
+        UUID image = imageDe(PAUL, aCompleter);
+        long sensAvant = nombreSens();
+
+        creer(image, " Animal ", "verbe")
+                .statusCode(200)
+                .body("sens.id", equalTo(animal.toString()))
+                .body("sens.categorie", equalTo("nom"));
+        assertEquals(sensAvant, nombreSens());
+        assertEquals(animal, images.sensId(image));
+    }
+
+    @Test
+    @TestSecurity(user = PAUL)
+    @OidcSecurity(claims = @Claim(key = "sub", value = PAUL))
+    void creerLeSensDUneImageLieeEstRefuseSansCreerDeSens() {
+        UUID image = imageDe(PAUL, aCompleter);
+        images.lien(image, UUID.fromString(ZOE), album);
+        long sensAvant = nombreSens();
+
+        refus(creer(image, "fruit", "nom"), 409, "image.sens_non_modifiable");
+        assertEquals(sensAvant, nombreSens());
+        assertEquals(aCompleter, images.sensId(image));
+    }
+
+    @Test
+    @TestSecurity(user = PAUL)
+    @OidcSecurity(claims = @Claim(key = "sub", value = PAUL))
+    void creerLeSensDeLImageDUnCollegueEstRefuse() {
+        UUID deZoe = imageDe(ZOE, aCompleter, "versee");
+        UUID privee = imageDe(ZOE, aCompleter);
+        long sensAvant = nombreSens();
+
+        refus(creer(deZoe, "fruit", "nom"), 403, "image.reservee_au_proprietaire");
+        refus(creer(privee, "fruit", "nom"), 404, "ressource.introuvable");
+        refus(creer(UUID.randomUUID(), "fruit", "nom"), 404, "ressource.introuvable");
+        assertEquals(sensAvant, nombreSens());
+        assertEquals(aCompleter, images.sensId(deZoe));
+    }
+
+    @Test
+    @TestSecurity(user = ZOE, roles = "admin")
+    @OidcSecurity(claims = @Claim(key = "sub", value = ZOE))
+    void lAdministrateurNonProprietaireNePeutPasCreerLeSens() {
+        UUID dePaul = imageDe(PAUL, aCompleter, "versee");
+        long sensAvant = nombreSens();
+
+        refus(creer(dePaul, "fruit", "nom"), 403, "image.reservee_au_proprietaire");
+        assertEquals(sensAvant, nombreSens());
+        assertEquals(aCompleter, images.sensId(dePaul));
+    }
+
+    @Test
+    @TestSecurity(user = PAUL)
+    @OidcSecurity(claims = @Claim(key = "sub", value = PAUL))
+    void unLibelleOuUneCategorieInvalidesSontRefusesSansCreerDeSens() {
+        UUID image = imageDe(PAUL, aCompleter);
+        long sensAvant = nombreSens();
+        long version = images.version(image);
+
+        for (String libelle : new String[] { "", "  ", null, "a".repeat(41), "à compléter", "À COMPLÉTER" }) {
+            refus(creer(image, libelle, "nom"), 400, "sens.libelle_invalide");
+        }
+        for (String categorie : new String[] { "pronom", null }) {
+            refus(creer(image, "fruit", categorie), 400, "requete.invalide");
+        }
+        refus(given().contentType(ContentType.JSON).when().post("/api/images/" + image + "/sens").then(), 400,
+                "requete.invalide");
+        assertEquals(sensAvant, nombreSens());
+        assertEquals(aCompleter, images.sensId(image));
+        assertEquals(version, images.version(image));
+    }
+
     // --- Sens proposés ---
 
     @Test
@@ -331,6 +431,19 @@ class SensImageResourceTest {
         corps.put("sensId", sensId == null ? null : sensId.toString());
         return given().contentType(ContentType.JSON).body(corps)
                 .when().put("/api/images/" + image + "/sens").then();
+    }
+
+    private static ValidatableResponse creer(UUID image, String libelle, String categorie) {
+        Map<String, Object> corps = new HashMap<>();
+        corps.put("libelle", libelle);
+        corps.put("categorie", categorie);
+        return given().contentType(ContentType.JSON).body(corps)
+                .when().post("/api/images/" + image + "/sens").then();
+    }
+
+    private long nombreSens() {
+        return QuarkusTransaction.requiringNew().call(() -> ((Number) entityManager
+                .createNativeQuery("select count(*) from sens").getSingleResult()).longValue());
     }
 
     private static String reponse(ValidatableResponse reponse) {

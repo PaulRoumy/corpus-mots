@@ -3620,6 +3620,55 @@ describe('Preparation (En-tête)', () => {
       );
     });
 
+    it('Sens créé dans le panneau : Carte mise à jour, puis l’Image choisie porte « Mot, nouveau Sens »', async () => {
+      const POUDRE = {
+        id: '0190f0a0-0000-7000-8000-0000000d0098',
+        libelle: 'poudre',
+        categorie: 'nom',
+      };
+      await ouvrirGrille();
+      await ouvrirChoix();
+
+      [...panneau()!.querySelectorAll<HTMLButtonElement>('button')]
+        .find((bouton) => bouton.textContent?.replace(/\s+/g, ' ').trim() === 'Nouveau sens')!
+        .click();
+      await stabiliser();
+      const libelle = panneau()!.querySelector<HTMLInputElement>('.creation-sens__libelle')!;
+      libelle.value = 'poudre';
+      libelle.dispatchEvent(new Event('input'));
+      await stabiliser();
+      [...panneau()!.querySelectorAll<HTMLButtonElement>('button')]
+        .find((bouton) => bouton.textContent?.trim() === 'Créer le sens')!
+        .click();
+      await stabiliser();
+      const requete = serveur.expectOne(`${URL_MOTS}/${FARINE.id}/sens`);
+      expect(requete.request.method).toBe('POST');
+      expect(requete.request.body).toEqual({ libelle: 'poudre', categorie: 'nom' });
+      requete.flush({ ...FARINE, sens: POUDRE, illustre: false, image: null });
+      await stabiliser();
+
+      expect(texte('p[aria-live="polite"]')).toBe(
+        'Sens de « farine » : poudre (nom). Image retirée.',
+      );
+      const relecture = serveur.expectOne(lecturePropositions(URL_PROPOSITIONS));
+      expect(relecture.request.params.get('sensId')).toBe(POUDRE.id);
+      relecture.flush({
+        ...PROPOSITIONS,
+        sens: [...PROPOSITIONS.sens, { ...POUDRE, aCompleter: false }],
+        images: [{ ...proposition(IMAGE_Y), sens: { ...POUDRE, aCompleter: false } }],
+      });
+      await stabiliser();
+      expect(panneau()).not.toBeNull();
+
+      options()[0].click();
+      await stabiliser();
+      serveur
+        .expectOne(URL_IMAGE)
+        .flush({ ...FARINE, sens: POUDRE, illustre: true, image: image(IMAGE_Y) });
+      await stabiliser();
+      expect(texte(`#carte-mot-alternative-${FARINE.id}`)).toBe('farine, poudre');
+    });
+
     it('un clic sur une Image la lie ; une Carte « à illustrer » devient illustrée', async () => {
       await ouvrirGrille();
       racine

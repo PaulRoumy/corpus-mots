@@ -777,6 +777,38 @@
           }
         }
       },
+      "NouveauSensImageDto" : {
+        "type" : "object",
+        "required" : [ "libelle", "categorie" ],
+        "properties" : {
+          "libelle" : {
+            "type" : "string",
+            "maxLength" : 40,
+            "description" : "Libellé court du Sens, autre que « à compléter » ; un libellé déjà connu pour le Mot de l'Image réutilise ce Sens, avec sa catégorie"
+          },
+          "categorie" : {
+            "type" : "string",
+            "description" : "Catégorie grammaticale du Sens",
+            "enum" : [ "nom", "verbe", "adjectif", "adverbe", "autre" ]
+          }
+        }
+      },
+      "NouveauSensMotPreparationDto" : {
+        "type" : "object",
+        "required" : [ "libelle", "categorie" ],
+        "properties" : {
+          "libelle" : {
+            "type" : "string",
+            "maxLength" : 40,
+            "description" : "Libellé court du Sens, autre que « à compléter » ; un libellé déjà connu pour ce Mot réutilise ce Sens, avec sa catégorie"
+          },
+          "categorie" : {
+            "type" : "string",
+            "description" : "Catégorie grammaticale du Sens",
+            "enum" : [ "nom", "verbe", "adjectif", "adverbe", "autre" ]
+          }
+        }
+      },
       "NouvelAlbumDto" : {
         "type" : "object",
         "required" : [ "titre", "auteur" ],
@@ -1843,6 +1875,44 @@
         },
         "tags" : [ "Images Resource" ]
       },
+      "post" : {
+        "summary" : "Créer un Sens (ou réutiliser celui de même libellé) pour le Mot d'une Image et le lui donner (son seul propriétaire), tant qu'elle n'est liée dans aucune Préparation",
+        "operationId" : "creerSensImage",
+        "parameters" : [ {
+          "name" : "id",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "$ref" : "#/components/schemas/UUID"
+          }
+        } ],
+        "requestBody" : {
+          "required" : true,
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/NouveauSensImageDto"
+              }
+            }
+          }
+        },
+        "responses" : {
+          "200" : {
+            "description" : "Carte d'identité à jour de l'Image",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/CarteIdentiteImageDto"
+                }
+              }
+            }
+          },
+          "400" : {
+            "description" : "Bad Request"
+          }
+        },
+        "tags" : [ "Images Resource" ]
+      },
       "put" : {
         "summary" : "Changer le Sens d'une Image pour un autre Sens de son Mot (son seul propriétaire), tant qu'elle n'est liée dans aucune Préparation",
         "operationId" : "changerSensImage",
@@ -2453,6 +2523,51 @@
       }
     },
     "/api/preparations/{id}/mots/{motPreparationId}/sens" : {
+      "post" : {
+        "summary" : "Créer un Sens (ou réutiliser celui de même libellé) pour un Mot d'une Préparation de l'enseignant connecté et le retenir ; l'Image liée d'un autre Sens est seulement déliée",
+        "operationId" : "creerSensMotPreparation",
+        "parameters" : [ {
+          "name" : "id",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "$ref" : "#/components/schemas/UUID"
+          }
+        }, {
+          "name" : "motPreparationId",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "$ref" : "#/components/schemas/UUID"
+          }
+        } ],
+        "requestBody" : {
+          "required" : true,
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/NouveauSensMotPreparationDto"
+              }
+            }
+          }
+        },
+        "responses" : {
+          "200" : {
+            "description" : "Mot de Préparation avec son nouveau Sens retenu",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/MotPreparationDto"
+                }
+              }
+            }
+          },
+          "400" : {
+            "description" : "Bad Request"
+          }
+        },
+        "tags" : [ "Preparations Resource" ]
+      },
       "put" : {
         "summary" : "Changer le Sens retenu d'un Mot d'une Préparation de l'enseignant connecté, parmi ses Sens visibles ; l'Image liée d'un autre Sens est seulement déliée",
         "operationId" : "changerSensMotPreparation",

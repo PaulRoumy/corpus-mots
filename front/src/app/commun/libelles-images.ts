@@ -1,4 +1,5 @@
 import { CarteIdentiteImageDto } from '../api/models/carte-identite-image-dto';
+import { NouveauSensImageDto } from '../api/models/nouveau-sens-image-dto';
 
 /** Type d'une Image, même valeur en base, dans l'API et dans le front (énumération du client généré). */
 export type TypeImage = CarteIdentiteImageDto['typeImage'];
@@ -68,3 +69,31 @@ export const LICENCES_IMPOSEES: Readonly<Partial<Record<TypeImage, string>>> = {
   photo_personnelle: LIBELLES_LICENCE.droits_auteur_enseignant,
   image_album: LIBELLES_LICENCE.usage_pedagogique_album,
 };
+
+/** Catégorie grammaticale d'un Sens, les cinq valeurs de l'énumération du client généré. */
+export type CategorieGrammaticale = NouveauSensImageDto['categorie'];
+
+/** Catégories du Sélecteur de catégorie grammaticale, dans l'ordre affiché. */
+export const CATEGORIES_GRAMMATICALES: readonly CategorieGrammaticale[] = [
+  'nom',
+  'verbe',
+  'adjectif',
+  'adverbe',
+  'autre',
+];
+
+/** Libellé affiché d'une catégorie grammaticale : seule source des libellés de catégorie du front. */
+export const LIBELLES_CATEGORIE: Readonly<Record<CategorieGrammaticale, string>> = {
+  nom: 'nom',
+  verbe: 'verbe',
+  adjectif: 'adjectif',
+  adverbe: 'adverbe',
+  autre: 'autre',
+};
+
+/** Catégorie grammaticale de `valeur` si elle fait partie de la liste, sinon `null`. */
+export function categorieGrammaticale(
+  valeur: string | null | undefined,
+): CategorieGrammaticale | null {
+  return CATEGORIES_GRAMMATICALES.find((categorie) => categorie === valeur) ?? null;
+}

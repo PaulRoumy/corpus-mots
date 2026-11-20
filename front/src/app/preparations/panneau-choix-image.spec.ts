@@ -609,4 +609,172 @@ describe('PanneauChoixImage', () => {
       expect(racine.querySelector('mat-select')?.getAttribute('aria-disabled')).toBe('false');
     });
   });
+
+  describe('Création de Sens (story 2.8, partie 2)', () => {
+    const CHUTE = { id: 's9', libelle: 'chute', categorie: 'verbe', aCompleter: false };
+    const AVOCAT_CHUTE: MotPreparationDto = {
+      ...AVOCAT,
+      sens: { id: 's9', libelle: 'chute', categorie: 'verbe' },
+      illustre: false,
+      image: null,
+    };
+    const bouton = (libelle: string) =>
+      [...racine.querySelectorAll<HTMLButtonElement>('button')].find(
+        (candidat) => candidat.textContent?.replace(/\s+/g, ' ').trim() === libelle,
+      );
+    const libelle = () => racine.querySelector<HTMLInputElement>('.creation-sens__libelle')!;
+
+    async function deplierEtSaisir(saisie: string) {
+      bouton('Nouveau sens')!.click();
+      await stabiliser();
+      libelle().value = saisie;
+      libelle().dispatchEvent(new Event('input'));
+      await stabiliser();
+    }
+
+    it('déplier : formulaire sur place, focus sur le libellé, catégorie du Sens retenu préremplie', async () => {
+      await ouvrir();
+
+      await deplierEtSaisir('');
+
+      expect(racine.querySelector('.choix-image__mot form.creation-sens')).not.toBeNull();
+      expect(document.activeElement).toBe(libelle());
+      expect(texte('.creation-sens__categorie .mat-mdc-select-value')).toBe('nom');
+    });
+
+    it('Entrée : Sens créé et retenu, Mot émis, liste relue pour ce Sens, formulaire replié, focus sur le champ Sens', async () => {
+      await ouvrir();
+      const changes: MotPreparationDto[] = [];
+      let fermetures = 0;
+      fixture.componentInstance.sensChange.subscribe((mot) => changes.push(mot));
+      fixture.componentInstance.fermer.subscribe(() => fermetures++);
+
+      await deplierEtSaisir(' chute ');
+      racine
+        .querySelector('form.creation-sens')!
+        .dispatchEvent(new SubmitEvent('submit', { bubbles: true, cancelable: true }));
+      await stabiliser();
+      const requete = serveur.expectOne(URL_SENS);
+      expect(requete.request.method).toBe('POST');
+      expect(requete.request.body).toEqual({ libelle: 'chute', categorie: 'nom' });
+      requete.flush(AVOCAT_CHUTE);
+      await stabiliser();
+
+      expect(changes).toEqual([AVOCAT_CHUTE]);
+      expect(racine.querySelector('form.creation-sens')).toBeNull();
+      fixture.componentRef.setInput('mot', AVOCAT_CHUTE);
+      await stabiliser();
+      const relecture = serveur.expectOne(lecture());
+      expect(relecture.request.params.get('sensId')).toBe('s9');
+      relecture.flush({ ...PROPOSITIONS, sens: [FRUIT, METIER, CHUTE], images: [] });
+      await stabiliser();
+
+      expect(texte('.choix-image__champ-sens .mat-mdc-select-value')).toBe('chute (verbe)');
+      expect(texte('.choix-image__vide')).toBe(MESSAGE_AUCUNE_IMAGE);
+      expect(bouton('Ajouter une image')).toBeDefined();
+      expect(
+        racine
+          .querySelector('.choix-image__champ-sens mat-select')
+          ?.contains(document.activeElement),
+      ).toBe(true);
+      expect(fermetures).toBe(0);
+    });
+
+    it('Échap : replié sans requête, panneau ouvert, focus sur « Nouveau sens »', async () => {
+      await ouvrir();
+      let fermetures = 0;
+      fixture.componentInstance.fermer.subscribe(() => fermetures++);
+      await deplierEtSaisir('chute');
+
+      libelle().dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+      await stabiliser();
+
+      expect(racine.querySelector('form.creation-sens')).toBeNull();
+      expect(fermetures).toBe(0);
+      expect(document.activeElement).toBe(bouton('Nouveau sens'));
+      serveur.expectNone(URL_SENS);
+    });
+
+    it('libellé vide : message sous le champ, aucune requête', async () => {
+      await ouvrir();
+      await deplierEtSaisir('   ');
+
+      bouton('Créer le sens')!.click();
+      await stabiliser();
+
+      expect(texte('form.creation-sens mat-error')).toBe(
+        'Le libellé du sens est obligatoire (40 caractères au plus).',
+      );
+      serveur.expectNone(URL_SENS);
+    });
+
+    it('Sens en lecture (un seul Sens) : « Nouveau sens » est proposé à côté', async () => {
+      await ouvrir({ ...PROPOSITIONS, sens: [FRUIT], images: [image('i1')] });
+
+      expect(texte('.choix-image__sens')).toBe('Sens : fruit (nom)');
+      expect(bouton('Nouveau sens')).toBeDefined();
+    });
+
+    it('échec : message dans la Création de Sens, formulaire ouvert, aucun Mot émis', async () => {
+      await ouvrir();
+      const changes: MotPreparationDto[] = [];
+      fixture.componentInstance.sensChange.subscribe((mot) => changes.push(mot));
+      await deplierEtSaisir('chute');
+
+      bouton('Créer le sens')!.click();
+      await stabiliser();
+      serveur.expectOne(URL_SENS).error(new ProgressEvent('error'));
+      await stabiliser();
+
+      expect(texte('.creation-sens__erreur')).toBe(MESSAGE_RESEAU);
+      expect(racine.querySelector('form.creation-sens')).not.toBeNull();
+      expect(changes).toEqual([]);
+      serveur.expectNone(lecture());
+    });
+
+    it('passé à un autre Mot : formulaire replié et vidé, la création de l’ancien ne se replie pas pour le nouveau', async () => {
+      await ouvrir();
+      const changes: MotPreparationDto[] = [];
+      fixture.componentInstance.sensChange.subscribe((mot) => changes.push(mot));
+      await deplierEtSaisir('chute');
+      bouton('Créer le sens')!.click();
+      await stabiliser();
+      const ancienne = serveur.expectOne(URL_SENS);
+
+      const AUTRE: MotPreparationDto = {
+        ...AVOCAT,
+        id: 'mp2',
+        forme: 'avoine',
+        sens: { id: 's5', libelle: 'céréale', categorie: 'adjectif' },
+        image: null,
+      };
+      fixture.componentRef.setInput('mot', AUTRE);
+      await stabiliser();
+      serveur.expectOne(lecture('mp2')).flush({ ...PROPOSITIONS, forme: 'avoine' });
+      await stabiliser();
+      expect(racine.querySelector('form.creation-sens')).toBeNull();
+
+      await deplierEtSaisir('');
+      expect(texte('.creation-sens__categorie .mat-mdc-select-value')).toBe('adjectif');
+      ancienne.flush(AVOCAT_CHUTE);
+      await stabiliser();
+
+      // La Carte de l'ancien Mot est mise à jour ; le formulaire du nouveau reste ouvert, focus inchangé.
+      expect(changes).toEqual([AVOCAT_CHUTE]);
+      expect(racine.querySelector('form.creation-sens')).not.toBeNull();
+      expect(document.activeElement).toBe(libelle());
+      serveur.expectNone(lecture());
+      serveur.expectNone(lecture('mp2'));
+    });
+
+    it('pendant le choix d’une Image, « Nouveau sens » est désactivé', async () => {
+      await ouvrir();
+      options()[2].click();
+      await stabiliser();
+
+      expect(bouton('Nouveau sens')!.disabled).toBe(true);
+      serveur.expectOne(URL_IMAGE).flush({ ...AVOCAT, image: { ...AVOCAT.image!, id: 'i3' } });
+      await stabiliser();
+    });
+  });
 });
