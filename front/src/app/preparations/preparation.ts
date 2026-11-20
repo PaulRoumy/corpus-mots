@@ -75,7 +75,7 @@ import { map } from 'rxjs';
 import { ouvrirDialogueCorrigerAlbum } from './corriger-album-dialogue';
 import { libelleMots } from './preparations';
 import type { PanneauChoixImage } from './panneau-choix-image';
-import { ChoixImage, PanneauDetection } from './panneau-detection';
+import { AjoutAvecSens, ChoixImage, PanneauDetection } from './panneau-detection';
 import { SaisieRapide } from './saisie-rapide';
 import { ouvrirDialogueTeleverserImage } from './televerser-image-dialogue';
 import {
@@ -144,12 +144,36 @@ interface ErreurAffichee {
 
 /**
  * Ajout en attente dans la file : la saisie tapée, et l'Image retenue dans le Panneau de détection s'il y en a une
- * (réutilisation : le Mot de l'Image est ajouté avec elle). La saisie revient dans le champ en cas de refus.
+ * (réutilisation : le Mot de l'Image est ajouté avec elle), ou le Sens choisi ou créé dans le panneau (le Mot est
+ * ajouté avec ce Sens). La saisie revient dans le champ en cas de refus. `issue` est celle de la Création de Sens, qui
+ * attend la réponse pour se replier ou afficher le refus.
  */
 interface Ajout {
   readonly saisie: string;
   readonly image?: ChoixImage;
+  readonly sens?: AjoutAvecSens;
+  readonly issue?: IssueCreationSens;
 }
+
+/**
+ * Issue d'un ajout lancé par la Création de Sens : `champ` est le texte du Champ de saisie rapide à l'envoi, vidé au
+ * succès seulement s'il n'a pas changé depuis.
+ */
+interface IssueCreationSens {
+  readonly champ: string;
+  readonly resoudre: () => void;
+  readonly rejeter: (erreur: unknown) => void;
+}
+
+/** Ajout de la Création de Sens abandonné (Préparation fermée ou rechargée) : rien n'a été appliqué. */
+const ERREUR_AJOUT_ABANDONNE = 'Ajout abandonné : la préparation a changé';
+
+/**
+ * Refus d'un Sens choisi devenu invisible (`preparation.sens_invalide`), sous le champ. Même texte que
+ * `MESSAGE_SENS_INDISPONIBLE` du Panneau de choix d'Image, recopié : l'importer chargerait ce panneau, chargé à la
+ * demande, dans la page.
+ */
+export const MESSAGE_SENS_PLUS_PROPOSE = "Ce sens n'est plus proposé pour ce mot.";
 
 /** Mots dont l'ajout a échoué (autrement que par un refus à corriger), et le message du dernier échec. */
 interface EchecAjout {
@@ -157,9 +181,15 @@ interface EchecAjout {
   readonly message: string;
 }
 
-/** Mot nommé pour un ajout : celui de l'Image retenue, sinon la saisie. */
+/** Mot nommé pour un ajout : celui de l'Image retenue ou du Sens choisi, sinon la saisie. */
 function motDeLAjout(ajout: Ajout): string {
-  return ajout.image?.forme ?? ajout.saisie;
+  return ajout.image?.forme ?? ajout.sens?.forme ?? ajout.saisie;
+}
+
+/** « « étalé » ajouté (chute, nom). », ou « « étalé » ajouté (chute). » pour un Sens sans catégorie. */
+export function annonceAjoutAvecSens(mot: MotPreparationDto): string {
+  const sens = mot.sens.categorie ? `${mot.sens.libelle}, ${mot.sens.categorie}` : mot.sens.libelle;
+  return `« ${mot.forme} » ajouté (${sens}).`;
 }
 
 /** « « citrouille » n'a pas été ajouté. », « « a », « b » n'ont pas été ajoutés. », suivi du message de l'échec. */
@@ -263,6 +293,12 @@ type Source = 'module' | 'theme';
  * un clic sur une Image, ajoute le Mot de l'Image avec elle (réutilisation, sans copie), dans la même file que les
  * Entrées ; annonce « « farine » ajouté avec son image. ». Une Image qui n'est plus disponible est refusée sous le
  * champ, où la saisie revient et relance la détection.
+ *
+ * Sens dans la détection (story 2.8, partie 3) : Entrée sans Image choisie, avec un Sens choisi dans les puces du
+ * panneau, ajoute le Mot de ce Sens avec lui ; « Créer le sens » de la Création de Sens du panneau ajoute le Mot avec le
+ * Sens tapé (obtenu ou créé par le back), dans la même file : le champ est vidé, le panneau masqué, le focus rendu au
+ * champ et « « étalé » ajouté (chute, nom). » annoncé. Un refus de cet ajout s'affiche dans la Création de Sens, la
+ * saisie gardée ; celui d'un Sens choisi, sous le champ.
  *
  * Retrait d'un Mot (story 2.3, partie 2) : « Retirer » sur une Carte la fait disparaître aussitôt, sans confirmation,
  * et le compteur suit ; le focus passe au bouton « Retirer » de la Carte suivante, sinon de la précédente, sinon au
@@ -553,7 +589,9 @@ type Source = 'module' | 'theme';
               #detection
               [preparationId]="courante.id"
               [saisie]="saisieTapee()"
+              [envoyerNouveauSens]="ajouterAvecNouveauSens"
               (retenir)="retenirImage($event)"
+              (focusChamp)="rendreFocusChamp()"
             />
             @if (motsCharges.length > 0) {
               <section class="mots" aria-labelledby="mots-titre">
@@ -869,6 +907,10 @@ export class Preparation {
     this.annonce.set('');
     this.carteOuverte.set(null);
     this.choixOuvert.set(null);
+    // Une Création de Sens en attente n'est pas envoyée : elle reste ouverte avec l'erreur.
+    for (const ajout of this.fileAjouts) {
+      ajout.issue?.rejeter(new Error(ERREUR_AJOUT_ABANDONNE));
+    }
     this.fileAjouts = [];
     try {
       const preparation = await this.api.invoke(lirePreparation, { id });
@@ -937,9 +979,31 @@ export class Preparation {
    * elle ; sinon la saisie est ajoutée « à illustrer ». L'ajout attend son tour, derrière les précédents.
    */
   protected ajouterMot(saisie: string): void {
-    const image = this.panneauDetection()?.choix() ?? null;
-    this.fileAjouts.push(image === null ? { saisie } : { saisie, image });
+    const panneau = this.panneauDetection();
+    const image = panneau?.choix() ?? null;
+    const sens = image === null ? (panneau?.choixSens() ?? null) : null;
+    this.fileAjouts.push(
+      image !== null ? { saisie, image } : sens !== null ? { saisie, sens } : { saisie },
+    );
     void this.envoyerAjouts();
+  }
+
+  /**
+   * « Créer le sens » dans le Panneau de détection : le Mot est ajouté avec le Sens tapé, derrière les ajouts en
+   * attente ; la promesse suit la réponse (rejetée en cas de refus, que la Création de Sens affiche).
+   */
+  protected readonly ajouterAvecNouveauSens = (sens: AjoutAvecSens): Promise<void> =>
+    new Promise<void>((resoudre, rejeter) => {
+      const champ = this.saisieTapee().trim();
+      // Mot nouveau : le back crée le Mot affiché par le panneau, pas une frappe plus récente du champ.
+      const saisie = sens.motId === null || champ === '' ? sens.forme : champ;
+      this.fileAjouts.push({ saisie, sens, issue: { champ, resoudre, rejeter } });
+      void this.envoyerAjouts();
+    });
+
+  /** Puce de Sens choisie ou Création de Sens repliée : le focus revient au Champ de saisie rapide. */
+  protected rendreFocusChamp(): void {
+    this.saisieRapide()?.focus();
   }
 
   /** Clic sur une Image du Panneau de détection : son Mot est ajouté avec elle ; le champ est vidé et garde le focus. */
@@ -980,33 +1044,70 @@ export class Preparation {
   private async envoyerAjout(ajout: Ajout): Promise<void> {
     const preparation = this.preparation();
     if (preparation === null) {
+      ajout.issue?.rejeter(new Error(ERREUR_AJOUT_ABANDONNE));
       return;
     }
     const numero = this.dernierChargement;
-    const { saisie, image } = ajout;
+    const { saisie, image, sens, issue } = ajout;
     try {
       const ajoute =
-        image === undefined
-          ? await this.api.invoke(ajouterMotPreparation, { id: preparation.id, body: { saisie } })
-          : await this.api.invoke(reutiliserImageMotPreparation, {
+        image !== undefined
+          ? await this.api.invoke(reutiliserImageMotPreparation, {
               id: preparation.id,
               body: { motId: image.motId, imageId: image.imageId },
+            })
+          : await this.api.invoke(ajouterMotPreparation, {
+              id: preparation.id,
+              body: {
+                saisie,
+                ...(sens?.motId ? { motId: sens.motId } : {}),
+                ...(sens?.sensId ? { sensId: sens.sensId } : {}),
+                ...(sens?.nouveauSens ? { nouveauSens: sens.nouveauSens } : {}),
+              },
             });
-      if (numero === this.dernierChargement) {
-        this.mots.update((mots) => (mots === null ? mots : [...mots, ajoute]));
-        this.annonce.set(
-          image === undefined
-            ? `« ${ajoute.forme} » ajouté.`
-            : `« ${ajoute.forme} » ajouté avec son image.`,
-        );
+      if (numero !== this.dernierChargement) {
+        // Réponse d'une Préparation qui n'est plus affichée : rien n'est appliqué, la Création de Sens ne se replie pas.
+        issue?.rejeter(new Error(ERREUR_AJOUT_ABANDONNE));
+        return;
       }
+      this.mots.update((mots) => (mots === null ? mots : [...mots, ajoute]));
+      if (issue !== undefined) {
+        // Création de Sens : le champ est vidé (le panneau se masque), sauf s'il a changé depuis l'envoi, et reprend
+        // le focus.
+        if (this.saisieTapee().trim() === issue.champ) {
+          this.saisieRapide()?.vider();
+        } else {
+          this.saisieRapide()?.focus();
+        }
+      }
+      this.annonce.set(
+        image !== undefined
+          ? `« ${ajoute.forme} » ajouté avec son image.`
+          : sens !== undefined
+            ? annonceAjoutAvecSens(ajoute)
+            : `« ${ajoute.forme} » ajouté.`,
+      );
+      issue?.resoudre();
     } catch (erreur) {
+      if (issue !== undefined) {
+        // Refus ou échec affiché dans la Création de Sens, qui reste ouverte : rien d'ajouté, saisie gardée.
+        issue.rejeter(erreur);
+        return;
+      }
       if (numero !== this.dernierChargement) {
         return;
       }
       const code = codeErreur(erreur);
       if (code === 'preparation.mot_deja_present') {
         this.saisieRapide()?.refuser(messageMotDejaPresent(motDeLAjout(ajout)), saisie);
+        return;
+      }
+      if (sens !== undefined && code !== null) {
+        // Sens choisi refusé (devenu invisible entre-temps) : sous le champ, la saisie remise relance la détection.
+        this.saisieRapide()?.refuser(
+          code === 'preparation.sens_invalide' ? MESSAGE_SENS_PLUS_PROPOSE : messageErreur(erreur),
+          saisie,
+        );
         return;
       }
       if (image !== undefined && code !== null) {

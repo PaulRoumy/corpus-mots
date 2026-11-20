@@ -83,6 +83,9 @@ function libelleValide(controle: AbstractControl<string>): ValidationErrors | nu
  * du libellé par le back s'affiche sous le champ, toute autre erreur sous le formulaire. Échap ferme d'abord la liste
  * des catégories ouverte, sinon replie sans rien créer ni fermer le panneau, et rend le focus à « Nouveau sens ».
  * `reinitialiser` replie et vide le formulaire quand le panneau passe à un autre Mot.
+ *
+ * Panneau de détection (story 2.8, partie 3) : `focusAuRepli` à faux, Échap replie sans donner le focus à « Nouveau
+ * sens » et émet `repliee`, pour que le panneau le rende au Champ de saisie rapide.
  */
 @Component({
   selector: 'app-creation-sens',
@@ -168,6 +171,10 @@ export class CreationSens {
   readonly envoyer = input.required<(sens: NouveauSens) => Promise<void>>();
   /** Sens créé et sélectionné, formulaire replié. */
   readonly creee = output<void>();
+  /** Vrai pour rendre le focus à « Nouveau sens » quand Échap replie le formulaire ; faux, l'hôte le place. */
+  readonly focusAuRepli = input(true);
+  /** Formulaire replié par Échap, sans rien créer. */
+  readonly repliee = output<void>();
 
   private readonly injecteur = inject(Injector);
   /** Vrai une fois le composant détruit (Sens devenu non modifiable pendant l'envoi) : plus rien n'est émis. */
@@ -297,6 +304,9 @@ export class CreationSens {
 
   private replier(): void {
     this.ouvert.set(false);
-    afterNextRender(() => this.focus(), { injector: this.injecteur });
+    if (this.focusAuRepli()) {
+      afterNextRender(() => this.focus(), { injector: this.injecteur });
+    }
+    this.repliee.emit();
   }
 }

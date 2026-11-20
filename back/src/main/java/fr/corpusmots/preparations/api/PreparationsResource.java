@@ -3,6 +3,7 @@ package fr.corpusmots.preparations.api;
 import fr.corpusmots.commun.api.ErreurMetier;
 import fr.corpusmots.commun.service.Pagination;
 import fr.corpusmots.commun.service.Section;
+import fr.corpusmots.preparations.service.AjouterMotCommande;
 import fr.corpusmots.preparations.service.PreparationsService;
 import fr.corpusmots.preparations.service.TeleverserImageMotCommande;
 import fr.corpusmots.vocabulaire.service.CategorieGrammaticale;
@@ -119,7 +120,21 @@ public class PreparationsResource {
         if (nouveau == null) {
             throw new ErreurMetier(400, "requete.invalide", "Le corps de la requête est obligatoire");
         }
-        return MotPreparationDto.de(preparations.ajouterMot(id, nouveau.saisie()));
+        if (nouveau.motId() != null && nouveau.sensId() == null && nouveau.nouveauSens() == null) {
+            throw new ErreurMetier(400, "requete.invalide", "Le mot ne se donne qu'avec un sens ou un nouveau sens");
+        }
+        AjouterMotCommande.NouveauSens nouveauSens = null;
+        if (nouveau.nouveauSens() != null) {
+            if (nouveau.sensId() != null) {
+                throw new ErreurMetier(400, "requete.invalide", "Un sens existant ou un nouveau sens, pas les deux");
+            }
+            nouveauSens = new AjouterMotCommande.NouveauSens(nouveau.nouveauSens().libelle(),
+                    CategorieGrammaticale.deValeur(nouveau.nouveauSens().categorie())
+                            .orElseThrow(() -> new ErreurMetier(400, "requete.invalide",
+                                    "Catégorie grammaticale absente ou inconnue")));
+        }
+        return MotPreparationDto.de(preparations.ajouterMot(id,
+                new AjouterMotCommande(nouveau.saisie(), nouveau.motId(), nouveau.sensId(), nouveauSens)));
     }
 
     @DELETE

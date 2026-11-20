@@ -33,8 +33,9 @@ import org.junit.jupiter.api.Test;
 /**
  * Sens modifiable dans le Panneau de choix d'Image (story 2.8, partie 1) :
  * {@code PUT /preparations/{id}/mots/{motPreparationId}/sens} et le paramètre {@code sensId} des propositions ;
- * Création de Sens (partie 2) : {@code POST /preparations/{id}/mots/{motPreparationId}/sens}. Une
- * ligne de test par ligne back de la matrice de la spec ; tout refus ne change rien.
+ * Création de Sens (partie 2) : {@code POST /preparations/{id}/mots/{motPreparationId}/sens} ; Sens à l'ajout depuis
+ * le Panneau de détection (partie 3) : {@code sensId} ou {@code nouveauSens} de {@code POST /preparations/{id}/mots}.
+ * Une ligne de test par ligne back de la matrice de la spec ; tout refus ne change rien.
  */
 @QuarkusTest
 @TestSecurity(user = SensPreparationResourceTest.PAUL)
@@ -372,7 +373,206 @@ class SensPreparationResourceTest {
         assertEquals(avant, etat(motPreparation));
     }
 
+    // --- Sens dans le Panneau de détection (story 2.8, partie 3) : POST /preparations/{id}/mots ---
+
+    @Test
+    void ajouterAvecUnSensVisibleLeRetient() {
+        MotVue etale = mot("étalé");
+        sens(etale, "cuisine", "adjectif");
+        UUID chute = sens(etale, "chute", "nom");
+        image(PAUL, chute, "privee");
+        long sensAvant = nombre("select count(*) from sens");
+
+        String motPreparation = ajouterAvec(Map.of("saisie", "étalé", "sensId", chute.toString()))
+                .statusCode(201)
+                .body("forme", equalTo("étalé"))
+                .body("sens.id", equalTo(chute.toString()))
+                .body("sens.libelle", equalTo("chute"))
+                .body("illustre", equalTo(false))
+                .extract().path("id");
+
+        assertEquals(chute, sensRetenu(UUID.fromString(motPreparation)));
+        assertEquals(sensAvant, nombre("select count(*) from sens"));
+        assertEquals(0L, nombre("select count(*) from lien_image"));
+    }
+
+    @Test
+    void ajouterAvecLeSensDUnAutreMotEstRefuse() {
+        MotVue cote = mot("côte");
+        image(PAUL, sens(cote, "corps", "nom"), "privee");
+        UUID direction = sens(mot("côté"), "direction", "nom");
+        image(PAUL, direction, "privee");
+        List<Long> avant = nombresAvecMots();
+
+        refus(ajouterAvec(Map.of("saisie", "cote", "motId", cote.id().toString(), "sensId", direction.toString())),
+                400, "preparation.sens_invalide");
+        assertEquals(avant, nombresAvecMots());
+    }
+
+    @Test
+    void ajouterAvecUnSensNonVisibleOuInconnuEstRefuse() {
+        MotVue avocat = mot("avocat");
+        image(PAUL, sens(avocat, "fruit", "nom"), "privee");
+        UUID deZoe = sens(avocat, "plaideur", "nom");
+        image(ZOE, deZoe, "privee");
+        List<Long> avant = nombresAvecMots();
+
+        for (UUID sens : new UUID[] { deZoe, UUID.randomUUID() }) {
+            refus(ajouterAvec(Map.of("saisie", "avocat", "sensId", sens.toString())), 400,
+                    "preparation.sens_invalide");
+            refus(ajouterAvec(Map.of("saisie", "avocat", "motId", avocat.id().toString(), "sensId", sens.toString())),
+                    400, "preparation.sens_invalide");
+        }
+        assertEquals(avant, nombresAvecMots());
+    }
+
+    @Test
+    void ajouterUnMotExistantAvecUnNouveauSensCreeCeSens() {
+        MotVue etale = mot("étalé");
+        image(PAUL, sens(etale, "cuisine", "adjectif"), "privee");
+        long sensAvant = nombre("select count(*) from sens");
+
+        String chute = ajouterAvec(Map.of("saisie", "etale", "motId", etale.id().toString(),
+                "nouveauSens", Map.of("libelle", "chute", "categorie", "nom")))
+                .statusCode(201)
+                .body("motId", equalTo(etale.id().toString()))
+                .body("forme", equalTo("étalé"))
+                .body("sens.libelle", equalTo("chute"))
+                .body("sens.categorie", equalTo("nom"))
+                .extract().path("sens.id");
+
+        assertEquals(sensAvant + 1, nombre("select count(*) from sens"));
+        assertEquals("chute|nom|" + etale.id(), ligneSens(UUID.fromString(chute)));
+        assertEquals(1L, nombre("select count(*) from sens_retenu where sens_id = '" + chute + "'"));
+    }
+
+    @Test
+    void ajouterUnMotNouveauAvecUnNouveauSensCreeLeMotEtLeSens() {
+        long motsAvant = nombre("select count(*) from mot");
+
+        String gateau = ajouterAvec(Map.of("saisie", "la galette",
+                "nouveauSens", Map.of("libelle", "gâteau", "categorie", "nom")))
+                .statusCode(201)
+                .body("forme", equalTo("galette"))
+                .body("sens.libelle", equalTo("gâteau"))
+                .body("sens.categorie", equalTo("nom"))
+                .extract().path("sens.id");
+
+        assertEquals(motsAvant + 1, nombre("select count(*) from mot"));
+        assertEquals(1L, nombre("select count(*) from sens s join mot m on m.id = s.mot_id where m.forme = 'galette'"));
+        assertEquals(1L, nombre("select count(*) from sens_retenu where sens_id = '" + gateau + "'"));
+    }
+
+    @Test
+    void ajouterAvecUnLibelleDejaConnuReutiliseCeSens() {
+        MotVue etale = mot("étalé");
+        UUID chute = sens(etale, "chute", "nom");
+        long sensAvant = nombre("select count(*) from sens");
+
+        ajouterAvec(Map.of("saisie", "étalé", "motId", etale.id().toString(),
+                "nouveauSens", Map.of("libelle", " Chute ", "categorie", "verbe")))
+                .statusCode(201)
+                .body("sens.id", equalTo(chute.toString()))
+                .body("sens.categorie", equalTo("nom"));
+        assertEquals(sensAvant, nombre("select count(*) from sens"));
+    }
+
+    @Test
+    void ajouterAvecUnLibelleInvalideNeCreeNiMotNiSens() {
+        MotVue etale = mot("étalé");
+        List<Long> avant = nombresAvecMots();
+
+        for (String libelle : new String[] { "à compléter", "", "a".repeat(41) }) {
+            Map<String, Object> nouveauSens = new HashMap<>();
+            nouveauSens.put("libelle", libelle);
+            nouveauSens.put("categorie", "nom");
+            refus(ajouterAvec(Map.of("saisie", "galette", "nouveauSens", nouveauSens)), 400,
+                    "sens.libelle_invalide");
+            refus(ajouterAvec(Map.of("saisie", "étalé", "motId", etale.id().toString(), "nouveauSens", nouveauSens)),
+                    400, "sens.libelle_invalide");
+        }
+        assertEquals(avant, nombresAvecMots());
+    }
+
+    @Test
+    void ajouterAvecUneCategorieAbsenteOuHorsListeEstRefuse() {
+        List<Long> avant = nombresAvecMots();
+
+        for (String categorie : new String[] { "pronom", null }) {
+            Map<String, Object> nouveauSens = new HashMap<>();
+            nouveauSens.put("libelle", "gâteau");
+            nouveauSens.put("categorie", categorie);
+            refus(ajouterAvec(Map.of("saisie", "galette", "nouveauSens", nouveauSens)), 400, "requete.invalide");
+        }
+        assertEquals(avant, nombresAvecMots());
+    }
+
+    @Test
+    void ajouterAvecUnSensEtUnNouveauSensEstRefuse() {
+        MotVue etale = mot("étalé");
+        UUID chute = sens(etale, "chute", "nom");
+        image(PAUL, chute, "privee");
+        List<Long> avant = nombresAvecMots();
+
+        refus(ajouterAvec(Map.of("saisie", "étalé", "sensId", chute.toString(),
+                "nouveauSens", Map.of("libelle", "cuisine", "categorie", "adjectif"))), 400, "requete.invalide");
+        assertEquals(avant, nombresAvecMots());
+    }
+
+    @Test
+    void ajouterAvecUnSensUnMotDejaPresentNeCreeAucunSens() {
+        MotVue etale = mot("étalé");
+        UUID chute = sens(etale, "chute", "nom");
+        image(PAUL, chute, "privee");
+        ajouter("étalé");
+        List<Long> avant = nombresAvecMots();
+
+        refus(ajouterAvec(Map.of("saisie", "étalé", "motId", etale.id().toString(),
+                "nouveauSens", Map.of("libelle", "cuisine", "categorie", "adjectif"))), 409,
+                "preparation.mot_deja_present");
+        refus(ajouterAvec(Map.of("saisie", "étalé", "sensId", chute.toString())), 409,
+                "preparation.mot_deja_present");
+        assertEquals(avant, nombresAvecMots());
+    }
+
+    @Test
+    void unMotSansSensEstRefuse() {
+        MotVue etale = mot("étalé");
+        List<Long> avant = nombresAvecMots();
+
+        refus(ajouterAvec(Map.of("saisie", "étalé", "motId", etale.id().toString())), 400, "requete.invalide");
+        assertEquals(avant, nombresAvecMots());
+    }
+
+    @Test
+    void unMotInconnuAvecUnSensEstIntrouvable() {
+        MotVue etale = mot("étalé");
+        UUID chute = sens(etale, "chute", "nom");
+        image(PAUL, chute, "privee");
+        List<Long> avant = nombresAvecMots();
+        String inconnu = UUID.randomUUID().toString();
+
+        refus(ajouterAvec(Map.of("saisie", "étalé", "motId", inconnu, "sensId", chute.toString())), 404,
+                "ressource.introuvable");
+        refus(ajouterAvec(Map.of("saisie", "galette", "motId", inconnu,
+                "nouveauSens", Map.of("libelle", "gâteau", "categorie", "nom"))), 404, "ressource.introuvable");
+        assertEquals(avant, nombresAvecMots());
+    }
+
     // --- Outils ---
+
+    private ValidatableResponse ajouterAvec(Map<String, Object> corps) {
+        return given().contentType(ContentType.JSON).body(corps)
+                .when().post("/api/preparations/" + preparation + "/mots")
+                .then();
+    }
+
+    /** {@link #nombres()} suivi du nombre de lignes de {@code mot}. */
+    private List<Long> nombresAvecMots() {
+        return List.of(nombre("select count(*) from preparation_mot"), nombre("select count(*) from sens_retenu"),
+                nombre("select count(*) from lien_image"), nombre("select count(*) from image"),
+                nombre("select count(*) from sens"), nombre("select count(*) from mot"));
+    }
 
     private static void refus(ValidatableResponse reponse, int statut, String code) {
         reponse.statusCode(statut)

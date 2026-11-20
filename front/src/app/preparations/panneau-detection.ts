@@ -10,14 +10,19 @@ import {
   output,
   signal,
   untracked,
+  viewChildren,
 } from '@angular/core';
+import { NgTemplateOutlet } from '@angular/common';
+import { MatIconModule } from '@angular/material/icon';
 import { Api } from '../api/api';
 import { detecterMotPreparation } from '../api/fn/preparations-resource/detecter-mot-preparation';
 import { DetectionImageDto } from '../api/models/detection-image-dto';
 import { DetectionMotDto } from '../api/models/detection-mot-dto';
 import { DetectionPreparationDto } from '../api/models/detection-preparation-dto';
+import { DetectionSensDto } from '../api/models/detection-sens-dto';
 import { Annuaire } from '../commun/annuaire';
 import { CompteCourant } from '../commun/compte-courant';
+import { CreationSens, NouveauSens } from '../commun/creation-sens/creation-sens';
 import { codeErreur } from '../commun/erreurs/message-erreur';
 import { SuggestionsArasaac } from './suggestions-arasaac';
 import { libelleProprietaire, nomProposition, VignetteProposition } from './vignette-proposition';
@@ -40,6 +45,17 @@ export interface ChoixImage {
   readonly motId: string;
   readonly forme: string;
   readonly imageId: string;
+}
+
+/**
+ * Mot à ajouter avec un Sens choisi dans les puces (`sensId`) ou tapé dans la Création de Sens (`nouveauSens`) ;
+ * `motId` est nul pour un Mot nouveau, que le back crée d'après `forme`.
+ */
+export interface AjoutAvecSens {
+  readonly motId: string | null;
+  readonly forme: string;
+  readonly sensId?: string;
+  readonly nouveauSens?: NouveauSens;
 }
 
 /** Geste du clavier transmis par le Champ de saisie rapide : ↓, ↑ ou Échap. */
@@ -70,14 +86,17 @@ export function libelleEtatMot(mot: DetectionMotDto): string {
   return `${etat} · ${libelleImages(mot.images.length)}${albums}`;
 }
 
+/** Libellé d'une puce de Sens : « chute (nom) », « méchant », « à compléter ». */
+export function libellePuceSens(sens: DetectionSensDto): string {
+  return sens.categorie ? `${sens.libelle} (${sens.categorie})` : sens.libelle;
+}
+
 /** Ligne des Sens : « animal (nom), méchant » ; `null` s'il n'y a que « à compléter ». */
 export function libelleSens(mot: DetectionMotDto): string | null {
   if (mot.sens.every((sens) => sens.aCompleter)) {
     return null;
   }
-  return mot.sens
-    .map((sens) => (sens.categorie ? `${sens.libelle} (${sens.categorie})` : sens.libelle))
-    .join(', ');
+  return mot.sens.map(libellePuceSens).join(', ');
 }
 
 /**
@@ -93,21 +112,33 @@ export function libelleSens(mot: DetectionMotDto): string | null {
  * ou sans Image, montre les suggestions ARASAAC et le Repère de qualité, une fois la frappe arrêtée depuis
  * `DELAI_SUGGESTIONS_MS` (ARASAAC n'est pas interrogé pour chaque fragment).
  *
- * Seul un résumé (l'en-tête de chaque Mot, ou le message d'échec) est annoncé, par une région `aria-live` polie ;
- * le panneau ne contient rien de focalisable : le focus reste dans le champ. Un échec affiche un message court, sans
- * bloquer la saisie.
+ * Seul un résumé (l'en-tête de chaque Mot, le Sens choisi et le nombre de ses Images, ou le message d'échec) est
+ * annoncé, par une région `aria-live` polie ; la liste des Images ne contient rien de focalisable : le focus reste dans
+ * le champ. Un échec affiche un message court, sans bloquer la saisie.
  *
  * Retenir une Image (story 2.7, partie 2) : les Images sont les options d'une liste (`role="listbox"`, un groupe par
  * Mot, nommé par son en-tête, ses Sens et ses Albums, texte masqué dans la liste) que le Champ de saisie rapide pilote
  * en combobox ARIA 1.2 (`idListe`, `idActif`, `deplie`) ; les Mots sans Image et leurs suggestions ARASAAC restent hors
  * de la liste. Aucune n'est choisie d'emblée ; ↓ choisit la première, ↓ ↑ parcourent les Images de tous les Mots dans
  * l'ordre, sans boucler ; ↑ sur la première et Échap retirent le choix (`naviguer`), qui tombe aussi à chaque frappe et
- * à chaque nouveau résultat. Tant que la détection d'une nouvelle saisie est attendue, rien n'est proposé. La page lit `choix()` à l'Entrée. Un clic sur une Image émet `retenir`, sans prendre le
- * focus du champ.
+ * à chaque nouveau résultat. Tant que la détection d'une nouvelle saisie est attendue, rien n'est proposé. La page lit
+ * `choix()` à l'Entrée. Un clic sur une Image émet `retenir`, sans prendre le focus du champ.
+ *
+ * Sens dans la détection (story 2.8, partie 3) : un Mot à au moins deux Sens visibles montre, à la place de la ligne
+ * « Sens : … », une rangée de puces à bascule (groupe « Sens de « étalé » », `aria-pressed`, coche en plus de la
+ * couleur) : « Tous », choisi d'emblée, puis chaque Sens dans l'ordre du back (« à compléter » en dernier). Les puces et
+ * « Nouveau sens » sont les seuls éléments focalisables (Tab depuis le champ) ; ceux d'un Mot qui propose des Images sont
+ * placés avant la liste, qui ne contient que groupes et options. Choisir un Sens limite les Images de ce Mot à ce Sens,
+ * dans la liste et dans ↑ ↓ (filtre de présentation, sans requête : la visibilité reste décidée par le back), fait tomber
+ * le choix d'Image et rend le focus au champ (`focusChamp`) ; un seul Sens choisi à la fois, tous Mots confondus, et le
+ * choix tombe à chaque frappe et à chaque nouveau résultat. La page lit `choixSens()` à l'Entrée sans Image choisie.
+ * « Nouveau sens », un par Mot existant et un pour un Mot nouveau, déplie la Création de Sens (catégorie préremplie avec
+ * celle du Sens choisi, sinon du premier Sens visible) ; « Créer le sens » appelle `envoyerNouveauSens`, fourni par la
+ * page, qui ajoute le Mot avec ce Sens ; Échap replie et rend le focus au champ.
  */
 @Component({
   selector: 'app-panneau-detection',
-  imports: [SuggestionsArasaac, VignetteProposition],
+  imports: [CreationSens, MatIconModule, NgTemplateOutlet, SuggestionsArasaac, VignetteProposition],
   changeDetection: ChangeDetectionStrategy.OnPush,
   styleUrl: './panneau-detection.scss',
   template: `
@@ -119,6 +150,17 @@ export function libelleSens(mot: DetectionMotDto): string | null {
           <div class="detection">
             @if (motsIllustres().length > 0) {
               <p class="detection__ligne">Images de votre section en premier.</p>
+              <!-- Puces et « Nouveau sens » hors de la liste : elle ne contient que groupes et options. -->
+              @for (mot of motsIllustres(); track mot.motId) {
+                <div class="detection__sens">
+                  <ng-container
+                    *ngTemplateOutlet="sensDuMot; context: { $implicit: mot, nomme: true }"
+                  />
+                  @if (imagesDe(mot).length === 0) {
+                    <p class="detection__ligne">Aucune image pour ce sens.</p>
+                  }
+                </div>
+              }
               <!-- Dans la liste, seuls groupes et options sont exposés : le texte de chaque Mot devient le nom du groupe. -->
               <div
                 class="detection__liste"
@@ -138,7 +180,7 @@ export function libelleSens(mot: DetectionMotDto): string | null {
                         >&ngsp;
                         <span>— {{ etatMot(mot) }}</span>
                       </p>
-                      @if (sensMot(mot); as sens) {
+                      @if (!aDesPuces(mot) && sensMot(mot); as sens) {
                         <p class="detection__ligne">Sens : {{ sens }}</p>
                       }
                       @if (mot.albums.length > 0) {
@@ -146,7 +188,7 @@ export function libelleSens(mot: DetectionMotDto): string | null {
                       }
                     </div>
                     <ul class="detection__images" role="presentation">
-                      @for (image of mot.images; track image.id) {
+                      @for (image of imagesDe(mot); track image.id) {
                         <li
                           [id]="idOption(image.id)"
                           [attr.role]="deplie() ? 'option' : null"
@@ -176,12 +218,15 @@ export function libelleSens(mot: DetectionMotDto): string | null {
                   >&ngsp;
                   <span>— {{ etatMot(mot) }}</span>
                 </p>
-                @if (sensMot(mot); as sens) {
+                @if (!aDesPuces(mot) && sensMot(mot); as sens) {
                   <p class="detection__ligne">Sens : {{ sens }}</p>
                 }
                 @if (mot.albums.length > 0) {
                   <p class="detection__ligne">Albums : {{ titresAlbums(mot) }}</p>
                 }
+                <ng-container
+                  *ngTemplateOutlet="sensDuMot; context: { $implicit: mot, nomme: false }"
+                />
                 @if (suggestionsPermises()) {
                   <app-suggestions-arasaac [mot]="mot.forme" />
                 }
@@ -194,6 +239,12 @@ export function libelleSens(mot: DetectionMotDto): string | null {
                   >&ngsp;
                   <span>— nouveau mot</span>
                 </p>
+                <app-creation-sens
+                  class="detection__creation-sens"
+                  [focusAuRepli]="false"
+                  [envoyer]="envoyeur(null, resultat.forme)"
+                  (repliee)="focusChamp.emit()"
+                />
                 @if (suggestionsPermises()) {
                   <app-suggestions-arasaac [mot]="resultat.forme" />
                 }
@@ -206,6 +257,49 @@ export function libelleSens(mot: DetectionMotDto): string | null {
         <p class="detection__erreur">{{ messageIndisponible }}</p>
       }
     }
+    <!-- Puces de Sens (Mot à au moins deux Sens visibles) et « Nouveau sens » d'un Mot existant. -->
+    <ng-template #sensDuMot let-mot let-nomme="nomme">
+      @if (aDesPuces(mot)) {
+        <div class="detection__puces" role="group" [attr.aria-label]="nomPuces(mot)">
+          @if (nomme) {
+            <span class="detection__ligne" aria-hidden="true">{{ nomPuces(mot) }} :</span>
+          }
+          <button
+            type="button"
+            class="detection__puce"
+            [class.detection__puce--choisie]="sensChoisiDe(mot) === null"
+            [attr.aria-pressed]="sensChoisiDe(mot) === null"
+            (click)="choisirSens(mot, null)"
+          >
+            @if (sensChoisiDe(mot) === null) {
+              <mat-icon class="detection__coche" svgIcon="coche" aria-hidden="true" />
+            }
+            Tous
+          </button>
+          @for (sens of sensDe(mot); track sens.id) {
+            <button
+              type="button"
+              class="detection__puce"
+              [class.detection__puce--choisie]="sensChoisiDe(mot) === sens.id"
+              [attr.aria-pressed]="sensChoisiDe(mot) === sens.id"
+              (click)="choisirSens(mot, sens.id)"
+            >
+              @if (sensChoisiDe(mot) === sens.id) {
+                <mat-icon class="detection__coche" svgIcon="coche" aria-hidden="true" />
+              }
+              {{ libellePuce(sens) }}
+            </button>
+          }
+        </div>
+      }
+      <app-creation-sens
+        class="detection__creation-sens"
+        [categorieInitiale]="categorieInitiale(mot)"
+        [focusAuRepli]="false"
+        [envoyer]="envoyeur(mot.motId, mot.forme)"
+        (repliee)="focusChamp.emit()"
+      />
+    </ng-template>
   `,
 })
 export class PanneauDetection {
@@ -214,8 +308,16 @@ export class PanneauDetection {
   /** Saisie en cours du Champ de saisie rapide. */
   readonly saisie = input('');
 
+  /**
+   * Ajoute le Mot avec le Sens tapé dans la Création de Sens (même file que les autres ajouts) ; rejette en cas de
+   * refus, que la Création de Sens affiche.
+   */
+  readonly envoyerNouveauSens = input<((ajout: AjoutAvecSens) => Promise<void>) | null>(null);
+
   /** Image retenue d'un clic : la page l'ajoute aussitôt. */
   readonly retenir = output<ChoixImage>();
+  /** Le focus revient au Champ de saisie rapide (Sens choisi, Création de Sens repliée). */
+  readonly focusChamp = output<void>();
 
   private readonly api = inject(Api);
   private readonly annuaire = inject(Annuaire);
@@ -254,9 +356,33 @@ export class PanneauDetection {
     this.saisie().trim() !== this.saisieDuResultat()
       ? []
       : this.motsIllustres().flatMap((mot) =>
-          mot.images.map((image) => ({ motId: mot.motId, forme: mot.forme, imageId: image.id })),
+          this.imagesDe(mot).map((image) => ({
+            motId: mot.motId,
+            forme: mot.forme,
+            imageId: image.id,
+          })),
         ),
   );
+
+  /** Sens choisi dans les puces d'un Mot, `null` pour « Tous » partout ; un seul à la fois. */
+  private readonly sensChoisi = signal<{ readonly motId: string; readonly sensId: string } | null>(
+    null,
+  );
+
+  /**
+   * Mot dont un Sens est choisi, avec ce Sens ; `null` si « Tous » partout, ou si une détection est attendue pour une
+   * autre saisie. Entrée sans Image choisie ajoute alors ce Mot avec ce Sens.
+   */
+  readonly choixSens = computed<AjoutAvecSens | null>(() => {
+    const choisi = this.sensChoisi();
+    if (choisi === null || this.saisie().trim() !== this.saisieDuResultat()) {
+      return null;
+    }
+    const mot = this.resultat()?.mots.find((autre) => autre.motId === choisi.motId);
+    return mot === undefined || !mot.sens.some((sens) => sens.id === choisi.sensId)
+      ? null
+      : { motId: mot.motId, forme: mot.forme, sensId: choisi.sensId };
+  });
 
   /** Vrai quand le panneau propose au moins une Image (`aria-expanded` du champ). */
   readonly deplie = computed(() => this.options().length > 0);
@@ -277,8 +403,14 @@ export class PanneauDetection {
 
   /** Première proposition, mise en avant : la première Image du premier Mot qui en a. */
   protected readonly premiereImageId = computed(
-    () => this.resultat()?.mots.find((mot) => mot.images.length > 0)?.images[0]?.id ?? null,
+    () => this.motsIllustres().flatMap((mot) => this.imagesDe(mot))[0]?.id ?? null,
   );
+
+  /** Créations de Sens affichées, une par Mot. */
+  private readonly creations = viewChildren(CreationSens);
+
+  /** Fonctions d'envoi de la Création de Sens, une par Mot : la même à chaque rendu. */
+  private readonly envoyeurs = new Map<string, (sens: NouveauSens) => Promise<void>>();
 
   /**
    * Vrai quand la saisie n'a pas changé depuis `DELAI_SUGGESTIONS_MS` : ARASAAC n'est interrogé que pour un mot dont la
@@ -296,6 +428,16 @@ export class PanneauDetection {
       return '';
     }
     const { forme, mots } = etat.resultat;
+    // Sens choisi dans les puces : la liste réduite est annoncée.
+    const choisi = this.sensChoisi();
+    const motChoisi = choisi === null ? undefined : mots.find((mot) => mot.motId === choisi.motId);
+    const sensChoisi = motChoisi?.sens.find((sens) => sens.id === choisi?.sensId);
+    if (motChoisi !== undefined && sensChoisi !== undefined) {
+      const nombre = this.imagesDe(motChoisi).length;
+      return nombre === 0
+        ? 'Aucune image pour ce sens.'
+        : `${motChoisi.forme}, ${libellePuceSens(sensChoisi)} : ${libelleImages(nombre)}.`;
+    }
     return mots.length === 0
       ? `${forme} — nouveau mot`
       : mots.map((mot) => `${mot.forme} — ${libelleEtatMot(mot)}`).join(' ; ');
@@ -312,6 +454,8 @@ export class PanneauDetection {
       untracked(() => {
         this.suggestionsPermises.set(false);
         this.imageChoisie.set(null);
+        this.sensChoisi.set(null);
+        this.reinitialiserCreations();
       });
       if (saisie.length < LONGUEUR_MIN_DETECTION) {
         untracked(() => this.etat.set({ nom: 'masque' }));
@@ -350,6 +494,75 @@ export class PanneauDetection {
     } else if (options.length > 0) {
       this.imageChoisie.set(options[Math.min(index + 1, options.length - 1)].imageId);
     }
+  }
+
+  /**
+   * Replie et vide toute Création de Sens ouverte (nouvelle frappe, nouveau résultat) : un libellé tapé pour une autre
+   * saisie n'est jamais envoyé pour la nouvelle.
+   */
+  private reinitialiserCreations(): void {
+    for (const creation of this.creations()) {
+      creation.reinitialiser();
+    }
+  }
+
+  /** Images du Mot montrées et parcourues : celles du Sens choisi pour lui, sinon toutes. */
+  protected imagesDe(mot: DetectionMotDto): readonly DetectionImageDto[] {
+    const sensId = this.sensChoisiDe(mot);
+    return sensId === null ? mot.images : mot.images.filter((image) => image.sens.id === sensId);
+  }
+
+  /** Sens choisi pour ce Mot, `null` pour « Tous ». */
+  protected sensChoisiDe(mot: DetectionMotDto): string | null {
+    const choisi = this.sensChoisi();
+    return choisi !== null && choisi.motId === mot.motId ? choisi.sensId : null;
+  }
+
+  /** Vrai pour un Mot à au moins deux Sens visibles : ses Sens sont des puces. */
+  protected aDesPuces(mot: DetectionMotDto): boolean {
+    return mot.sens.length >= 2;
+  }
+
+  protected sensDe(mot: DetectionMotDto): readonly DetectionSensDto[] {
+    return mot.sens;
+  }
+
+  protected nomPuces(mot: DetectionMotDto): string {
+    return `Sens de « ${mot.forme} »`;
+  }
+
+  protected libellePuce(sens: DetectionSensDto): string {
+    return libellePuceSens(sens);
+  }
+
+  /** Puce choisie (clic, ou Espace ou Entrée après Tab) : le choix d'Image tombe, le focus revient au champ. */
+  protected choisirSens(mot: DetectionMotDto, sensId: string | null): void {
+    this.sensChoisi.set(sensId === null ? null : { motId: mot.motId, sensId });
+    this.imageChoisie.set(null);
+    this.focusChamp.emit();
+  }
+
+  /** Catégorie préremplie de la Création de Sens : celle du Sens choisi, sinon du premier Sens visible. */
+  protected categorieInitiale(mot: DetectionMotDto): string | null {
+    const sensId = this.sensChoisiDe(mot);
+    const sens = mot.sens.find((autre) => autre.id === sensId) ?? mot.sens[0];
+    return sens?.categorie ?? null;
+  }
+
+  /** Fonction d'envoi de la Création de Sens d'un Mot existant (`motId`) ou nouveau (`null`). */
+  protected envoyeur(motId: string | null, forme: string): (sens: NouveauSens) => Promise<void> {
+    const cle = motId ?? `nouveau:${forme}`;
+    let envoyeur = this.envoyeurs.get(cle);
+    if (envoyeur === undefined) {
+      envoyeur = (nouveauSens) => {
+        const envoyer = this.envoyerNouveauSens();
+        return envoyer === null
+          ? Promise.reject(new Error('Ajout avec un nouveau sens indisponible'))
+          : envoyer({ motId, forme, nouveauSens });
+      };
+      this.envoyeurs.set(cle, envoyeur);
+    }
+    return envoyeur;
   }
 
   protected retenirParClic(mot: DetectionMotDto, image: DetectionImageDto): void {
@@ -399,6 +612,9 @@ export class PanneauDetection {
       const resultat = await this.api.invoke(detecterMotPreparation, { id: preparationId, saisie });
       if (numero === this.derniereFrappe) {
         this.imageChoisie.set(null);
+        this.sensChoisi.set(null);
+        this.reinitialiserCreations();
+        this.envoyeurs.clear();
         this.saisieDuResultat.set(saisie);
         this.etat.set({ nom: 'resultat', resultat });
         const moi = this.compteCourant.compte()?.id;

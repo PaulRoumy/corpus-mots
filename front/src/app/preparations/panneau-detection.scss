@@ -72,3 +72,47 @@
   font: var(--cm-typo-body-sm);
   color: var(--mat-sys-on-surface-variant);
 }
+
+// Puces de Sens (story 2.8, partie 3) : bascules en pilule ; la puce choisie porte une coche en plus de la couleur.
+.detection__sens {
+  display: flex;
+  flex-direction: column;
+  gap: var(--cm-espace-2);
+}
+
+.detection__puces {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--cm-espace-2);
+}
+
+.detection__puce {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--cm-espace-1);
+  min-height: var(--cm-hauteur-badge);
+  padding: var(--cm-espace-1) var(--cm-espace-3);
+  border: var(--cm-epaisseur-separateur) solid var(--mat-sys-outline);
+  border-radius: var(--cm-arrondi-plein);
+  background: var(--mat-sys-surface);
+  color: var(--mat-sys-on-surface-variant);
+  font: var(--cm-typo-label);
+  cursor: pointer;
+
+  &:focus-visible {
+    outline: var(--cm-anneau-focus-epaisseur) solid var(--mat-sys-primary);
+    outline-offset: var(--cm-anneau-focus-decalage);
+  }
+}
+
+.detection__puce--choisie {
+  border-color: var(--mat-sys-secondary-container);
+  background: var(--mat-sys-secondary-container);
+  color: var(--mat-sys-on-secondary-container);
+}
+
+.detection__coche {
+  width: var(--cm-taille-icone-badge);
+  height: var(--cm-taille-icone-badge);
+}

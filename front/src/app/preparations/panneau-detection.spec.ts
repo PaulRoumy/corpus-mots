@@ -1,11 +1,14 @@
-import { provideHttpClient } from '@angular/common/http';
+import { HttpErrorResponse, provideHttpClient } from '@angular/common/http';
 import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
+import { MATERIAL_ANIMATIONS } from '@angular/material/core';
 import { DetectionImageDto } from '../api/models/detection-image-dto';
 import { DetectionMotDto } from '../api/models/detection-mot-dto';
 import { DetectionPreparationDto } from '../api/models/detection-preparation-dto';
 import { CompteCourant } from '../commun/compte-courant';
+import { provideIcones } from '../commun/icones';
 import {
+  AjoutAvecSens,
   DELAI_DETECTION_MS,
   DELAI_SUGGESTIONS_MS,
   libelleEtatMot,
@@ -110,7 +113,12 @@ describe('PanneauDetection', () => {
     URL.createObjectURL = vi.fn(() => 'blob:http://localhost/1');
     URL.revokeObjectURL = vi.fn();
     TestBed.configureTestingModule({
-      providers: [provideHttpClient(), provideHttpClientTesting()],
+      providers: [
+        provideHttpClient(),
+        provideHttpClientTesting(),
+        provideIcones(),
+        { provide: MATERIAL_ANIMATIONS, useValue: { animationsDisabled: true } },
+      ],
     });
     serveur = TestBed.inject(HttpTestingController);
     TestBed.inject(CompteCourant).mettreAJour({
@@ -179,7 +187,13 @@ describe('PanneauDetection', () => {
       [...racine.querySelectorAll<HTMLImageElement>('.vignette__image')].map((img) => img.alt),
     ).toEqual(['farine, à compléter', 'farine, à compléter']);
     expect(racine.querySelector('.vignette__sens')).toBeNull();
-    expect(racine.querySelector('a, button, input, [tabindex]')).toBeNull();
+    // Seul « Nouveau sens » est focalisable (un seul Sens : pas de puces).
+    expect(
+      [...racine.querySelectorAll('a, button, input, [tabindex]')].map((element) =>
+        element.textContent?.trim(),
+      ),
+    ).toEqual(['Nouveau sens']);
+    expect(racine.querySelector('.detection__puces')).toBeNull();
   });
 
   it('ignore une réponse dépassée par une frappe plus récente', async () => {
@@ -285,10 +299,12 @@ describe('PanneauDetection', () => {
 
     expect(textes('.detection__mot')).toEqual(['côte', 'côté']);
     expect(annonce()).toBe('côte — existe déjà · 1 image ; côté — existe déjà · 1 image');
+    // « côte » a deux Sens : des puces à la place de la ligne « Sens : … ».
     expect(textes('.detection__ligne')).toEqual([
       'Images de votre section en premier.',
-      'Sens : animal (nom), méchant',
+      'Sens de « côte » :',
     ]);
+    expect(textes('.detection__puce')).toEqual(['Tous', 'animal (nom)', 'méchant']);
     expect(textes('.vignette__sens')).toEqual(['méchant']);
     expect(racine.querySelectorAll('.vignette--premiere')).toHaveLength(1);
     expect(textes('.vignette__origine')).toEqual(['vous', 'vous']);
@@ -381,8 +397,8 @@ describe('PanneauDetection', () => {
         "farine, à compléter, vous, déjà utilisée, MS GS, image d'album, album La petite poule rousse",
         'farine, à compléter, Zoé, GS, image libre',
       ]);
-      // Rien de focalisable : le focus reste dans le champ.
-      expect(racine.querySelector('a, button, input, [tabindex]')).toBeNull();
+      // Rien de focalisable dans la liste : le focus reste dans le champ.
+      expect(liste.querySelector('a, button, input, [tabindex]')).toBeNull();
     });
 
     it('↓ choisit la première puis la suivante, sans boucler ; ↑ revient, puis retire le choix', async () => {
@@ -500,6 +516,358 @@ describe('PanneauDetection', () => {
       await attendreSuggestions();
       serveur.expectOne('/api/arasaac/suggestions?mot=farine').flush([]);
       await stabiliser();
+    });
+  });
+
+  describe('Sens dans la détection (story 2.8, partie 3)', () => {
+    const panneau = () => fixture.componentInstance;
+    const CHUTE = { id: 's-chute', libelle: 'chute', categorie: 'nom', aCompleter: false };
+    const CUISINE = {
+      id: 's-cuisine',
+      libelle: 'cuisine',
+      categorie: 'adjectif',
+      aCompleter: false,
+    };
+    const ETALE: DetectionPreparationDto = {
+      forme: 'étalé',
+      mots: [
+        mot('étalé', {
+          sens: [CHUTE, CUISINE, ACOMPLETER],
+          images: [
+            image('i1', { sens: CUISINE }),
+            image('i2', { sens: CHUTE }),
+            image('i3', { sens: CHUTE }),
+          ],
+        }),
+      ],
+    };
+    const puces = () => [...racine.querySelectorAll<HTMLButtonElement>('.detection__puce')];
+    const pressees = () => puces().map((puce) => puce.getAttribute('aria-pressed'));
+    const vignettes = () =>
+      [...racine.querySelectorAll<HTMLElement>('[role="option"]')].map((option) =>
+        option.id.replace(`${panneau().idListe}-image-`, ''),
+      );
+    const bouton = (libelle: string, dans: ParentNode = racine) =>
+      [...dans.querySelectorAll<HTMLButtonElement>('button')].find(
+        (candidat) => candidat.textContent?.replace(/\s+/g, ' ').trim() === libelle,
+      );
+
+    async function afficher(resultat: DetectionPreparationDto, saisie = 'etale') {
+      await taper(saisie);
+      serveur.expectOne(url(saisie)).flush(resultat);
+      await stabiliser();
+      serveur.match('/api/enseignants').forEach((requete) => requete.flush([]));
+      servirMiniatures();
+      await stabiliser();
+    }
+
+    async function choisir(libelle: string) {
+      bouton(libelle)!.click();
+      await stabiliser();
+    }
+
+    it('puces : groupe nommé, « Tous » choisi d’emblée, « à compléter » en dernier', async () => {
+      await afficher(ETALE);
+
+      const groupe = racine.querySelector('.detection__puces')!;
+      expect(groupe.getAttribute('role')).toBe('group');
+      expect(groupe.getAttribute('aria-label')).toBe('Sens de « étalé »');
+      expect(groupe.closest('[role="listbox"]')).toBeNull();
+      expect(textes('.detection__puce')).toEqual([
+        'Tous',
+        'chute (nom)',
+        'cuisine (adjectif)',
+        'à compléter',
+      ]);
+      expect(pressees()).toEqual(['true', 'false', 'false', 'false']);
+      // L'état ne tient pas à la couleur seule : la puce choisie porte une coche.
+      expect(puces()[0].querySelector('mat-icon')).not.toBeNull();
+      expect(puces()[1].querySelector('mat-icon')).toBeNull();
+      expect(vignettes()).toEqual(['i1', 'i2', 'i3']);
+      expect(panneau().choixSens()).toBeNull();
+      await attendreSuggestions();
+    });
+
+    it('clic sur une puce : seules les Images de ce Sens, ↓ ne parcourt qu’elles, focus au champ', async () => {
+      await afficher(ETALE);
+      let focus = 0;
+      panneau().focusChamp.subscribe(() => focus++);
+      panneau().naviguer('suivant');
+
+      await choisir('chute (nom)');
+
+      expect(focus).toBe(1);
+      expect(pressees()).toEqual(['false', 'true', 'false', 'false']);
+      expect(puces()[1].querySelector('mat-icon')).not.toBeNull();
+      expect(vignettes()).toEqual(['i2', 'i3']);
+      // Le choix d'Image en cours tombe.
+      expect(panneau().choix()).toBeNull();
+      expect(panneau().choixSens()).toEqual({
+        motId: 'mot-étalé',
+        forme: 'étalé',
+        sensId: 's-chute',
+      });
+      panneau().naviguer('suivant');
+      expect(panneau().choix()?.imageId).toBe('i2');
+      panneau().naviguer('suivant');
+      panneau().naviguer('suivant');
+      expect(panneau().choix()?.imageId).toBe('i3');
+      await fixture.whenStable();
+      expect(racine.querySelector('.vignette--premiere')).toBeNull();
+
+      await choisir('Tous');
+      servirMiniatures();
+      await stabiliser();
+      expect(panneau().choixSens()).toBeNull();
+      expect(vignettes()).toEqual(['i1', 'i2', 'i3']);
+      expect(racine.querySelector('.vignette--premiere')?.id).toContain('i1');
+      await attendreSuggestions();
+    });
+
+    it('le Sens choisi et le nombre de ses Images sont annoncés', async () => {
+      await afficher(ETALE);
+      expect(annonce()).toBe('étalé — existe déjà · 3 images');
+
+      await choisir('chute (nom)');
+      expect(annonce()).toBe('étalé, chute (nom) : 2 images.');
+      await choisir('cuisine (adjectif)');
+      expect(annonce()).toBe('étalé, cuisine (adjectif) : 1 image.');
+      await choisir('à compléter');
+      expect(annonce()).toBe('Aucune image pour ce sens.');
+      await choisir('Tous');
+      servirMiniatures();
+      await stabiliser();
+      expect(annonce()).toBe('étalé — existe déjà · 3 images');
+      // La région annoncée reste la seule, sans les vignettes.
+      expect(racine.querySelectorAll('[aria-live]')).toHaveLength(1);
+    });
+
+    it('un Sens sans Image : aucune Image, Entrée gardera ce Sens', async () => {
+      await afficher(ETALE);
+      await choisir('à compléter');
+      expect(vignettes()).toEqual([]);
+      expect(texte('.detection__sens .detection__ligne:last-child')).toBe(
+        'Aucune image pour ce sens.',
+      );
+      expect(panneau().choixSens()?.sensId).toBe('s0');
+      await attendreSuggestions();
+    });
+
+    it('une frappe ramène « Tous »', async () => {
+      await afficher(ETALE);
+      await choisir('chute (nom)');
+
+      fixture.componentRef.setInput('saisie', 'etalee');
+      await fixture.whenStable();
+      expect(panneau().choixSens()).toBeNull();
+      await tour(DELAI_DETECTION_MS + 20);
+      await stabiliser();
+      serveur.expectOne(url('etalee')).flush(ETALE);
+      await stabiliser();
+      servirMiniatures();
+      await stabiliser();
+      expect(pressees()).toEqual(['true', 'false', 'false', 'false']);
+      expect(panneau().choixSens()).toBeNull();
+    });
+
+    it('deux Mots : le Sens choisi est celui d’un seul Mot', async () => {
+      const corps = { id: 's-corps', libelle: 'corps', categorie: 'nom', aCompleter: false };
+      const direction = { id: 's-dir', libelle: 'direction', categorie: 'nom', aCompleter: false };
+      const gauche = { id: 's-gauche', libelle: 'gauche', categorie: 'nom', aCompleter: false };
+      await afficher(
+        {
+          forme: 'cote',
+          mots: [
+            mot('côte', { sens: [corps, ACOMPLETER], images: [image('i1', { sens: corps })] }),
+            mot('côté', {
+              sens: [direction, gauche],
+              images: [image('i2', { sens: direction }), image('i3', { sens: gauche })],
+            }),
+          ],
+        },
+        'cote',
+      );
+
+      const groupes = [...racine.querySelectorAll('.detection__puces')];
+      expect(groupes.map((groupe) => groupe.getAttribute('aria-label'))).toEqual([
+        'Sens de « côte »',
+        'Sens de « côté »',
+      ]);
+      bouton('gauche (nom)', groupes[1])!.click();
+      await stabiliser();
+
+      expect(panneau().choixSens()).toEqual({
+        motId: 'mot-côté',
+        forme: 'côté',
+        sensId: 's-gauche',
+      });
+      // Les Images de l'autre Mot restent toutes proposées.
+      expect(vignettes()).toEqual(['i1', 'i3']);
+      expect(groupes[0].querySelector('[aria-pressed="true"]')?.textContent?.trim()).toBe('Tous');
+      await attendreSuggestions();
+    });
+
+    it('un seul Sens : la ligne « Sens : … » reste, sans puces', async () => {
+      await afficher({
+        forme: 'etale',
+        mots: [mot('étalé', { sens: [CHUTE], images: [image('i2', { sens: CHUTE })] })],
+      });
+      expect(racine.querySelector('.detection__puces')).toBeNull();
+      expect(textes('.detection__ligne')).toContain('Sens : chute (nom)');
+      await attendreSuggestions();
+    });
+
+    describe('« Nouveau sens »', () => {
+      let envoyer: ReturnType<typeof vi.fn<(ajout: AjoutAvecSens) => Promise<void>>>;
+      const libelle = () => racine.querySelector<HTMLInputElement>('.creation-sens__libelle')!;
+      const valeurCategorie = () => texte('.creation-sens__categorie .mat-mdc-select-value');
+
+      beforeEach(() => {
+        envoyer = vi.fn<(ajout: AjoutAvecSens) => Promise<void>>(() => Promise.resolve());
+        fixture.componentRef.setInput('envoyerNouveauSens', envoyer);
+        document.body.appendChild(racine);
+      });
+
+      afterEach(() => {
+        racine.remove();
+        document
+          .querySelectorAll('.cdk-overlay-container')
+          .forEach((surcouche) => surcouche.remove());
+      });
+
+      async function ouvrir(dans: ParentNode = racine) {
+        bouton('Nouveau sens', dans)!.click();
+        await stabiliser();
+      }
+
+      async function saisirEtCreer(valeur: string) {
+        libelle().value = valeur;
+        libelle().dispatchEvent(new Event('input'));
+        await stabiliser();
+        // Entrée dans le formulaire : soumission implicite, que jsdom ne simule pas.
+        racine
+          .querySelector('form')!
+          .dispatchEvent(new SubmitEvent('submit', { bubbles: true, cancelable: true }));
+        await stabiliser();
+      }
+
+      it('Mot existant : catégorie du Sens choisi, Entrée envoie le Mot avec le Sens tapé', async () => {
+        await afficher(ETALE);
+        await choisir('cuisine (adjectif)');
+        await ouvrir();
+
+        expect(document.activeElement).toBe(libelle());
+        expect(valeurCategorie()).toBe('adjectif');
+        await saisirEtCreer('chute');
+
+        expect(envoyer).toHaveBeenCalledWith({
+          motId: 'mot-étalé',
+          forme: 'étalé',
+          nouveauSens: { libelle: 'chute', categorie: 'adjectif' },
+        });
+        await attendreSuggestions();
+      });
+
+      it('sans Sens choisi : catégorie du premier Sens visible', async () => {
+        await afficher(ETALE);
+        await ouvrir();
+        expect(valeurCategorie()).toBe('nom');
+        await attendreSuggestions();
+      });
+
+      it('Mot nouveau : catégorie vide, envoyé sans Mot détecté', async () => {
+        await afficher({ forme: 'galette', mots: [] }, 'la galette');
+        await ouvrir();
+        expect(valeurCategorie() ?? '').toBe('');
+        racine
+          .querySelector<HTMLElement>('.creation-sens__categorie .mat-mdc-select-trigger')!
+          .click();
+        await stabiliser();
+        [...document.querySelectorAll<HTMLElement>('.cdk-overlay-pane mat-option')]
+          .find((option) => option.textContent?.trim() === 'nom')!
+          .click();
+        await stabiliser();
+        await saisirEtCreer('gâteau');
+
+        expect(envoyer).toHaveBeenCalledWith({
+          motId: null,
+          forme: 'galette',
+          nouveauSens: { libelle: 'gâteau', categorie: 'nom' },
+        });
+        await attendreSuggestions();
+        serveur.expectOne('/api/arasaac/suggestions?mot=galette').flush([]);
+        await stabiliser();
+      });
+
+      it('une frappe et un nouveau résultat replient et vident le formulaire ouvert', async () => {
+        await afficher(ETALE);
+        await ouvrir();
+        libelle().value = 'chute';
+        libelle().dispatchEvent(new Event('input'));
+        await stabiliser();
+
+        // Même Mot dans le nouveau résultat : son formulaire n'est pas gardé pour l'autre saisie.
+        await taper('etalee');
+        expect(racine.querySelector('form')).toBeNull();
+        serveur.expectOne(url('etalee')).flush(ETALE);
+        await stabiliser();
+        servirMiniatures();
+        await stabiliser();
+        expect(racine.querySelector('form')).toBeNull();
+        await ouvrir();
+        expect(libelle().value).toBe('');
+        expect(envoyer).not.toHaveBeenCalled();
+      });
+
+      it('Mot nouveau : le formulaire ouvert est vidé pour une autre forme', async () => {
+        await afficher({ forme: 'galette', mots: [] }, 'galette');
+        await ouvrir();
+        libelle().value = 'gâteau';
+        libelle().dispatchEvent(new Event('input'));
+        await stabiliser();
+
+        await taper('galettes');
+        serveur.expectOne(url('galettes')).flush({ forme: 'galettes', mots: [] });
+        await stabiliser();
+        expect(racine.querySelector('form')).toBeNull();
+        await ouvrir();
+        expect(libelle().value).toBe('');
+        await attendreSuggestions();
+        serveur.match((requete) => requete.url.startsWith('/api/arasaac/'));
+      });
+
+      it('Échap replie sans rien envoyer et rend le focus au champ', async () => {
+        await afficher(ETALE);
+        let focus = 0;
+        panneau().focusChamp.subscribe(() => focus++);
+        await ouvrir();
+
+        libelle().dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+        await stabiliser();
+
+        expect(racine.querySelector('form')).toBeNull();
+        expect(envoyer).not.toHaveBeenCalled();
+        expect(focus).toBe(1);
+        expect(document.activeElement).not.toBe(bouton('Nouveau sens'));
+        await attendreSuggestions();
+      });
+
+      it('refus : message sous le formulaire, rien de replié', async () => {
+        envoyer.mockRejectedValueOnce(
+          new HttpErrorResponse({
+            status: 409,
+            error: { code: 'preparation.mot_deja_present' },
+          }),
+        );
+        await afficher(ETALE);
+        await ouvrir();
+        await saisirEtCreer('chute');
+
+        expect(racine.querySelector('form')).not.toBeNull();
+        expect(texte('.creation-sens__erreur')).toBe('Ce mot est déjà dans la préparation.');
+        expect(libelle().value).toBe('chute');
+        await attendreSuggestions();
+      });
     });
   });
 

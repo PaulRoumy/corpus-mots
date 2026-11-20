@@ -792,7 +792,23 @@ components:
       properties:
         saisie:
           type: string
-          description: De 1 à 100 caractères une fois normalisé
+          description: "De 1 à 100 caractères une fois normalisé ; ignorée quand motId\
+            \ est donné, ou quand sensId est donné (le Mot est alors celui du Sens)"
+        motId:
+          description: "Mot détecté auquel s'applique sensId ou nouveauSens, jamais\
+            \ seul ; sans lui, le Mot du Sens choisi, ou celui de la saisie pour un\
+            \ nouveau Sens"
+          type: string
+          $ref: "#/components/schemas/UUID"
+        sensId:
+          description: "Sens visible du Mot, à retenir pour lui"
+          type: string
+          $ref: "#/components/schemas/UUID"
+        nouveauSens:
+          description: "Sens tapé dans la Création de Sens, obtenu ou créé pour le\
+            \ Mot et retenu"
+          type: object
+          $ref: "#/components/schemas/NouveauSensMotPreparationDto"
     NouveauSensImageDto:
       type: object
       required:

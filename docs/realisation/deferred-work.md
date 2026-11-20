@@ -226,3 +226,4 @@
 - source_spec: none
   summary: Story 2.8, partie 3 : choisir le Sens d'un Mot existant dans le Panneau de détection (Images proposées limitées à ce Sens, Mot ajouté ou Image retenue avec ce Sens) et « Nouveau sens » avec la Création de Sens de la partie 2.
   evidence: Découpage de la story 2.8 en trois parties choisi par Paul.
+  status: fait (`docs/realisation/spec-2-8-3-sens-dans-la-detection.md`).

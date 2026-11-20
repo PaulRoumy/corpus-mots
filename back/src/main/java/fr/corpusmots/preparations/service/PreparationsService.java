@@ -185,34 +185,72 @@ public class PreparationsService {
     }
 
     /**
-     * Ajoute en fin de Préparation {@code id} de l'enseignant courant le Mot saisi, normalisé par
-     * {@link Lexique#normaliser}, avec le Sens que {@link Usages#retenirSens} retient pour lui et le Thème par défaut
-     * de la Préparation à cet instant. Rien n'est ajouté en cas de refus. Les ajouts à une même Préparation passent
-     * un à un (Préparation verrouillée).
+     * Ajoute en fin de Préparation {@code id} de l'enseignant courant un Mot du Champ de saisie rapide, avec le Thème
+     * par défaut de la Préparation à cet instant (stories 2.3 et 2.8) :
+     * <ul>
+     * <li>saisie seule : le Mot saisi, normalisé par {@link Lexique#normaliser} et obtenu ou créé, avec le Sens que
+     * {@link Usages#retenirSens} retient pour lui ;</li>
+     * <li>{@code sensId} : le Mot {@code motId} (à défaut, celui du Sens), avec ce Sens, qui doit en être un Sens visible
+     * de l'enseignant ({@link DetectionMots#sensVisible}, AD-2) ;</li>
+     * <li>{@code nouveauSens} : le Mot {@code motId} (à défaut, celui de la saisie, obtenu ou créé), avec le Sens tapé,
+     * obtenu ou créé par {@link Lexique#obtenirOuCreerSensSaisi} (AD-19).</li>
+     * </ul>
+     * Une seule transaction, Préparation verrouillée : rien n'est écrit en cas de refus, ni Mot, ni Sens. Les ajouts à
+     * une même Préparation passent un à un.
      *
      * @throws ErreurMetier {@code 404 ressource.introuvable} si la Préparation n'existe pas ou appartient à un
-     *         collègue ; {@code 400 preparation.mot_invalide} si la saisie normalisée est vide ou dépasse
-     *         {@value Lexique#LONGUEUR_MAX_FORME} caractères ; {@code 409 preparation.mot_deja_present} si le Mot
-     *         figure déjà dans la Préparation
+     *         collègue, ou si {@code motId} est inconnu ; {@code 400 preparation.mot_invalide} si la saisie normalisée
+     *         est vide ou dépasse {@value Lexique#LONGUEUR_MAX_FORME} caractères ;
+     *         {@code 400 preparation.sens_invalide} si {@code sensId} est inconnu, d'un autre Mot ou non visible ;
+     *         {@code 400 sens.libelle_invalide} si le libellé du nouveau Sens est vide, trop long ou réservé ;
+     *         {@code 409 preparation.mot_deja_present} si le Mot figure déjà dans la Préparation
+     * @throws IllegalArgumentException si {@code sensId} et {@code nouveauSens} sont donnés ensemble, ou si la catégorie
+     *         du nouveau Sens manque : l'appelant le vérifie avant
      */
     @Transactional
-    public MotPreparationVue ajouterMot(UUID id, String saisie) {
+    public MotPreparationVue ajouterMot(UUID id, AjouterMotCommande commande) {
+        if (commande.sensId() != null && commande.nouveauSens() != null) {
+            throw new IllegalArgumentException("Sens existant et nouveau Sens donnés ensemble");
+        }
         Preparation preparation = verrouillee(id);
+        MotVue mot;
+        if (commande.motId() != null && (commande.sensId() != null || commande.nouveauSens() != null)) {
+            mot = lexique.mots(List.of(commande.motId())).get(commande.motId());
+            if (mot == null) {
+                throw new ErreurMetier(404, CODE_INTROUVABLE, "Aucun mot ne porte cet identifiant");
+            }
+        } else if (commande.sensId() != null) {
+            mot = lexique.sens(commande.sensId())
+                    .map(sens -> lexique.mots(List.of(sens.motId())).get(sens.motId()))
+                    .orElseThrow(() -> new ErreurMetier(400, CODE_SENS_INVALIDE, "Aucun sens ne porte cet identifiant"));
+        } else {
+            mot = motSaisi(commande.saisie());
+        }
+        if (commande.sensId() != null && !detectionMots.sensVisible(mot.id(), commande.sensId())) {
+            throw new ErreurMetier(400, CODE_SENS_INVALIDE, "Ce sens n'est pas un sens visible de ce mot");
+        }
+        if (preparationMots.contient(preparation.id(), mot.id())) {
+            throw new ErreurMetier(409, CODE_MOT_DEJA_PRESENT, "Ce mot figure déjà dans la préparation");
+        }
+        UUID sensId = commande.nouveauSens() == null ? commande.sensId()
+                : lexique.obtenirOuCreerSensSaisi(mot.id(), commande.nouveauSens().libelle(),
+                        commande.nouveauSens().categorie()).id();
+        PreparationMot ligne = PreparationMot.nouveau(preparationMots.nouvelIdentifiant(), preparation.id(), mot.id(),
+                preparationMots.dernierOrdre(preparation.id()) + 1, preparation.themeDefautId());
+        preparationMots.persistAndFlush(ligne);
+        SensVue sens = usages.retenirSens(new RetenirSensCommande(preparation.id(), ligne.id(), mot.id(),
+                preparation.albumId(), preparation.section(), sensId));
+        return vue(ligne, mot, sens, null);
+    }
+
+    /** Mot de la saisie, normalisée par {@link Lexique#normaliser}, obtenu ou créé. */
+    private MotVue motSaisi(String saisie) {
         String forme = Lexique.normaliser(saisie);
         if (forme.isEmpty() || forme.length() > Lexique.LONGUEUR_MAX_FORME) {
             throw new ErreurMetier(400, CODE_MOT_INVALIDE,
                     "Le mot doit compter de 1 à " + Lexique.LONGUEUR_MAX_FORME + " caractères");
         }
-        MotVue mot = lexique.obtenirOuCreerMot(saisie);
-        if (preparationMots.contient(preparation.id(), mot.id())) {
-            throw new ErreurMetier(409, CODE_MOT_DEJA_PRESENT, "Ce mot figure déjà dans la préparation");
-        }
-        PreparationMot ligne = PreparationMot.nouveau(preparationMots.nouvelIdentifiant(), preparation.id(), mot.id(),
-                preparationMots.dernierOrdre(preparation.id()) + 1, preparation.themeDefautId());
-        preparationMots.persistAndFlush(ligne);
-        SensVue sens = usages.retenirSens(new RetenirSensCommande(preparation.id(), ligne.id(), mot.id(),
-                preparation.albumId(), preparation.section()));
-        return vue(ligne, mot, sens, null);
+        return lexique.obtenirOuCreerMot(saisie);
     }
 
     /**

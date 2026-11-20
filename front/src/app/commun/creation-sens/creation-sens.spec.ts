@@ -155,6 +155,21 @@ describe('CreationSens', () => {
     expect(envoyer).toHaveBeenCalledOnce();
   });
 
+  it('focusAuRepli à faux : Échap replie, émet repliee et laisse l’hôte placer le focus', async () => {
+    fixture.componentRef.setInput('focusAuRepli', false);
+    const repliee = vi.fn();
+    fixture.componentInstance.repliee.subscribe(repliee);
+    await ouvrir();
+
+    libelle().dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+    await stabiliser();
+
+    expect(racine.querySelector('form')).toBeNull();
+    expect(repliee).toHaveBeenCalledOnce();
+    expect(envoyer).not.toHaveBeenCalled();
+    expect(document.activeElement).not.toBe(bouton('Nouveau sens'));
+  });
+
   it('Échap : replié sans rien envoyer, sans remonter au panneau, focus sur « Nouveau sens »', async () => {
     const remontees = vi.fn();
     document.body.addEventListener('keydown', remontees);
