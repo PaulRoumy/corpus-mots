@@ -321,6 +321,11 @@ type Source = 'module' | 'theme';
  * illustrés » suit la Grille une fois chargée. Retirer un Mot illustré ne supprime pas son Image : « Annuler » le
  * rétablit avec la même Image.
  *
+ * Choisir un pictogramme (story 2.4, partie 2) : une suggestion ARASAAC d'une Carte « à illustrer » illustre le Mot ;
+ * la Carte illustrée remplace la Carte comme après un téléversement (focus sur « Retirer », compteur, annonce
+ * « « renard » illustré. »). Un Mot illustré entre-temps (autre onglet) affiche le message traduit en Bandeau d'erreur
+ * et les Mots sont relus.
+ *
  * Panneau de choix d'Image (story 2.7, partie 3) : la vignette d'une Carte (miniature, ou « + » d'une Carte « à
  * illustrer ») ouvre à droite, sur 400 px, le Panneau de choix d'Image du Mot, chargé à la demande (import
  * dynamique), sans masquer la Grille ; une autre vignette le remplace. L'Image choisie, ou téléversée par « Ajouter une image » (qui
@@ -434,6 +439,14 @@ type Source = 'module' | 'theme';
               [reessayable]="echec.reessayable"
               (reessayer)="reessayerRetablissement(echec)"
               (fermer)="echecRetablissement.set(null)"
+            />
+          }
+          @if (erreurPictogramme(); as message) {
+            <app-bandeau-erreur
+              class="erreur-pictogramme"
+              [message]="message"
+              [reessayable]="false"
+              (fermer)="erreurPictogramme.set(null)"
             />
           }
           @if (erreurListes(); as message) {
@@ -618,7 +631,10 @@ type Source = 'module' | 'theme';
                         [theme]="nomTheme(mot)"
                         (retirer)="retirerMot(mot)"
                         (changerTheme)="ouvrirThemeMot(mot)"
+                        [preparationId]="courante.id"
                         (televerser)="ouvrirTeleverser(mot)"
+                        (illustre)="appliquerPictogramme($event)"
+                        (aRecharger)="signalerMotChange(mot, $event)"
                         (choisirImage)="ouvrirChoixImage(mot)"
                       />
                     </li>
@@ -752,6 +768,8 @@ export class Preparation {
   /** Mots de la Préparation dans l'ordre de saisie ; `null` tant qu'ils ne sont pas chargés. */
   protected readonly mots = signal<MotPreparationDto[] | null>(null);
   protected readonly erreurMots = signal<string | null>(null);
+  /** Refus du choix d'un pictogramme pour un Mot illustré entre-temps (autre onglet), `null` sinon. */
+  protected readonly erreurPictogramme = signal<string | null>(null);
   protected readonly echecAjout = signal<EchecAjout | null>(null);
   /** Dernier Mot ajouté, annoncé aux lecteurs d'écran : le focus reste dans le champ. */
   protected readonly annonce = signal('');
@@ -818,6 +836,11 @@ export class Preparation {
 
   /** Numéro du dernier chargement : la réponse d'une Préparation quittée depuis n'écrit rien. */
   private dernierChargement = 0;
+  /**
+   * Révision locale de la Grille : chaque Image posée sur une Carte (pictogramme, téléversement, choix) l'augmente, et
+   * une lecture des Mots partie avant n'écrase pas ce changement plus récent.
+   */
+  private revisionMots = 0;
   /** Vrai pendant un enregistrement : un changement survenu entre-temps est envoyé après lui. */
   private enregistrementEnCours = false;
   private enregistrementEnAttente = false;
@@ -921,6 +944,7 @@ export class Preparation {
     // Le Champ de saisie rapide est recréé vide : la détection ne suit plus l'ancienne saisie.
     this.saisieTapee.set('');
     this.erreurMots.set(null);
+    this.erreurPictogramme.set(null);
     this.echecAjout.set(null);
     this.echecRetrait.set(null);
     this.echecRetablissement.set(null);
@@ -981,10 +1005,11 @@ export class Preparation {
   /** Mots de la Préparation ; en échec, leur propre Bandeau d'erreur, l'En-tête reste affiché. */
   async chargerMots(id: string): Promise<void> {
     const numero = this.dernierChargement;
+    const revision = this.revisionMots;
     this.erreurMots.set(null);
     try {
       const mots = await this.api.invoke(listerMotsPreparation, { id });
-      if (numero === this.dernierChargement) {
+      if (numero === this.dernierChargement && revision === this.revisionMots) {
         this.mots.set(mots);
       }
     } catch (erreur) {
@@ -1344,14 +1369,62 @@ export class Preparation {
       { preparationId: preparation.id, mot, titreAlbum: preparation.titreAlbum },
       declencheur,
     );
-    if (illustre === undefined || numero !== this.dernierChargement) {
+    if (
+      illustre === undefined ||
+      numero !== this.dernierChargement ||
+      !this.remplacerMotIllustre(illustre)
+    ) {
       return;
     }
+    this.annonce.set(`Image enregistrée pour « ${illustre.forme} ».`);
+    this.focaliserApresRendu(illustre);
+  }
+
+  /**
+   * Pictogramme ARASAAC choisi dans les suggestions d'une Carte « à illustrer » (story 2.4, partie 2) : comme après un
+   * téléversement, le Mot illustré renvoyé remplace celui de la Carte, le compteur suit, son bouton « Retirer » prend le
+   * focus et « « renard » illustré. » est annoncé.
+   */
+  protected appliquerPictogramme(illustre: MotPreparationDto): void {
+    // Mot retiré entre-temps : rien à annoncer ni à focaliser.
+    if (!this.remplacerMotIllustre(illustre)) {
+      return;
+    }
+    this.annoncer(`« ${illustre.forme} » illustré.`);
+    this.focaliserApresRendu(illustre);
+  }
+
+  /**
+   * Le Mot a été illustré ou retiré entre-temps (autre onglet) : le message traduit s'affiche en Bandeau d'erreur et les Mots de la
+   * Préparation sont relus ; le focus va au bouton « Retirer » de la Carte rechargée.
+   */
+  protected async signalerMotChange(mot: MotPreparationDto, message: string): Promise<void> {
+    const preparation = this.preparation();
+    if (preparation === null) {
+      return;
+    }
+    const numero = this.dernierChargement;
+    this.erreurPictogramme.set(message);
+    await this.chargerMots(preparation.id);
+    if (numero === this.dernierChargement) {
+      this.focaliserApresRendu(this.mots()?.find((autre) => autre.id === mot.id));
+    }
+  }
+
+  /**
+   * Remplace dans la Grille le Mot qui vient de recevoir une Image ; faux s'il n'y est plus. Le Bandeau d'un refus de
+   * pictogramme précédent disparaît, et une lecture des Mots déjà partie ne reviendra pas en arrière.
+   */
+  private remplacerMotIllustre(illustre: MotPreparationDto): boolean {
+    if (!this.mots()?.some((autre) => autre.id === illustre.id)) {
+      return false;
+    }
+    this.revisionMots++;
+    this.erreurPictogramme.set(null);
     this.mots.update((mots) =>
       mots === null ? mots : mots.map((autre) => (autre.id === illustre.id ? illustre : autre)),
     );
-    this.annonce.set(`Image enregistrée pour « ${illustre.forme} ».`);
-    this.focaliserApresRendu(illustre);
+    return true;
   }
 
   /**
@@ -1379,9 +1452,7 @@ export class Preparation {
    * badge, Sens), le panneau se ferme, le focus revient à la vignette et le changement est annoncé.
    */
   protected appliquerChoixImage(change: MotPreparationDto): void {
-    this.mots.update((mots) =>
-      mots === null ? mots : mots.map((autre) => (autre.id === change.id ? change : autre)),
-    );
+    this.remplacerMotIllustre(change);
     this.choixOuvert.set(null);
     this.annoncer(`Image de « ${change.forme} » changée.`);
     this.rendreFocusVignette(change.id);

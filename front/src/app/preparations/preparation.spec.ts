@@ -3794,6 +3794,246 @@ describe('Preparation (En-tête)', () => {
     });
   });
 
+  describe('Choisir un pictogramme (story 2.4, partie 2)', () => {
+    const GALETTE = motPreparation('galette', 1);
+    const CITROUILLE = motPreparation('citrouille', 2);
+    const IMAGE = '0190f0a0-0000-7000-8000-0000000c0031';
+    const ILLUSTREE: MotPreparationDto = {
+      ...CITROUILLE,
+      illustre: true,
+      image: {
+        id: IMAGE,
+        proprietaireId: MOI,
+        etat: 'privee',
+        aRemplacer: null,
+        reutilisable: true,
+        typeImage: 'image_libre',
+        aCompleter: false,
+      },
+    };
+    const original = { creer: URL.createObjectURL, revoquer: URL.revokeObjectURL };
+
+    beforeEach(() => {
+      URL.createObjectURL = vi.fn(() => 'blob:http://localhost/image');
+      URL.revokeObjectURL = vi.fn();
+    });
+
+    afterEach(() => {
+      serveur.match((requete) => requete.url.startsWith('/api/images/'));
+      URL.createObjectURL = original.creer;
+      URL.revokeObjectURL = original.revoquer;
+    });
+
+    const boutonRetirer = (forme: string) =>
+      racine.querySelector<HTMLButtonElement>(
+        `app-carte-mot button[aria-label="Retirer « ${forme} » de la préparation"]`,
+      )!;
+
+    /** Ouvre la Préparation et répond aux suggestions ARASAAC de « citrouille ». */
+    async function ouvrirAvecSuggestions() {
+      await ouvrir({ ...PREPARATION, nombreMots: 2 }, MODULES, THEMES, albumDe(PREPARATION), [
+        GALETTE,
+        CITROUILLE,
+      ]);
+      serveur
+        .expectOne('/api/arasaac/suggestions?mot=citrouille')
+        .flush([{ idArasaac: 2459, motCle: 'citrouille' }]);
+      await stabiliser();
+    }
+
+    const suggestion = () =>
+      racine.querySelector<HTMLButtonElement>(
+        'app-carte-mot button[aria-label="Illustrer « citrouille » avec le pictogramme « citrouille »"]',
+      )!;
+
+    it('clic sur une suggestion : la Carte illustrée remplace la Carte, compteur, focus et annonce suivent', async () => {
+      await ouvrirAvecSuggestions();
+      expect(texte('.entete__compteur')).toBe('2 mots, 0 déjà illustrés');
+
+      suggestion().click();
+      await stabiliser();
+      const requete = serveur.expectOne(`${URL_MOTS}/${CITROUILLE.id}/pictogramme`);
+      expect(requete.request.method).toBe('POST');
+      expect(requete.request.body).toEqual({ idArasaac: 2459 });
+      requete.flush(ILLUSTREE, { status: 201, statusText: 'Created' });
+      await stabiliser();
+
+      expect(cartes()).toEqual(['galette', 'citrouille']);
+      expect(
+        [...racine.querySelectorAll('.mots__element')].map((element) =>
+          element.classList.contains('mots__element--a-illustrer'),
+        ),
+      ).toEqual([true, false]);
+      expect(texte('.entete__compteur')).toBe('2 mots, 1 déjà illustré');
+      expect(document.activeElement).toBe(boutonRetirer('citrouille'));
+      await stabiliser();
+      expect(texte('p[aria-live="polite"]')).toBe('« citrouille » illustré.');
+    });
+
+    it('409 « mot déjà illustré » : message traduit en Bandeau, Mots de la Préparation relus', async () => {
+      await ouvrirAvecSuggestions();
+
+      suggestion().click();
+      await stabiliser();
+      serveur
+        .expectOne(`${URL_MOTS}/${CITROUILLE.id}/pictogramme`)
+        .flush(
+          { status: 409, code: 'preparation.mot_deja_illustre' },
+          { status: 409, statusText: 'Conflict' },
+        );
+      await stabiliser();
+
+      expect(texte('app-bandeau-erreur.erreur-pictogramme .bandeau-erreur__message')).toBe(
+        'Ce mot a déjà une image dans la préparation.',
+      );
+      expect(
+        racine.querySelector('app-bandeau-erreur.erreur-pictogramme .bandeau-erreur__reessayer'),
+      ).toBeNull();
+      serveur.expectOne(URL_MOTS).flush([GALETTE, ILLUSTREE]);
+      await stabiliser();
+
+      expect(texte('.entete__compteur')).toBe('2 mots, 1 déjà illustré');
+      expect(racine.querySelector('.carte-mot__miniature')).not.toBeNull();
+      expect(document.activeElement).toBe(boutonRetirer('citrouille'));
+    });
+
+    it('404 « ressource introuvable » (Mot retiré ailleurs) : message en Bandeau, Mots relus', async () => {
+      await ouvrirAvecSuggestions();
+
+      suggestion().click();
+      await stabiliser();
+      serveur
+        .expectOne(`${URL_MOTS}/${CITROUILLE.id}/pictogramme`)
+        .flush(
+          { status: 404, code: 'ressource.introuvable' },
+          { status: 404, statusText: 'Not Found' },
+        );
+      await stabiliser();
+
+      expect(texte('app-bandeau-erreur.erreur-pictogramme .bandeau-erreur__message')).toBe(
+        "Cet élément n'existe plus. Rechargez la page.",
+      );
+      serveur.expectOne(URL_MOTS).flush([GALETTE]);
+      await stabiliser();
+      expect(cartes()).toEqual(['galette']);
+    });
+
+    it('503 : message dans la Carte, Mot toujours « à illustrer », « Téléverser » proposé, rien n’est relu', async () => {
+      await ouvrirAvecSuggestions();
+
+      suggestion().click();
+      await stabiliser();
+      serveur
+        .expectOne(`${URL_MOTS}/${CITROUILLE.id}/pictogramme`)
+        .flush(
+          { status: 503, code: 'arasaac.indisponible' },
+          { status: 503, statusText: 'Service Unavailable' },
+        );
+      await stabiliser();
+
+      expect(texte('app-carte-mot .suggestions__echec .suggestions__message')).toBe(
+        "ARASAAC ne répond pas pour l'instant.",
+      );
+      expect(texte('.entete__compteur')).toBe('2 mots, 0 déjà illustrés');
+      expect(
+        racine.querySelector(
+          'app-carte-mot button[aria-label="Téléverser une image pour « citrouille »"]',
+        ),
+      ).not.toBeNull();
+      expect(racine.querySelector('app-bandeau-erreur.erreur-pictogramme')).toBeNull();
+      serveur.expectNone(URL_MOTS);
+    });
+
+    it('un choix réussi retire le Bandeau d’un refus précédent', async () => {
+      await ouvrirAvecSuggestions();
+      suggestion().click();
+      await stabiliser();
+      serveur
+        .expectOne(`${URL_MOTS}/${CITROUILLE.id}/pictogramme`)
+        .flush(
+          { status: 409, code: 'preparation.mot_deja_illustre' },
+          { status: 409, statusText: 'Conflict' },
+        );
+      await stabiliser();
+      // La Carte, gardée par la relecture, garde ses suggestions.
+      serveur.expectOne(URL_MOTS).flush([GALETTE, CITROUILLE]);
+      await stabiliser();
+      expect(racine.querySelector('app-bandeau-erreur.erreur-pictogramme')).not.toBeNull();
+
+      suggestion().click();
+      await stabiliser();
+      serveur
+        .expectOne(`${URL_MOTS}/${CITROUILLE.id}/pictogramme`)
+        .flush(ILLUSTREE, { status: 201, statusText: 'Created' });
+      await stabiliser();
+
+      expect(racine.querySelector('app-bandeau-erreur.erreur-pictogramme')).toBeNull();
+      expect(texte('.entete__compteur')).toBe('2 mots, 1 déjà illustré');
+    });
+
+    it('une relecture des Mots partie avant un choix réussi ne l’écrase pas', async () => {
+      const GALETTE_ILLUSTREE: MotPreparationDto = {
+        ...GALETTE,
+        illustre: true,
+        image: { ...ILLUSTREE.image!, id: '0190f0a0-0000-7000-8000-0000000c0032' },
+      };
+      await ouvrirAvecSuggestions();
+      serveur
+        .expectOne('/api/arasaac/suggestions?mot=galette')
+        .flush([{ idArasaac: 7, motCle: 'galette' }]);
+      await stabiliser();
+
+      // Refus 409 sur « citrouille » : la relecture des Mots part.
+      suggestion().click();
+      await stabiliser();
+      serveur
+        .expectOne(`${URL_MOTS}/${CITROUILLE.id}/pictogramme`)
+        .flush(
+          { status: 409, code: 'preparation.mot_deja_illustre' },
+          { status: 409, statusText: 'Conflict' },
+        );
+      await stabiliser();
+      const relecture = serveur.expectOne(URL_MOTS);
+
+      // Pendant ce temps, « galette » est illustrée.
+      racine
+        .querySelector<HTMLButtonElement>(
+          'app-carte-mot button[aria-label="Illustrer « galette » avec le pictogramme « galette »"]',
+        )!
+        .click();
+      await stabiliser();
+      serveur
+        .expectOne(`${URL_MOTS}/${GALETTE.id}/pictogramme`)
+        .flush(GALETTE_ILLUSTREE, { status: 201, statusText: 'Created' });
+      await stabiliser();
+
+      // La relecture, plus ancienne, arrive avec « galette » encore « à illustrer » : elle est ignorée.
+      relecture.flush([GALETTE, ILLUSTREE]);
+      await stabiliser();
+      expect(
+        [...racine.querySelectorAll('.mots__element')].map((element) =>
+          element.classList.contains('mots__element--a-illustrer'),
+        ),
+      ).toEqual([false, true]);
+    });
+
+    it('un Mot illustré qui n’est plus dans la Grille : ni annonce ni changement de focus', async () => {
+      await ouvrirAvecSuggestions();
+      const avant = document.activeElement;
+      const page = fixture.componentInstance as unknown as {
+        appliquerPictogramme(mot: MotPreparationDto): void;
+      };
+
+      page.appliquerPictogramme({ ...ILLUSTREE, id: '0190f0a0-0000-7000-8000-0000000f0999' });
+      await stabiliser();
+      await stabiliser();
+
+      expect(texte('p[aria-live="polite"]')).toBe('');
+      expect(document.activeElement).toBe(avant);
+      expect(texte('.entete__compteur')).toBe('2 mots, 0 déjà illustrés');
+    });
+  });
+
   describe('Carte d’identité (story 2.6, partie 1)', () => {
     const GALETTE = motPreparation('galette', 1);
     const IMAGE_1 = '0190f0a0-0000-7000-8000-0000000c0011';

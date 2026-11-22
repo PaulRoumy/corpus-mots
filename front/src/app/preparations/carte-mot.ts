@@ -22,9 +22,10 @@ import { SuggestionsArasaac } from './suggestions-arasaac';
  * Carte de Mot de la Grille d'une Préparation (story 2.3). Tant que le Mot n'a pas d'Image, c'est une Carte « à
  * illustrer » (key-preparation.html › `.todo`) : fond et bordure tirets « à illustrer » ; à gauche, vignette vide avec
  * « + », bouton « Choisir une image pour « forme » » qui émet `choisirImage` (la page ouvre le Panneau de choix
- * d'Image), Mot en cursive, badge crayon « à illustrer » ; à droite, les suggestions ARASAAC (story 2.4, partie 1). La
- * page lui fait occuper trois colonnes de la Grille. Sous les suggestions, le bouton texte « Téléverser » émet `televerser` :
- * la page ouvre le Dialogue « Téléverser une image » (story 2.5, partie 1).
+ * d'Image), Mot en cursive, badge crayon « à illustrer » ; à droite, les suggestions ARASAAC (story 2.4), dont un clic
+ * illustre le Mot et émet `illustre` (ou `aRecharger` si le Mot a été illustré ou retiré entre-temps, partie 2). La page
+ * lui fait occuper trois colonnes de la Grille. Sous les suggestions, le bouton texte « Téléverser » émet `televerser` : la
+ * page ouvre le Dialogue « Téléverser une image » (story 2.5, partie 1).
  *
  * Une fois illustrée, la Carte occupe une colonne (key-preparation.html › `.wc`) : vignette de la miniature de l'Image,
  * chargée en `blob` par le client généré (`?taille=miniature`, AD-23), d'alternative « Mot, Sens » ; Badge de type
@@ -115,7 +116,13 @@ import { SuggestionsArasaac } from './suggestions-arasaac';
     </div>
     @if (!mot().illustre) {
       <div class="carte-mot__droite">
-        <app-suggestions-arasaac [mot]="mot().forme" />
+        <app-suggestions-arasaac
+          [mot]="mot().forme"
+          [preparationId]="preparationId()"
+          [motPreparationId]="mot().id"
+          (illustre)="illustre.emit($event)"
+          (aRecharger)="aRecharger.emit($event)"
+        />
         <button
           #boutonTeleverser
           matButton
@@ -132,6 +139,8 @@ import { SuggestionsArasaac } from './suggestions-arasaac';
 })
 export class CarteMot {
   readonly mot = input.required<MotPreparationDto>();
+  /** Préparation du Mot, pour le choix d'un pictogramme ARASAAC. */
+  readonly preparationId = input.required<string>();
   /** Nom du Thème du Mot, `null` sans thème, indéfini tant que les Thèmes ne sont pas chargés. */
   readonly theme = input<string | null | undefined>(undefined);
   readonly retirer = output<void>();
@@ -139,6 +148,10 @@ export class CarteMot {
   readonly televerser = output<void>();
   /** Clic ou Entrée sur la vignette, illustrée ou « + » : la page ouvre le Panneau de choix d'Image. */
   readonly choisirImage = output<void>();
+  /** Mot illustré par un pictogramme ARASAAC choisi dans les suggestions : la page remplace la Carte. */
+  readonly illustre = output<MotPreparationDto>();
+  /** Mot illustré ou retiré entre-temps (autre onglet), avec le message traduit : la page recharge la Préparation. */
+  readonly aRecharger = output<string>();
 
   private readonly api = inject(Api);
 

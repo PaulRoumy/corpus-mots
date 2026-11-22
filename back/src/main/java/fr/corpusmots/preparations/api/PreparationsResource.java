@@ -8,7 +8,9 @@ import fr.corpusmots.preparations.service.PreparationsService;
 import fr.corpusmots.preparations.service.TeleverserImageMotCommande;
 import fr.corpusmots.vocabulaire.service.CategorieGrammaticale;
 import fr.corpusmots.vocabulaire.service.FichierTeleverseVue;
+import fr.corpusmots.vocabulaire.service.PictogrammeTelechargeVue;
 import fr.corpusmots.vocabulaire.service.ReductionImages;
+import fr.corpusmots.vocabulaire.service.SuggestionsArasaac;
 import jakarta.inject.Inject;
 import jakarta.ws.rs.Consumes;
 import jakarta.ws.rs.DELETE;
@@ -50,6 +52,9 @@ public class PreparationsResource {
 
     @Inject
     ReductionImages reduction;
+
+    @Inject
+    SuggestionsArasaac suggestionsArasaac;
 
     @POST
     @Consumes(MediaType.APPLICATION_JSON)
@@ -307,6 +312,32 @@ public class PreparationsResource {
                 new TeleverserImageMotCommande(prepare.fichier(), prepare.typeImage(), prepare.licence(),
                         televersement.source, televersement.auteur,
                         Boolean.TRUE.equals(televersement.remplacer))));
+    }
+
+    @POST
+    @Path("/{id}/mots/{motPreparationId}/pictogramme")
+    @Consumes(MediaType.APPLICATION_JSON)
+    @ResponseStatus(201)
+    @Operation(operationId = "choisirPictogrammeMotPreparation",
+            summary = "Illustrer un Mot d'une Préparation de l'enseignant connecté avec un pictogramme ARASAAC,"
+                    + " téléchargé par le back")
+    @APIResponse(responseCode = "201",
+            description = "Image créée (privee, image_libre, licence ARASAAC), réduite et liée au Mot (origine nouvelle)",
+            content = @Content(mediaType = MediaType.APPLICATION_JSON,
+                    schema = @Schema(implementation = MotPreparationDto.class)))
+    public MotPreparationDto choisirPictogramme(@PathParam("id") UUID id,
+            @PathParam("motPreparationId") UUID motPreparationId,
+            @RequestBody(required = true) PictogrammeMotPreparationDto choix) {
+        if (choix == null || choix.idArasaac() == null || choix.idArasaac() <= 0) {
+            throw new ErreurMetier(400, "requete.invalide", "Identifiant ARASAAC positif attendu");
+        }
+        // Préparation d'un collègue (404) ou Mot déjà illustré (409) : refus avant ARASAAC (lecture sans verrou).
+        preparations.verifierMot(id, motPreparationId);
+        // Téléchargement et réduction hors transaction (AD-9, AD-17), puis création et lien dans une transaction.
+        PictogrammeTelechargeVue pictogramme = suggestionsArasaac.telecharger(choix.idArasaac());
+        return MotPreparationDto.de(preparations.televerserImage(id, motPreparationId,
+                new TeleverserImageMotCommande(pictogramme.fichier(), pictogramme.typeImage(), pictogramme.licence(),
+                        pictogramme.source(), pictogramme.auteur(), false)));
     }
 
     @GET

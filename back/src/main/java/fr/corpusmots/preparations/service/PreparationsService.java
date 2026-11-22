@@ -73,6 +73,7 @@ public class PreparationsService {
     static final String CODE_INTROUVABLE = "ressource.introuvable";
     static final String CODE_IMAGE_INDISPONIBLE = "image.indisponible";
     static final String CODE_NOM_TROP_LONG = "preparation.nom_trop_long";
+    static final String CODE_MOT_DEJA_ILLUSTRE = "preparation.mot_deja_illustre";
 
     /** Longueur maximale du nom d'une Préparation, une fois nettoyé (contrainte {@code preparation_nom_longueur}). */
     public static final int NOM_MAXIMUM = 100;
@@ -574,6 +575,24 @@ public class PreparationsService {
                         preparation.albumId(), preparation.section(), OrigineLien.NOUVELLE));
         MotVue mot = motDe(ligne, lexique.mots(List.of(ligne.motId())));
         return vue(ligne, mot, sens, liee);
+    }
+
+    /**
+     * Vérifie, sans verrou ni écriture, que le Mot de Préparation {@code motPreparationId} appartient à la Préparation
+     * {@code id} de l'enseignant courant : appelé avant un appel sortant (pictogramme ARASAAC, story 2.4), pour qu'une
+     * Préparation de collègue ou un Mot déjà illustré n'appelle jamais ARASAAC. L'écriture qui suit revérifie sous
+     * verrou.
+     *
+     * @throws ErreurMetier {@code 404 ressource.introuvable} si la Préparation n'existe pas ou appartient à un
+     *         collègue, ou si le Mot de Préparation n'existe pas ou appartient à une autre Préparation ;
+     *         {@code 409 preparation.mot_deja_illustre} si le Mot a déjà une Image
+     */
+    @Transactional
+    public void verifierMot(UUID id, UUID motPreparationId) {
+        PreparationMot ligne = deLaPreparation(mienne(id), motPreparationId);
+        if (usages.imagesLiees(List.of(ligne.id())).containsKey(ligne.id())) {
+            throw new ErreurMetier(409, CODE_MOT_DEJA_ILLUSTRE, "Ce mot de préparation a déjà une image");
+        }
     }
 
     /**

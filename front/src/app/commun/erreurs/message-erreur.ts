@@ -70,6 +70,7 @@ export const MESSAGES_PAR_CODE: Readonly<Record<string, string>> = {
     "Seuls le créateur du thème et l'administrateur peuvent le modifier.",
   'theme.utilise': 'Ce thème est utilisé par des images : réaffectez-les avant de le supprimer.',
   'arasaac.indisponible': "ARASAAC ne répond pas pour l'instant.",
+  'arasaac.pictogramme_introuvable': "Ce pictogramme n'est plus disponible chez ARASAAC.",
   'ressource.introuvable': "Cet élément n'existe plus. Rechargez la page.",
   'requete.invalide': 'La demande est incomplète. Vérifiez la saisie, puis réessayez.',
   'requete.trop_volumineuse':

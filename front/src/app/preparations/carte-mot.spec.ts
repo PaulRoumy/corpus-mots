@@ -16,6 +16,7 @@ describe('CarteMot', () => {
     });
     serveur = TestBed.inject(HttpTestingController);
     fixture = TestBed.createComponent(CarteMot);
+    fixture.componentRef.setInput('preparationId', '0190f0a0-0000-7000-8000-0000000a0001');
     fixture.componentRef.setInput('mot', {
       id: '0190f0a0-0000-7000-8000-0000000f0001',
       motId: '0190f0a0-0000-7000-8000-0000000e0001',
@@ -188,6 +189,7 @@ describe('CarteMot illustrée', () => {
     });
     serveur = TestBed.inject(HttpTestingController);
     fixture = TestBed.createComponent(CarteMot);
+    fixture.componentRef.setInput('preparationId', '0190f0a0-0000-7000-8000-0000000a0001');
     fixture.componentRef.setInput('mot', MOT_ILLUSTRE);
     racine = fixture.nativeElement as HTMLElement;
     await stabiliser();

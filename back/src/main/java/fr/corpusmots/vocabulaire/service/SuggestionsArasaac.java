@@ -9,9 +9,9 @@ import java.util.Set;
 import org.jboss.logging.Logger;
 
 /**
- * Suggestions de pictogrammes ARASAAC pour un Mot et fichier d'un pictogramme (FR-12, story 2.4, AD-9). Sans
- * transaction : ces appels sortants ne s'exécutent jamais dans une transaction ouverte (AD-17), et rien n'est
- * enregistré.
+ * Suggestions de pictogrammes ARASAAC pour un Mot, fichier d'un pictogramme et téléchargement d'un pictogramme choisi
+ * (FR-12, story 2.4, AD-9). Sans transaction : ces appels sortants ne s'exécutent jamais dans une transaction ouverte
+ * (AD-17), et rien n'est enregistré ici.
  */
 @ApplicationScoped
 public class SuggestionsArasaac {
@@ -20,11 +20,18 @@ public class SuggestionsArasaac {
     public static final int NOMBRE_MAX = 3;
 
     static final String CODE_INDISPONIBLE = "arasaac.indisponible";
+    static final String CODE_PICTOGRAMME_INTROUVABLE = "arasaac.pictogramme_introuvable";
 
     private static final Logger LOG = Logger.getLogger(SuggestionsArasaac.class);
 
+    /** Auteur d'un pictogramme ARASAAC, mention exigée par sa licence. */
+    public static final String AUTEUR_PICTOGRAMME = "Sergio Palao, propriété du Gouvernement d'Aragon";
+
     @Inject
     SourceArasaac source;
+
+    @Inject
+    ReductionImages reduction;
 
     /**
      * Au plus {@link #NOMBRE_MAX} pictogrammes pour {@code mot} (normalisé par le {@link Lexique}, donc sans article),
@@ -69,6 +76,43 @@ public class SuggestionsArasaac {
         } catch (ArasaacIndisponible erreur) {
             throw indisponible(erreur);
         }
+    }
+
+    /**
+     * Télécharge le pictogramme {@code idArasaac} et le réduit par {@link ReductionImages}, hors transaction (AD-9,
+     * AD-17), pour en faire une Image : type {@code image_libre}, licence {@code arasaac_cc_by_nc_sa}, source et auteur
+     * selon les mentions de la licence ARASAAC (story 2.4, partie 2). Rien n'est enregistré.
+     *
+     * @throws ErreurMetier {@code 400 requete.invalide} sans appel pour un identifiant nul ou négatif ;
+     *         {@code 404 arasaac.pictogramme_introuvable} si ARASAAC ne connaît pas ce pictogramme ;
+     *         {@code 503 arasaac.indisponible} si ARASAAC ne répond pas ou renvoie un fichier illisible
+     */
+    public PictogrammeTelechargeVue telecharger(long idArasaac) {
+        if (idArasaac <= 0) {
+            throw new ErreurMetier(400, "requete.invalide", "Identifiant ARASAAC positif attendu");
+        }
+        byte[] octets;
+        try {
+            octets = source.pictogramme(idArasaac)
+                    .orElseThrow(() -> new ErreurMetier(404, CODE_PICTOGRAMME_INTROUVABLE,
+                            "Pictogramme ARASAAC inconnu : " + idArasaac));
+        } catch (ArasaacIndisponible erreur) {
+            throw indisponible(erreur);
+        }
+        ImageReduiteVue fichier;
+        try {
+            fichier = reduction.reduire(octets, TypeImage.IMAGE_LIBRE);
+        } catch (RuntimeException erreur) {
+            // Fichier d'ARASAAC illisible ou réduction en échec : jamais un 500.
+            throw indisponible(new ArasaacIndisponible("pictogramme " + idArasaac + " illisible", erreur));
+        }
+        return new PictogrammeTelechargeVue(fichier, TypeImage.IMAGE_LIBRE, Licence.ARASAAC_CC_BY_NC_SA,
+                sourcePictogramme(idArasaac), AUTEUR_PICTOGRAMME);
+    }
+
+    /** Source d'un pictogramme ARASAAC, mention exigée par sa licence. */
+    public static String sourcePictogramme(long idArasaac) {
+        return "ARASAAC (https://arasaac.org), pictogramme n° " + idArasaac;
     }
 
     private static ErreurMetier indisponible(ArasaacIndisponible erreur) {

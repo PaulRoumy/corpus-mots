@@ -1,6 +1,7 @@
 import { provideHttpClient } from '@angular/common/http';
 import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
+import { MotPreparationDto } from '../api/models/mot-preparation-dto';
 import { SuggestionArasaacDto } from '../api/models/suggestion-arasaac-dto';
 import { SuggestionsArasaac } from './suggestions-arasaac';
 
@@ -11,6 +12,9 @@ describe('SuggestionsArasaac', () => {
   const original = { creer: URL.createObjectURL, revoquer: URL.revokeObjectURL };
 
   const URL_CITROUILLE = '/api/arasaac/suggestions?mot=citrouille';
+  const PREPARATION = '0190f0a0-0000-7000-8000-0000000a0001';
+  const MOT_PREPARATION = '0190f0a0-0000-7000-8000-0000000f0001';
+  const URL_PICTOGRAMME = `/api/preparations/${PREPARATION}/mots/${MOT_PREPARATION}/pictogramme`;
   const SUGGESTIONS: SuggestionArasaacDto[] = [
     { idArasaac: 2459, motCle: 'citrouille' },
     { idArasaac: 37172, motCle: 'potiron' },
@@ -37,6 +41,8 @@ describe('SuggestionsArasaac', () => {
     serveur = TestBed.inject(HttpTestingController);
     fixture = TestBed.createComponent(SuggestionsArasaac);
     fixture.componentRef.setInput('mot', 'citrouille');
+    fixture.componentRef.setInput('preparationId', PREPARATION);
+    fixture.componentRef.setInput('motPreparationId', MOT_PREPARATION);
     racine = fixture.nativeElement as HTMLElement;
     await stabiliser();
   });
@@ -76,7 +82,7 @@ describe('SuggestionsArasaac', () => {
       'blob:http://localhost/2',
       'blob:http://localhost/3',
     ]);
-    expect(racine.querySelector('a, button')).toBeNull();
+    expect(racine.querySelector('a')).toBeNull();
   });
 
   it('fichier d’un pictogramme non chargé : son mot-clé à la place de la vignette', async () => {
@@ -126,5 +132,191 @@ describe('SuggestionsArasaac', () => {
     serveur.expectOne('/api/arasaac/suggestions?mot=four').flush([]);
     await stabiliser();
     expect(texte('.suggestions__message')).toBe('Aucun pictogramme ARASAAC pour ce mot.');
+  });
+
+  describe('choisir un pictogramme (story 2.4, partie 2)', () => {
+    const ILLUSTRE: MotPreparationDto = {
+      id: MOT_PREPARATION,
+      motId: '0190f0a0-0000-7000-8000-0000000e0001',
+      forme: 'citrouille',
+      ordre: 1,
+      sens: { id: '0190f0a0-0000-7000-8000-0000000d0001', libelle: 'à compléter' },
+      illustre: true,
+      image: {
+        id: '0190f0a0-0000-7000-8000-0000000c0001',
+        proprietaireId: '0190f0a0-0000-7000-8000-00000000e001',
+        etat: 'privee',
+        aRemplacer: null,
+        reutilisable: true,
+        typeImage: 'image_libre',
+        aCompleter: false,
+      },
+    };
+
+    const boutons = () => [
+      ...racine.querySelectorAll<HTMLButtonElement>('button.suggestions__vignette'),
+    ];
+    const reessayer = () => racine.querySelector<HTMLButtonElement>('.suggestions__reessayer');
+
+    beforeEach(async () => {
+      serveur.expectOne(URL_CITROUILLE).flush(SUGGESTIONS);
+      await stabiliser();
+    });
+
+    afterEach(() => {
+      // Fichiers des pictogrammes : couverts par les tests ci-dessus.
+      serveur.match((requete) => requete.url.startsWith('/api/arasaac/pictogrammes/'));
+    });
+
+    it('entrées non liées (Panneau de détection) : vignettes inertes, sans bouton', async () => {
+      const inerte = TestBed.createComponent(SuggestionsArasaac);
+      inerte.componentRef.setInput('mot', 'four');
+      await stabiliser();
+      serveur
+        .expectOne('/api/arasaac/suggestions?mot=four')
+        .flush([{ idArasaac: 5, motCle: 'four' }]);
+      await stabiliser();
+      await inerte.whenStable();
+
+      const element = inerte.nativeElement as HTMLElement;
+      expect(element.querySelectorAll('li.suggestions__vignette')).toHaveLength(1);
+      expect(element.querySelector('button')).toBeNull();
+      inerte.destroy();
+    });
+
+    it('chaque suggestion est un bouton nommé « Illustrer « citrouille » avec le pictogramme « … » »', () => {
+      expect(boutons().map((bouton) => bouton.getAttribute('aria-label'))).toEqual([
+        'Illustrer « citrouille » avec le pictogramme « citrouille »',
+        'Illustrer « citrouille » avec le pictogramme « potiron »',
+        'Illustrer « citrouille » avec le pictogramme « courge »',
+      ]);
+      expect(boutons().every((bouton) => bouton.type === 'button')).toBe(true);
+    });
+
+    it('clic : requête avec le seul `idArasaac`, boutons désactivés et indicateur, puis Mot illustré émis', async () => {
+      const illustres: MotPreparationDto[] = [];
+      fixture.componentInstance.illustre.subscribe((mot) => illustres.push(mot));
+
+      boutons()[1].click();
+      await stabiliser();
+
+      const requete = serveur.expectOne(URL_PICTOGRAMME);
+      expect(requete.request.method).toBe('POST');
+      expect(requete.request.body).toEqual({ idArasaac: 37172 });
+      expect(boutons().every((bouton) => bouton.getAttribute('aria-disabled') === 'true')).toBe(
+        true,
+      );
+      expect(
+        boutons().map((bouton) => bouton.classList.contains('suggestions__vignette--choisie')),
+      ).toEqual([false, true, false]);
+      expect(racine.querySelector('.suggestions__liste')?.getAttribute('aria-busy')).toBe('true');
+
+      // Pendant l'envoi, un autre clic n'envoie rien.
+      boutons()[0].click();
+      await stabiliser();
+      serveur.expectNone(URL_PICTOGRAMME);
+
+      requete.flush(ILLUSTRE, { status: 201, statusText: 'Created' });
+      await stabiliser();
+      expect(illustres).toEqual([ILLUSTRE]);
+      // Si la Carte reste affichée, ses boutons redeviennent actifs.
+      expect(boutons().some((bouton) => bouton.hasAttribute('aria-disabled'))).toBe(false);
+      expect(racine.querySelector('.suggestions__vignette--choisie')).toBeNull();
+    });
+
+    it('404 pictogramme introuvable chez ARASAAC : message dans la Carte, sans « Réessayer »', async () => {
+      boutons()[0].click();
+      await stabiliser();
+      serveur
+        .expectOne(URL_PICTOGRAMME)
+        .flush(
+          { status: 404, code: 'arasaac.pictogramme_introuvable' },
+          { status: 404, statusText: 'Not Found' },
+        );
+      await stabiliser();
+
+      expect(texte('.suggestions__echec .suggestions__message')).toBe(
+        "Ce pictogramme n'est plus disponible chez ARASAAC.",
+      );
+      expect(reessayer()).toBeNull();
+      expect(boutons().some((bouton) => bouton.hasAttribute('aria-disabled'))).toBe(false);
+    });
+
+    it('404 « ressource introuvable » (Mot retiré ailleurs) : sortie `aRecharger` avec le message traduit', async () => {
+      const messages: string[] = [];
+      fixture.componentInstance.aRecharger.subscribe((message) => messages.push(message));
+      boutons()[0].click();
+      await stabiliser();
+      serveur
+        .expectOne(URL_PICTOGRAMME)
+        .flush(
+          { status: 404, code: 'ressource.introuvable' },
+          { status: 404, statusText: 'Not Found' },
+        );
+      await stabiliser();
+
+      expect(messages).toEqual(["Cet élément n'existe plus. Rechargez la page."]);
+      expect(racine.querySelector('.suggestions__echec')).toBeNull();
+    });
+
+    it('503 : message court, boutons de nouveau actifs, sans « Réessayer »', async () => {
+      boutons()[0].click();
+      await stabiliser();
+      serveur
+        .expectOne(URL_PICTOGRAMME)
+        .flush(
+          { status: 503, code: 'arasaac.indisponible' },
+          { status: 503, statusText: 'Service Unavailable' },
+        );
+      await stabiliser();
+
+      expect(texte('.suggestions__echec .suggestions__message')).toBe(
+        "ARASAAC ne répond pas pour l'instant.",
+      );
+      expect(racine.querySelector('.suggestions__echec [role="alert"]')).not.toBeNull();
+      expect(boutons().some((bouton) => bouton.hasAttribute('aria-disabled'))).toBe(false);
+      expect(racine.querySelector('.suggestions__vignette--choisie')).toBeNull();
+      expect(reessayer()).toBeNull();
+    });
+
+    it('échec réseau : message avec « Réessayer », qui renvoie la même requête', async () => {
+      const illustres: MotPreparationDto[] = [];
+      fixture.componentInstance.illustre.subscribe((mot) => illustres.push(mot));
+      boutons()[2].click();
+      await stabiliser();
+      serveur.expectOne(URL_PICTOGRAMME).error(new ProgressEvent('error'), { status: 0 });
+      await stabiliser();
+
+      expect(texte('.suggestions__echec .suggestions__message')).toBe(
+        'Connexion au serveur impossible. Vérifiez votre réseau, puis réessayez.',
+      );
+      reessayer()!.click();
+      await stabiliser();
+
+      const requete = serveur.expectOne(URL_PICTOGRAMME);
+      expect(requete.request.body).toEqual({ idArasaac: 8 });
+      expect(document.activeElement).toBe(boutons()[2]);
+      expect(reessayer()).toBeNull();
+      requete.flush(ILLUSTRE, { status: 201, statusText: 'Created' });
+      await stabiliser();
+      expect(illustres).toEqual([ILLUSTRE]);
+    });
+
+    it('409 « mot déjà illustré » : sortie `aRecharger` avec le message traduit, aucun message dans la Carte', async () => {
+      const messages: string[] = [];
+      fixture.componentInstance.aRecharger.subscribe((message) => messages.push(message));
+      boutons()[0].click();
+      await stabiliser();
+      serveur
+        .expectOne(URL_PICTOGRAMME)
+        .flush(
+          { status: 409, code: 'preparation.mot_deja_illustre' },
+          { status: 409, statusText: 'Conflict' },
+        );
+      await stabiliser();
+
+      expect(messages).toEqual(['Ce mot a déjà une image dans la préparation.']);
+      expect(racine.querySelector('.suggestions__echec')).toBeNull();
+    });
   });
 });

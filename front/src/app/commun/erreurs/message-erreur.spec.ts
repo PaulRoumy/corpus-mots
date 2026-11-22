@@ -81,6 +81,7 @@ describe('messageErreur', () => {
     ],
     // vocabulaire.service.SuggestionsArasaac
     [503, 'arasaac.indisponible', "ARASAAC ne répond pas pour l'instant."],
+    [404, 'arasaac.pictogramme_introuvable', "Ce pictogramme n'est plus disponible chez ARASAAC."],
     // referentiels.service.ReferentielsService
     [400, 'album.titre_invalide', 'Saisissez un titre de 1 à 200 caractères.'],
     [400, 'album.auteur_invalide', 'Saisissez un auteur de 1 à 200 caractères.'],

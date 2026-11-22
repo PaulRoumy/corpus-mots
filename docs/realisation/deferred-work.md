@@ -141,6 +141,7 @@
 - source_spec: none
   summary: Story 2.4, partie 2 : choisir un pictogramme ARASAAC crée l'Image (téléchargement hors transaction, `ReductionImages`, `image` et `image_fichier`, état `privee`, licence `arasaac_cc_by_nc_sa`), la lie au Mot par `Usages.lierImage` (origine `nouvelle`, verrou sur l'Image), et la Carte affiche la vignette servie en blob par `commun/image-securisee` (`?taille=miniature`, `Cache-Control`, `ETag`), avec `VisibiliteImages` et ses trois prédicats testés.
   evidence: Découpage de la story 2.4 choisi par Paul ; la partie 1 pose les suggestions ARASAAC dans la Carte par le proxy de `vocabulaire`.
+  status: fait (`docs/realisation/spec-2-4-2-choisir-un-pictogramme.md`).
 - source_spec: `docs/realisation/spec-2-4-suggestions-arasaac.md`
   summary: Cache court des recherches (par `forme`) et des PNG (par identifiant) d'ARASAAC, et plafond d'appels sortants simultanés, une fois les conditions d'usage de l'API connues (Q-2).
   evidence: Revue de la story 2.4, partie 1, ligne 12 du journal de tri : chaque Carte « à illustrer » fait 1 + 3 appels bloquants (jusqu'à 3 s) à chaque affichage.

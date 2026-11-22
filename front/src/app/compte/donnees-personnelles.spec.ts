@@ -73,6 +73,9 @@ describe('TexteDonneesPersonnelles', () => {
     expect(texte).toContain(
       "Un mot tapé dans « Ajouter un mot » peut aussi lui être envoyé pendant la frappe, avant d'être ajouté.",
     );
+    expect(texte).toContain(
+      "Un pictogramme que vous choisissez est téléchargé par le serveur et enregistré comme une de vos Images, avec la licence et les mentions d'auteur d'ARASAAC.",
+    );
   });
 
   it('donne les durées, dont les 14 jours des sauvegardes, et la réserve du délégué à la protection des données', () => {

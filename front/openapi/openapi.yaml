@@ -946,6 +946,17 @@ components:
         total:
           type: integer
           format: int64
+    PictogrammeMotPreparationDto:
+      type: object
+      required:
+      - idArasaac
+      properties:
+        idArasaac:
+          type: integer
+          format: int64
+          minimum: 1
+          description: "Identifiant ARASAAC du pictogramme, strictement positif ;\
+            \ le back le télécharge lui-même"
     PreparationDto:
       type: object
       required:
@@ -2305,6 +2316,40 @@ paths:
       responses:
         "200":
           description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MotPreparationDto"
+        "400":
+          description: Bad Request
+      tags:
+      - Preparations Resource
+  /api/preparations/{id}/mots/{motPreparationId}/pictogramme:
+    post:
+      summary: "Illustrer un Mot d'une Préparation de l'enseignant connecté avec un\
+        \ pictogramme ARASAAC, téléchargé par le back"
+      operationId: choisirPictogrammeMotPreparation
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          $ref: "#/components/schemas/UUID"
+      - name: motPreparationId
+        in: path
+        required: true
+        schema:
+          $ref: "#/components/schemas/UUID"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PictogrammeMotPreparationDto"
+      responses:
+        "201":
+          description: "Image créée (privee, image_libre, licence ARASAAC), réduite\
+            \ et liée au Mot (origine nouvelle)"
           content:
             application/json:
               schema:

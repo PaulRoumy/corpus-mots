@@ -46,16 +46,16 @@ development_status:
   epic-1-retrospective: done
 
   epic-2: in-progress
-  2-1-créer-une-préparation-pour-un-album: review
-  2-2-modules-thèmes-et-réglages-de-la-préparation: review
-  2-3-saisir-des-mots-en-série: review
-  2-4-illustrer-un-mot-avec-un-pictogramme-arasaac: in-progress
-  2-5-téléverser-une-image: review
-  2-6-carte-d-identité-d-une-image: review
-  2-7-détection-immédiate-et-réutilisation-en-un-geste: review
-  2-8-choisir-ou-créer-un-sens: review
-  2-9-reprendre-les-mots-déjà-illustrés-pour-l-album: review
-  2-10-gérer-ses-préparations: review
+  2-1-créer-une-préparation-pour-un-album: done
+  2-2-modules-thèmes-et-réglages-de-la-préparation: done
+  2-3-saisir-des-mots-en-série: done
+  2-4-illustrer-un-mot-avec-un-pictogramme-arasaac: done
+  2-5-téléverser-une-image: done
+  2-6-carte-d-identité-d-une-image: done
+  2-7-détection-immédiate-et-réutilisation-en-un-geste: done
+  2-8-choisir-ou-créer-un-sens: done
+  2-9-reprendre-les-mots-déjà-illustrés-pour-l-album: done
+  2-10-gérer-ses-préparations: done
   epic-2-retrospective: optional
 
   epic-3: backlog

@@ -23,17 +23,54 @@
   list-style: none;
 }
 
-// Vignette de 60 px (`.aras .ph`), pictogramme de 50 px centré.
+// Vignette de 60 px (`.aras .ph`), pictogramme de 50 px centré ; bouton qui illustre le Mot (story 2.4, partie 2).
 .suggestions__vignette {
   display: grid;
   place-items: center;
   box-sizing: border-box;
   width: var(--cm-taille-suggestion-arasaac);
   height: var(--cm-taille-suggestion-arasaac);
+  margin: 0;
+  padding: 0;
   overflow: hidden;
   border: var(--cm-epaisseur-separateur) solid var(--mat-sys-outline-variant);
   border-radius: var(--cm-arrondi-md);
   background: var(--mat-sys-surface);
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+
+  &:hover:not([aria-disabled='true']) {
+    border-color: var(--mat-sys-primary);
+  }
+
+  &:focus-visible {
+    outline: var(--cm-epaisseur-anneau-proposition) solid var(--mat-sys-primary);
+    outline-offset: var(--cm-epaisseur-anneau-proposition);
+  }
+
+  &[aria-disabled='true'] {
+    cursor: default;
+  }
+}
+
+// Indicateur du pictogramme choisi pendant l'envoi : anneau `primary` et pulsation, comme la Squelette.
+.suggestions__vignette--choisie {
+  outline: var(--cm-epaisseur-anneau-proposition) solid var(--mat-sys-primary);
+  outline-offset: var(--cm-epaisseur-anneau-proposition);
+  animation: suggestions-pulsation var(--cm-duree-pulsation-squelette) ease-in-out infinite;
+}
+
+@keyframes suggestions-pulsation {
+  50% {
+    opacity: var(--cm-opacite-pulsation-squelette);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .suggestions__vignette--choisie {
+    animation: none;
+  }
 }
 
 .suggestions__pictogramme {
@@ -55,4 +92,12 @@
   margin: 0;
   font: var(--cm-typo-body-sm);
   color: var(--cm-etat-a-illustrer-texte);
+}
+
+// Échec du choix d'un pictogramme : message court, et « Réessayer » après un échec réseau.
+.suggestions__echec {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--cm-espace-2);
 }
