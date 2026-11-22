@@ -29,7 +29,7 @@
 # - Dev moves story to 'review', then runs code-review (fresh context, different LLM recommended)
 # - Retrospective appends its action items to action_items; the status view surfaces open ones
 generated: 10-30-2026 18:50
-last_updated: 2026-11-20
+last_updated: 11-22-2026 14:09
 project: corpus-mots
 project_key: NOKEY
 tracking_system: file-system
@@ -56,7 +56,7 @@ development_status:
   2-8-choisir-ou-créer-un-sens: done
   2-9-reprendre-les-mots-déjà-illustrés-pour-l-album: done
   2-10-gérer-ses-préparations: done
-  epic-2-retrospective: optional
+  epic-2-retrospective: done
 
   epic-3: backlog
   3-1-parcourir-la-banque-ouverte-sur-mes-mots: backlog
@@ -179,3 +179,28 @@ action_items:
     owner: "Paul, Epic 2"
     status: done
     ref: "docs/realisation/epic-1-retro-2026-11-05.md"
+  - id: "epic-2-retro-item-12-remettre-d-aplomb-l-état-de-la-grille-da"
+    epic: 2
+    action: "Remettre d aplomb l état de la Grille dans preparation.ts : un seul chemin
+      d écriture avec révision, résultat du Panneau de choix appliqué même fermé,
+      panneaux fermés avec focus rendu, une seule écriture aria-live, état de la Grille
+      sorti dans un service (B-1, B-2, B-3, B-7, A-1)"
+    owner: "dev, avant l Epic 3"
+    status: open
+    ref: "docs/realisation/epic-2-retro-2026-11-22.md"
+  - id: "epic-2-retro-item-13-encart-et-bandeau-annuler-fermeture-à-la"
+    epic: 2
+    action: "Encart et Bandeau Annuler : fermeture à la navigation, recharger() ordonné
+      par rapport aux gestes, ressource.introuvable traduit comme image indisponible
+      (B-4, B-5, B-6)"
+    owner: "dev, avant l Epic 3"
+    status: open
+    ref: "docs/realisation/epic-2-retro-2026-11-22.md"
+  - id: "epic-2-retro-item-14-un-code-d-erreur-stable-par-condition-im"
+    epic: 2
+    action: "Un code d erreur stable par condition : image non proposable, image d
+      un autre Sens, pictogramme inconnu ; une seule liste de codes image indisponible
+      dans le front (C-2)"
+    owner: "dev, avec l action 2"
+    status: open
+    ref: "docs/realisation/epic-2-retro-2026-11-22.md"
