@@ -73,7 +73,9 @@ import { CarteMot } from './carte-mot';
 import { ChampNomModule } from './champ-nom-module';
 import { map } from 'rxjs';
 import { ouvrirDialogueCorrigerAlbum } from './corriger-album-dialogue';
+import { Annonces } from './annonces';
 import { EncartMotsDejaIllustres } from './encart-mots-deja-illustres';
+import { GrilleMots } from './grille-mots';
 import { nomPreparation } from './nom-preparation';
 import { libelleMots } from './preparations';
 import type { PanneauChoixImage } from './panneau-choix-image';
@@ -246,11 +248,6 @@ export function messageEchecRetablissement(echec: EchecRetablissement): string {
   return `« ${echec.mot.forme} » n'a pas été rétabli. ${echec.message}`;
 }
 
-/** Mots dans l'ordre de leur place, `mot` inséré à la sienne. */
-function inserer(mots: readonly MotPreparationDto[], mot: MotPreparationDto): MotPreparationDto[] {
-  return [...mots.filter((autre) => autre.id !== mot.id), mot].sort((a, b) => a.ordre - b.ordre);
-}
-
 /** Champ de l'En-tête relu après une suppression : le Module ou le Thème par défaut. */
 type Source = 'module' | 'theme';
 
@@ -365,6 +362,8 @@ type Source = 'module' | 'theme';
     SaisieRapide,
     Squelette,
   ],
+  // État de la Grille et région `aria-live` propres à la page : une autre page repart de zéro.
+  providers: [GrilleMots, Annonces],
   changeDetection: ChangeDetectionStrategy.OnPush,
   styleUrls: ['../commun/page-rubrique.scss', './preparation.scss'],
   template: `
@@ -617,7 +616,7 @@ type Source = 'module' | 'theme';
               [preparationId]="courante.id"
               [motsPresents]="motsPresents()"
               (ajoutes)="ajouterReprises($event)"
-              (annonce)="annoncer($event)"
+              (annonce)="annonces.annoncer($event)"
               (focusChamp)="rendreFocusChamp()"
             />
             @if (motsCharges.length > 0) {
@@ -645,7 +644,7 @@ type Source = 'module' | 'theme';
           } @else if (!erreurMots()) {
             <app-squelette forme="carte" [nombre]="3" />
           }
-          <p class="cm-visuellement-masque" aria-live="polite">{{ annonce() }}</p>
+          <p class="cm-visuellement-masque" aria-live="polite">{{ annonces.texte() }}</p>
         } @else if (chargementEnCours()) {
           <app-squelette forme="texte" [nombre]="3" />
         }
@@ -670,6 +669,10 @@ export class Preparation {
   private readonly confirmation = inject(DialogueConfirmation);
   private readonly injecteur = inject(Injector);
   private readonly bandeauAnnuler = inject(BandeauAnnuler);
+  /** Seules écritures de la liste des Mots. */
+  private readonly grille = inject(GrilleMots);
+  /** Seule écriture de la région `aria-live`. */
+  protected readonly annonces = inject(Annonces);
 
   /** Identifiant de la Préparation, lu dans l'URL (`withComponentInputBinding`). */
   readonly id = input.required<string>();
@@ -765,29 +768,22 @@ export class Preparation {
     this.listesChargees() ? new Map(this.themes().map((theme) => [theme.id, theme.nom])) : null,
   );
 
-  /** Mots de la Préparation dans l'ordre de saisie ; `null` tant qu'ils ne sont pas chargés. */
-  protected readonly mots = signal<MotPreparationDto[] | null>(null);
+  /** Mots de la Préparation dans l'ordre de leur place ; `null` tant qu'ils ne sont pas chargés (`GrilleMots`). */
+  protected readonly mots = this.grille.mots;
   protected readonly erreurMots = signal<string | null>(null);
   /** Refus du choix d'un pictogramme pour un Mot illustré entre-temps (autre onglet), `null` sinon. */
   protected readonly erreurPictogramme = signal<string | null>(null);
   protected readonly echecAjout = signal<EchecAjout | null>(null);
-  /** Dernier Mot ajouté, annoncé aux lecteurs d'écran : le focus reste dans le champ. */
-  protected readonly annonce = signal('');
   /** Compteur de l'En-tête : la Grille une fois chargée, sinon le nombre lu avec la Préparation. */
   protected readonly nombreMots = computed(
     () => this.mots()?.length ?? this.preparation()?.nombreMots ?? 0,
   );
   /** Compteur « M déjà illustrés » : la Grille une fois chargée, sinon le nombre lu avec la Préparation. */
-  protected readonly nombreIllustres = computed(() => {
-    const mots = this.mots();
-    return mots === null
-      ? (this.preparation()?.nombreIllustres ?? 0)
-      : mots.filter((mot) => mot.illustre).length;
-  });
-  /** Mots du Lexique de la Grille : l'Encart « mots déjà illustrés » ne les propose plus. */
-  protected readonly motsPresents = computed(
-    () => new Set((this.mots() ?? []).map((mot) => mot.motId)) as ReadonlySet<string>,
+  protected readonly nombreIllustres = computed(
+    () => this.grille.nombreIllustres() ?? this.preparation()?.nombreIllustres ?? 0,
   );
+  /** Mots du Lexique de la Grille : l'Encart « mots déjà illustrés » ne les propose plus. */
+  protected readonly motsPresents = this.grille.motsPresents;
   private readonly saisieRapide = viewChild(SaisieRapide);
   private readonly encart = viewChild(EncartMotsDejaIllustres);
   private readonly panneauDetection = viewChild(PanneauDetection);
@@ -836,11 +832,6 @@ export class Preparation {
 
   /** Numéro du dernier chargement : la réponse d'une Préparation quittée depuis n'écrit rien. */
   private dernierChargement = 0;
-  /**
-   * Révision locale de la Grille : chaque Image posée sur une Carte (pictogramme, téléversement, choix) l'augmente, et
-   * une lecture des Mots partie avant n'écrase pas ce changement plus récent.
-   */
-  private revisionMots = 0;
   /** Vrai pendant un enregistrement : un changement survenu entre-temps est envoyé après lui. */
   private enregistrementEnCours = false;
   private enregistrementEnAttente = false;
@@ -885,7 +876,7 @@ export class Preparation {
           // Code introuvable (hors ligne, nouvelle version déployée) : rien ne reste ouvert, un prochain clic réessaie.
           this.codePanneauChoix = null;
           this.choixOuvert.set(null);
-          this.annoncer(MESSAGE_RESEAU);
+          this.annonces.annoncer(MESSAGE_RESEAU);
           return;
         }
         const { PanneauChoixImage } = code;
@@ -940,7 +931,7 @@ export class Preparation {
     this.erreurRenommageTheme.set(null);
     this.erreurTheme.set(null);
     this.enregistrementEnAttente = false;
-    this.mots.set(null);
+    this.grille.vider();
     // Le Champ de saisie rapide est recréé vide : la détection ne suit plus l'ancienne saisie.
     this.saisieTapee.set('');
     this.erreurMots.set(null);
@@ -948,7 +939,7 @@ export class Preparation {
     this.echecAjout.set(null);
     this.echecRetrait.set(null);
     this.echecRetablissement.set(null);
-    this.annonce.set('');
+    this.annonces.effacer();
     this.carteOuverte.set(null);
     this.choixOuvert.set(null);
     // Une Création de Sens en attente n'est pas envoyée : elle reste ouverte avec l'erreur.
@@ -1002,19 +993,26 @@ export class Preparation {
     }
   }
 
-  /** Mots de la Préparation ; en échec, leur propre Bandeau d'erreur, l'En-tête reste affiché. */
-  async chargerMots(id: string): Promise<void> {
+  /**
+   * Mots de la Préparation ; en échec, leur propre Bandeau d'erreur, l'En-tête reste affiché. Une écriture locale
+   * pendant la lecture (ajout, reprise, retrait, Thème, Sens, Image) l'emporte : la liste lue est ignorée, sans fusion,
+   * puis relue au plus `relances` fois.
+   */
+  async chargerMots(id: string, relances = 0): Promise<void> {
     const numero = this.dernierChargement;
-    const revision = this.revisionMots;
     this.erreurMots.set(null);
-    try {
-      const mots = await this.api.invoke(listerMotsPreparation, { id });
-      if (numero === this.dernierChargement && revision === this.revisionMots) {
-        this.mots.set(mots);
-      }
-    } catch (erreur) {
-      if (numero === this.dernierChargement) {
-        this.erreurMots.set(messageErreur(erreur));
+    for (let reste = relances; reste >= 0; reste--) {
+      const revision = this.grille.revision();
+      try {
+        const mots = await this.api.invoke(listerMotsPreparation, { id });
+        if (numero !== this.dernierChargement || this.grille.charger(mots, revision)) {
+          return;
+        }
+      } catch (erreur) {
+        if (numero === this.dernierChargement) {
+          this.erreurMots.set(messageErreur(erreur));
+        }
+        return;
       }
     }
   }
@@ -1048,9 +1046,9 @@ export class Preparation {
 
   /** Mots repris depuis l'Encart « mots déjà illustrés » : ils arrivent à leur place, en fin de Grille. */
   protected ajouterReprises(ajoutes: readonly MotPreparationDto[]): void {
-    this.mots.update((mots) =>
-      mots === null ? mots : ajoutes.reduce((grille, ajoute) => inserer(grille, ajoute), mots),
-    );
+    for (const ajoute of ajoutes) {
+      this.grille.ajouter(ajoute);
+    }
   }
 
   /** Puce de Sens choisie ou Création de Sens repliée : le focus revient au Champ de saisie rapide. */
@@ -1122,7 +1120,7 @@ export class Preparation {
         issue?.rejeter(new Error(ERREUR_AJOUT_ABANDONNE));
         return;
       }
-      this.mots.update((mots) => (mots === null ? mots : [...mots, ajoute]));
+      this.grille.ajouter(ajoute);
       if (issue !== undefined) {
         // Création de Sens : le champ est vidé (le panneau se masque), sauf s'il a changé depuis l'envoi, et reprend
         // le focus.
@@ -1132,7 +1130,7 @@ export class Preparation {
           this.saisieRapide()?.focus();
         }
       }
-      this.annonce.set(
+      this.annonces.annoncer(
         image !== undefined
           ? `« ${ajoute.forme} » ajouté avec son image.`
           : sens !== undefined
@@ -1191,7 +1189,7 @@ export class Preparation {
       return;
     }
     const restants = mots.filter((autre) => autre.id !== mot.id);
-    this.mots.set(restants);
+    this.grille.retirer(mot.id);
     if (this.carteOuverte()?.motId === mot.id) {
       this.carteOuverte.set(null);
     }
@@ -1240,7 +1238,7 @@ export class Preparation {
       if (numero !== this.dernierChargement) {
         return;
       }
-      this.mots.update((mots) => (mots === null ? mots : inserer(mots, mot)));
+      this.grille.ajouter(mot);
       this.echecRetrait.update((echec) => ({
         mots: [...(echec?.mots ?? []), mot],
         message: messageErreur(erreur),
@@ -1270,10 +1268,10 @@ export class Preparation {
         },
       });
       if (numero === this.dernierChargement) {
-        this.mots.update((mots) => (mots === null ? mots : inserer(mots, retabli)));
+        this.grille.ajouter(retabli);
         void this.encart()?.recharger();
         // L'Image retirée qui n'est plus proposable ou a changé de Sens n'est pas reliée : le Mot revient « à illustrer ».
-        this.annonce.set(
+        this.annonces.annoncer(
           retire.image && !retabli.image
             ? `« ${retabli.forme} » rétabli, sans son image, qui n'est plus disponible.`
             : `« ${retabli.forme} » rétabli.`,
@@ -1345,9 +1343,7 @@ export class Preparation {
     if (change === undefined || numero !== this.dernierChargement) {
       return;
     }
-    this.mots.update((mots) =>
-      mots === null ? mots : mots.map((autre) => (autre.id === change.id ? change : autre)),
-    );
+    this.grille.remplacer(change);
   }
 
   /**
@@ -1376,7 +1372,7 @@ export class Preparation {
     ) {
       return;
     }
-    this.annonce.set(`Image enregistrée pour « ${illustre.forme} ».`);
+    this.annonces.annoncer(`Image enregistrée pour « ${illustre.forme} ».`);
     this.focaliserApresRendu(illustre);
   }
 
@@ -1390,7 +1386,7 @@ export class Preparation {
     if (!this.remplacerMotIllustre(illustre)) {
       return;
     }
-    this.annoncer(`« ${illustre.forme} » illustré.`);
+    this.annonces.annoncer(`« ${illustre.forme} » illustré.`);
     this.focaliserApresRendu(illustre);
   }
 
@@ -1405,7 +1401,8 @@ export class Preparation {
     }
     const numero = this.dernierChargement;
     this.erreurPictogramme.set(message);
-    await this.chargerMots(preparation.id);
+    // Le Mot a changé ailleurs : la relecture repart si un geste local l'a rendue périmée.
+    await this.chargerMots(preparation.id, 2);
     if (numero === this.dernierChargement) {
       this.focaliserApresRendu(this.mots()?.find((autre) => autre.id === mot.id));
     }
@@ -1413,17 +1410,13 @@ export class Preparation {
 
   /**
    * Remplace dans la Grille le Mot qui vient de recevoir une Image ; faux s'il n'y est plus. Le Bandeau d'un refus de
-   * pictogramme précédent disparaît, et une lecture des Mots déjà partie ne reviendra pas en arrière.
+   * pictogramme précédent disparaît, et une lecture des Mots déjà partie ne reviendra pas en arrière (`GrilleMots`).
    */
   private remplacerMotIllustre(illustre: MotPreparationDto): boolean {
-    if (!this.mots()?.some((autre) => autre.id === illustre.id)) {
+    if (!this.grille.remplacer(illustre)) {
       return false;
     }
-    this.revisionMots++;
     this.erreurPictogramme.set(null);
-    this.mots.update((mots) =>
-      mots === null ? mots : mots.map((autre) => (autre.id === illustre.id ? illustre : autre)),
-    );
     return true;
   }
 
@@ -1454,7 +1447,7 @@ export class Preparation {
   protected appliquerChoixImage(change: MotPreparationDto): void {
     this.remplacerMotIllustre(change);
     this.choixOuvert.set(null);
-    this.annoncer(`Image de « ${change.forme} » changée.`);
+    this.annonces.annoncer(`Image de « ${change.forme} » changée.`);
     this.rendreFocusVignette(change.id);
   }
 
@@ -1464,15 +1457,15 @@ export class Preparation {
    */
   protected appliquerChangementSens(change: MotPreparationDto): void {
     const avant = this.mots()?.find((mot) => mot.id === change.id);
-    this.mots.update((mots) =>
-      mots === null ? mots : mots.map((autre) => (autre.id === change.id ? change : autre)),
-    );
+    this.grille.remplacer(change);
     const imageRetiree = !!avant?.image && !change.image;
     // Même format que le champ Sens : « libellé (catégorie) ».
     const sens = change.sens.categorie
       ? `${change.sens.libelle} (${change.sens.categorie})`
       : change.sens.libelle;
-    this.annoncer(`Sens de « ${change.forme} » : ${sens}.${imageRetiree ? ' Image retirée.' : ''}`);
+    this.annonces.annoncer(
+      `Sens de « ${change.forme} » : ${sens}.${imageRetiree ? ' Image retirée.' : ''}`,
+    );
   }
 
   /**
@@ -1524,15 +1517,6 @@ export class Preparation {
     this.rendreFocusVignette(ouverte?.motId ?? null);
   }
 
-  /**
-   * Annonce `message` dans la région `aria-live` : vidée d'abord, puis remplie après le rendu, pour qu'un même message
-   * (deuxième changement d'Image du même Mot) soit annoncé de nouveau.
-   */
-  protected annoncer(message: string): void {
-    this.annonce.set('');
-    afterNextRender(() => this.annonce.set(message), { injector: this.injecteur });
-  }
-
   /** Après le rendu, focus à la vignette de la Carte du Mot `motId`, ou au Champ de saisie rapide sans elle. */
   private rendreFocusVignette(motId: string | null): void {
     afterNextRender(
@@ -1555,18 +1539,14 @@ export class Preparation {
    * chaque Carte de Mot qui l'affiche (Badge de type).
    */
   protected readonly appliquerCarteIdentite = (carte: CarteIdentiteImageDto): void => {
-    this.mots.update((mots) =>
-      mots === null
-        ? mots
-        : mots.map((mot) =>
-            mot.image?.id === carte.id
-              ? {
-                  ...mot,
-                  image: { ...mot.image, typeImage: carte.typeImage, aCompleter: carte.aCompleter },
-                }
-              : mot,
-          ),
-    );
+    for (const mot of this.mots() ?? []) {
+      if (mot.image?.id === carte.id) {
+        this.grille.remplacer({
+          ...mot,
+          image: { ...mot.image, typeImage: carte.typeImage, aCompleter: carte.aCompleter },
+        });
+      }
+    }
   };
 
   /** Thème créé, renommé ou supprimé depuis le Dialogue du Thème d'un Mot. */
@@ -1602,11 +1582,11 @@ export class Preparation {
 
   /** Le Thème `themeId` a été supprimé : le back l'a retiré des Mots qui le portaient, les Cartes suivent. */
   private retirerThemeDesMots(themeId: string): void {
-    this.mots.update((mots) =>
-      mots === null
-        ? mots
-        : mots.map((mot) => (mot.themeId === themeId ? { ...mot, themeId: null } : mot)),
-    );
+    for (const mot of this.mots() ?? []) {
+      if (mot.themeId === themeId) {
+        this.grille.remplacer({ ...mot, themeId: null });
+      }
+    }
   }
 
   /** Après le rendu, focus au bouton « Retirer » de la Carte de `mot`, ou au Champ de saisie rapide sans Carte. */

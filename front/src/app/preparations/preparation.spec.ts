@@ -4015,6 +4015,15 @@ describe('Preparation (En-tête)', () => {
           element.classList.contains('mots__element--a-illustrer'),
         ),
       ).toEqual([false, true]);
+
+      // Elle repart, et la liste à jour montre les deux Mots illustrés.
+      serveur.expectOne(URL_MOTS).flush([GALETTE_ILLUSTREE, ILLUSTREE]);
+      await stabiliser();
+      expect(
+        [...racine.querySelectorAll('.mots__element')].map((element) =>
+          element.classList.contains('mots__element--a-illustrer'),
+        ),
+      ).toEqual([false, false]);
     });
 
     it('un Mot illustré qui n’est plus dans la Grille : ni annonce ni changement de focus', async () => {
@@ -4805,6 +4814,277 @@ describe('Preparation (En-tête)', () => {
 
       expect(panneau()).toBeNull();
       serveur.expectOne(`${URL_MOTS}/${FARINE.id}`);
+    });
+  });
+
+  describe('Grille et annonces (rétrospective de l’Epic 2, B-1 et B-7)', () => {
+    const GALETTE = motPreparation('galette', 1);
+    const CITROUILLE = motPreparation('citrouille', 2);
+    const MOT_LOUP = motPreparation('loup', 3);
+    const URL_REPRISES = `/api/preparations/${ID}/reprises`;
+    const ETALE: RepriseMotPreparationDto = {
+      motId: '0190f0a0-0000-7000-8000-0000000a0001',
+      forme: 'etale',
+      sens: { id: '0190f0a0-0000-7000-8000-0000000b0001', libelle: 'etale', categorie: 'nom' },
+      image: {
+        id: '0190f0a0-0000-7000-8000-0000000c0001',
+        proprietaireId: MOI,
+        etat: 'privee',
+        aRemplacer: null,
+        reutilisable: true,
+        typeImage: 'image_album',
+        aCompleter: false,
+        sections: ['ms'],
+        albumOrigine: { id: ALBUM, titre: 'La Roule Galette' },
+        sens: {
+          id: '0190f0a0-0000-7000-8000-0000000b0001',
+          libelle: 'etale',
+          categorie: 'nom',
+          aCompleter: false,
+        },
+        dejaUtilisee: false,
+      },
+    };
+    const ETALE_REPRIS: MotPreparationDto = {
+      id: '0190f0a0-0000-7000-8000-0000000f0010',
+      motId: ETALE.motId,
+      forme: 'etale',
+      ordre: 10,
+      sens: ETALE.sens,
+      illustre: true,
+      image: {
+        id: ETALE.image.id,
+        proprietaireId: MOI,
+        etat: 'privee',
+        aRemplacer: null,
+        reutilisable: true,
+        typeImage: 'image_album',
+        aCompleter: false,
+      },
+    };
+    const original = { creer: URL.createObjectURL, revoquer: URL.revokeObjectURL };
+    const champSaisie = () => racine.querySelector<HTMLInputElement>('app-saisie-rapide input')!;
+    const page = () =>
+      fixture.componentInstance as unknown as {
+        chargerMots(id: string): Promise<void>;
+        appliquerChangementSens(change: MotPreparationDto): void;
+      };
+
+    beforeEach(() => {
+      URL.createObjectURL = vi.fn(() => 'blob:http://localhost/image');
+      URL.revokeObjectURL = vi.fn();
+      vi.spyOn(TestBed.inject(BandeauAnnuler), 'afficher').mockImplementation(() => undefined);
+    });
+
+    afterEach(() => {
+      serveur.match((requete) => requete.url.startsWith('/api/images/'));
+      serveur.match((requete) => requete.url.endsWith('/detection'));
+      URL.createObjectURL = original.creer;
+      URL.revokeObjectURL = original.revoquer;
+    });
+
+    async function ouvrirAvec(
+      mots: MotPreparationDto[],
+      reprises: RepriseMotPreparationDto[] = [],
+    ) {
+      await ouvrir(
+        { ...PREPARATION, nombreMots: mots.length },
+        MODULES,
+        THEMES,
+        albumDe(PREPARATION),
+        mots,
+      );
+      serveur.expectOne(URL_REPRISES).flush(reprises);
+      await stabiliser();
+    }
+
+    /** Relecture des Mots lancée, sans réponse. */
+    async function relire(): Promise<TestRequest> {
+      void page().chargerMots(ID);
+      await stabiliser();
+      return serveur.expectOne((requete) => requete.method === 'GET' && requete.url === URL_MOTS);
+    }
+
+    async function taper(saisie: string) {
+      champSaisie().value = saisie;
+      champSaisie().dispatchEvent(new Event('input'));
+      champSaisie().dispatchEvent(
+        new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }),
+      );
+      await stabiliser();
+    }
+
+    const ajout = () =>
+      serveur.expectOne((requete) => requete.method === 'POST' && requete.url === URL_MOTS);
+
+    it('relecture (refus d’un pictogramme) puis retrait : la Carte retirée ne revient pas, la relecture repart', async () => {
+      const CITROUILLE_ILLUSTREE: MotPreparationDto = {
+        ...CITROUILLE,
+        illustre: true,
+        image: { ...ETALE_REPRIS.image!, id: '0190f0a0-0000-7000-8000-0000000c0031' },
+      };
+      await ouvrirAvec([GALETTE, CITROUILLE]);
+      serveur
+        .expectOne('/api/arasaac/suggestions?mot=citrouille')
+        .flush([{ idArasaac: 2459, motCle: 'citrouille' }]);
+      await stabiliser();
+      racine
+        .querySelector<HTMLButtonElement>(
+          'app-carte-mot button[aria-label="Illustrer « citrouille » avec le pictogramme « citrouille »"]',
+        )!
+        .click();
+      await stabiliser();
+      serveur
+        .expectOne(`${URL_MOTS}/${CITROUILLE.id}/pictogramme`)
+        .flush(
+          { status: 409, code: 'preparation.mot_deja_illustre' },
+          { status: 409, statusText: 'Conflict' },
+        );
+      await stabiliser();
+      const relecture = serveur.expectOne(URL_MOTS);
+
+      racine
+        .querySelector<HTMLButtonElement>(
+          'app-carte-mot button[aria-label="Retirer « galette » de la préparation"]',
+        )!
+        .click();
+      await stabiliser();
+      serveur.expectOne(`${URL_MOTS}/${GALETTE.id}`).flush(GALETTE);
+      await stabiliser();
+      serveur.expectOne(URL_REPRISES).flush([]);
+
+      // Relecture périmée (partie avant le retrait) : ignorée, puis relancée.
+      relecture.flush([GALETTE, CITROUILLE_ILLUSTREE]);
+      await stabiliser();
+      expect(cartes()).toEqual(['citrouille']);
+
+      serveur.expectOne(URL_MOTS).flush([CITROUILLE_ILLUSTREE]);
+      await stabiliser();
+
+      expect(cartes()).toEqual(['citrouille']);
+      expect(racine.querySelector('.mots__element--a-illustrer')).toBeNull();
+      expect(texte('.entete__compteur')).toBe('1 mot, 1 déjà illustré');
+    });
+
+    it('relecture puis « Reprendre » dans l’Encart : le Mot repris reste dans la Grille', async () => {
+      await ouvrirAvec([GALETTE], [ETALE]);
+      const relecture = await relire();
+
+      racine.querySelector<HTMLButtonElement>('button[aria-label="Reprendre « etale »"]')!.click();
+      serveur.expectOne(`${URL_MOTS}/reutilisation`).flush(ETALE_REPRIS);
+      await stabiliser();
+
+      relecture.flush([GALETTE]);
+      await stabiliser();
+
+      expect(cartes()).toEqual(['galette', 'etale']);
+      expect(texte('.entete__compteur')).toBe('2 mots, 1 déjà illustré');
+    });
+
+    it('relecture puis changement de Sens : le nouveau Sens reste', async () => {
+      const CHUTE = {
+        id: '0190f0a0-0000-7000-8000-0000000d0099',
+        libelle: 'chute',
+        categorie: 'nom',
+      };
+      await ouvrirAvec([GALETTE, CITROUILLE]);
+      const relecture = await relire();
+
+      // Sortie `sensChange` du Panneau de choix d'Image.
+      page().appliquerChangementSens({ ...CITROUILLE, sens: CHUTE });
+      await stabiliser();
+
+      relecture.flush([GALETTE, CITROUILLE]);
+      await stabiliser();
+
+      expect(
+        (fixture.componentInstance as unknown as { mots(): MotPreparationDto[] }).mots()[1].sens,
+      ).toEqual(CHUTE);
+    });
+
+    it('relecture puis ajout par le champ : la relecture, partie avant cette écriture locale, est ignorée', async () => {
+      await ouvrirAvec([GALETTE]);
+      const relecture = await relire();
+
+      await taper('loup');
+      ajout().flush(MOT_LOUP);
+      await stabiliser();
+
+      // La liste relue porte un Mot de plus : elle est ignorée, la Grille garde son état local.
+      relecture.flush([GALETTE, MOT_LOUP, CITROUILLE]);
+      await stabiliser();
+
+      expect(cartes()).toEqual(['galette', 'loup']);
+    });
+
+    it('relecture arrivée avant la réponse de l’ajout, avec ce Mot : un seul exemplaire', async () => {
+      await ouvrirAvec([GALETTE]);
+      const relecture = await relire();
+
+      await taper('loup');
+      const requete = ajout();
+      relecture.flush([GALETTE, MOT_LOUP]);
+      await stabiliser();
+      requete.flush(MOT_LOUP);
+      await stabiliser();
+
+      expect(cartes()).toEqual(['galette', 'loup']);
+    });
+
+    it('relecture seule : la liste relue remplace la Grille', async () => {
+      await ouvrirAvec([GALETTE]);
+      const relecture = await relire();
+
+      relecture.flush([GALETTE, CITROUILLE]);
+      await stabiliser();
+
+      expect(cartes()).toEqual(['galette', 'citrouille']);
+    });
+
+    it('réponse d’ajout et reprise de l’Encart dans le même tour : une annonce entière, jamais vidée par l’autre', async () => {
+      await ouvrirAvec([GALETTE], [ETALE]);
+      const region = racine.querySelector<HTMLElement>('p[aria-live="polite"]')!;
+      const textes: string[] = [];
+      const observateur = new MutationObserver(() => textes.push(region.textContent ?? ''));
+      observateur.observe(region, { childList: true, characterData: true, subtree: true });
+
+      await taper('loup');
+      const requete = ajout();
+      racine.querySelector<HTMLButtonElement>('button[aria-label="Reprendre « etale »"]')!.click();
+      const reprise = serveur.expectOne(`${URL_MOTS}/reutilisation`);
+      // La reprise répond d'abord, l'ajout ensuite : la dernière annonce est celle de l'ajout, que la reprise, écrite
+      // après le rendu, n'écrase plus.
+      reprise.flush(ETALE_REPRIS);
+      requete.flush(MOT_LOUP);
+      await stabiliser();
+      await stabiliser();
+      observateur.disconnect();
+
+      const completes = ['« loup » ajouté.', '« etale » repris avec son image.'];
+      expect(region.textContent).toBe('« loup » ajouté.');
+      expect(textes.every((texte) => texte === '' || completes.includes(texte))).toBe(true);
+      expect(textes.at(-1)).toBe('« loup » ajouté.');
+      expect(cartes()).toEqual(['galette', 'loup', 'etale']);
+    });
+
+    it('autre Préparation : la Grille repart de zéro, une relecture de la première n’écrit rien', async () => {
+      await ouvrirAvec([GALETTE]);
+      await taper('loup');
+      ajout().flush(MOT_LOUP);
+      await stabiliser();
+      const relecture = await relire();
+
+      fixture.componentRef.setInput('id', AUTRE_ID);
+      await stabiliser();
+      expect(racine.querySelector('.mots__grille')).toBeNull();
+      await ouvrir({ ...LOUP, nombreMots: 1 }, MODULES_LOUP, THEMES, albumDe(LOUP), [
+        motPreparation('renard', 1),
+      ]);
+      serveur.match((requete) => requete.url.endsWith('/reprises'));
+      relecture.flush([GALETTE, MOT_LOUP]);
+      await stabiliser();
+
+      expect(cartes()).toEqual(['renard']);
     });
   });
 });

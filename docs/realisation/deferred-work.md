@@ -232,3 +232,9 @@
 - source_spec: `docs/realisation/spec-2-10-gerer-ses-preparations.md`
   summary: Epic 3 : un lien `reutilisee` peut viser une Image de l'enseignant lui-même (duplication d'une Préparation, reprise de sa propre Image dans la détection ou l'Encart) ; tout calcul « réutilisée par des collègues » (notifications de retrait, protection contre la suppression, indicateurs) filtre `lien_image.enseignant_id <> image.proprietaire_id`.
   evidence: Revue de la story 2.10, ligne 8 du journal de tri.
+- source_spec: `docs/realisation/spec-retro-e2-1-grille-mots.md`
+  summary: Action 1 de la rétrospective de l'Epic 2, partie 2 : `appliquerChangementSens` et `appliquerChoixImage` n'annoncent rien et ne déplacent pas le focus quand `grille.remplacer` renvoie faux (Mot sorti de la Grille), avec B-2 et B-3.
+  evidence: Revue de la partie 1, ligne 4 du journal de tri.
+- source_spec: `docs/realisation/spec-retro-e2-1-grille-mots.md`
+  summary: Action 2 de la rétrospective de l'Epic 2 : le Bandeau « Annuler » annonce par `LiveAnnouncer`, hors du service `Annonces` de la page ; à coordonner avec sa fermeture à la navigation (B-4).
+  evidence: Revue de la partie 1, ligne 5 du journal de tri.
