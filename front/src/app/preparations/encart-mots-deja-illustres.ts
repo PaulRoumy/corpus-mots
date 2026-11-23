@@ -1,8 +1,10 @@
+import { HttpErrorResponse } from '@angular/common/http';
 import {
   afterNextRender,
   ChangeDetectionStrategy,
   Component,
   computed,
+  DestroyRef,
   effect,
   inject,
   Injector,
@@ -52,12 +54,22 @@ export function libelleSensReprise(reprise: RepriseMotPreparationDto): string {
     : reprise.sens.libelle;
 }
 
-/** Refus d'une reprise dont l'Image n'est plus proposable ou n'illustre plus ce Mot (y compris sous verrou). */
+/** Refus d'une reprise dont l'Image n'est plus proposable ou n'illustre plus ce Mot. */
 const CODES_IMAGE_INDISPONIBLE: ReadonlySet<string> = new Set([
   'image.indisponible',
   'image.sens_different',
   'preparation.sens_invalide',
 ]);
+
+/**
+ * Refus sous verrou : `409 ressource.introuvable`, renvoyé par `Usages.lierImage` quand l'Image cesse d'être
+ * proposable. Un `404 ressource.introuvable` (Préparation ou Mot disparu) garde son message générique.
+ */
+function refusSousVerrou(erreur: unknown, code: string | null): boolean {
+  return (
+    code === 'ressource.introuvable' && erreur instanceof HttpErrorResponse && erreur.status === 409
+  );
+}
 
 /** Nombre maximal de Mots par requête « Tout reprendre » (le back refuse au-delà). */
 export const REPRISES_PAR_LOT = 200;
@@ -76,7 +88,7 @@ export function messageRefusReprise(forme: string, erreur: unknown): string {
   if (code === 'preparation.mot_deja_present') {
     return `« ${forme} » est déjà dans la préparation.`;
   }
-  if (code !== null && CODES_IMAGE_INDISPONIBLE.has(code)) {
+  if ((code !== null && CODES_IMAGE_INDISPONIBLE.has(code)) || refusSousVerrou(erreur, code)) {
     return `« ${forme} » n'a pas pu être repris : son image n'est plus disponible.`;
   }
   return `« ${forme} » n'a pas pu être repris. ${messageErreur(erreur)}`;
@@ -235,6 +247,7 @@ export class EncartMotsDejaIllustres {
   private readonly api = inject(Api);
   private readonly bandeauAnnuler = inject(BandeauAnnuler);
   private readonly injecteur = inject(Injector);
+  private readonly destruction = inject(DestroyRef);
 
   protected readonly libelleSens = libelleSensReprise;
   protected readonly idTitre = `encart-titre-${++prochainEncart}`;
@@ -257,6 +270,13 @@ export class EncartMotsDejaIllustres {
 
   /** Numéro du dernier chargement : une réponse pour une Préparation quittée n'écrit rien. */
   private chargement = 0;
+  /**
+   * Révision locale des candidats : toute écriture d'un geste (reprise, « Tout reprendre », écart) l'augmente. Une
+   * relecture (`recharger`) partie avant un geste est ignorée : le changement local, plus récent, est gardé.
+   */
+  private revision = 0;
+  /** Numéro de la dernière relecture (`recharger`) : seule la plus récente écrit sa réponse. */
+  private relecture = 0;
 
   constructor() {
     effect(() => {
@@ -395,6 +415,7 @@ export class EncartMotsDejaIllustres {
     }
     this.ajoutes.emit(ajoutes);
     const repris = new Set(ajoutes.map((mot) => mot.motId));
+    this.revision++;
     this.reprises.update((reprises) => reprises.filter((reprise) => !repris.has(reprise.motId)));
   }
 
@@ -416,6 +437,7 @@ export class EncartMotsDejaIllustres {
       this.bandeauAnnuler.afficher(
         `« ${reprise.forme} » écarté des mots déjà illustrés.`,
         () => void this.annulerEcart(id, reprise, numero),
+        this.destruction,
       );
     } catch (erreur) {
       if (numero !== this.chargement) {
@@ -459,6 +481,8 @@ export class EncartMotsDejaIllustres {
       if (numero !== this.chargement) {
         return;
       }
+      // Le Mot redevient candidat : une relecture partie avant l'annulation est périmée.
+      this.revision++;
       await this.recharger();
       const index = this.affiches().findIndex((autre) => autre.motId === reprise.motId);
       if (index >= 0) {
@@ -485,6 +509,7 @@ export class EncartMotsDejaIllustres {
   /** Le Mot quitte l'Encart ; annonce du geste et du nouveau titre, focus au Mot voisin ou au champ. */
   private retirer(reprise: RepriseMotPreparationDto, geste: string): void {
     const index = this.affiches().findIndex((autre) => autre.motId === reprise.motId);
+    this.revision++;
     this.reprises.update((reprises) => reprises.filter((autre) => autre.motId !== reprise.motId));
     const restants = this.affiches().length;
     this.annoncer(restants > 0 ? `${geste} ${this.titre()}.` : geste);
@@ -493,19 +518,29 @@ export class EncartMotsDejaIllustres {
 
   /**
    * Relit les candidats, sans changer de chargement : les gestes en cours restent valables. La page l'appelle aussi
-   * après le retrait (ou le rétablissement) d'un Mot de la Grille, qui redevient candidat (ou ne l'est plus).
+   * après le retrait (ou le rétablissement) d'un Mot de la Grille, qui redevient candidat (ou ne l'est plus). Seule la
+   * dernière relecture écrit sa réponse, et seulement si aucun geste n'a changé l'Encart pendant la lecture (révision
+   * inchangée) ; sinon la lecture est relancée, au plus `relances` fois, pour ne pas perdre le changement attendu.
    */
-  async recharger(): Promise<void> {
+  async recharger(relances = 2): Promise<void> {
     const numero = this.chargement;
-    try {
-      const reprises = await this.api.invoke(listerReprisesPreparation, {
-        id: this.preparationId(),
-      });
-      if (numero === this.chargement) {
-        this.reprises.set(reprises);
+    const appel = ++this.relecture;
+    for (let reste = relances; reste >= 0; reste--) {
+      const revisionAuDepart = this.revision;
+      let reprises: RepriseMotPreparationDto[];
+      try {
+        reprises = await this.api.invoke(listerReprisesPreparation, { id: this.preparationId() });
+      } catch {
+        // L'Encart garde ce qu'il montrait ; le prochain geste ou la prochaine ouverture le corrigera.
+        return;
       }
-    } catch {
-      // L'Encart garde ce qu'il montrait ; le prochain geste ou la prochaine ouverture le corrigera.
+      if (numero !== this.chargement || appel !== this.relecture) {
+        return;
+      }
+      if (revisionAuDepart === this.revision) {
+        this.reprises.set(reprises);
+        return;
+      }
     }
   }
 

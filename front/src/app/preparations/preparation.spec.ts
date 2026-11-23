@@ -9,6 +9,7 @@ import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { MATERIAL_ANIMATIONS } from '@angular/material/core';
 import { MatDialog } from '@angular/material/dialog';
 import { Title } from '@angular/platform-browser';
+import { Router } from '@angular/router';
 import { of } from 'rxjs';
 import { AlbumDto } from '../api/models/album-dto';
 import { DetectionImageDto } from '../api/models/detection-image-dto';
@@ -3089,6 +3090,36 @@ describe('Preparation (En-tête)', () => {
       expect(afficher).toHaveBeenCalledTimes(1);
       expect(afficher.mock.lastCall![0]).toBe('« citrouille » retiré de la préparation.');
       expect(cartes()).toEqual(['galette', 'lapin']);
+    });
+
+    it('retrait puis navigation : le Bandeau « Annuler » se ferme, aucun rétablissement n’est envoyé', async () => {
+      // Bandeau réel : le snackbar s'affiche et se ferme au début de la navigation.
+      vi.mocked(TestBed.inject(BandeauAnnuler).afficher).mockRestore();
+      await ouvrirAvec([GALETTE, CITROUILLE, LAPIN]);
+      await retirer('citrouille');
+      retrait(CITROUILLE).flush(CITROUILLE);
+      await stabiliser();
+      expect(document.querySelector('app-bandeau-annuler')).not.toBeNull();
+
+      await TestBed.inject(Router).navigateByUrl('/');
+      await stabiliser();
+
+      expect(document.querySelector('app-bandeau-annuler')).toBeNull();
+      // `serveur.verify()` (afterEach) : aucune requête de rétablissement.
+    });
+
+    it('réponse du retrait arrivée après la sortie de la page : aucun Bandeau « Annuler »', async () => {
+      vi.mocked(TestBed.inject(BandeauAnnuler).afficher).mockRestore();
+      await ouvrirAvec([GALETTE, CITROUILLE, LAPIN]);
+      await retirer('citrouille');
+      const requete = retrait(CITROUILLE);
+
+      // L'enseignant quitte la Préparation avant la réponse.
+      fixture.destroy();
+      requete.flush(CITROUILLE);
+      await new Promise((fin) => setTimeout(fin));
+
+      expect(document.querySelector('app-bandeau-annuler')).toBeNull();
     });
 
     it('« Annuler » : le Mot revient à sa place avec son Sens, son bouton « Retirer » a le focus', async () => {

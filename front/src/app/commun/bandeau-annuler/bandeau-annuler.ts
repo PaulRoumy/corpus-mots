@@ -16,6 +16,7 @@ import {
   MatSnackBarLabel,
   MatSnackBarRef,
 } from '@angular/material/snack-bar';
+import { NavigationStart, Router } from '@angular/router';
 
 /** Temps laissé pour annuler (DESIGN.md › bandeau-annuler, EXPERIENCE.md : 8 s), hors survol et focus. */
 export const DUREE_BANDEAU_ANNULER_MS = 8000;
@@ -81,6 +82,16 @@ export class BandeauAnnulerContenu {
     }
   }
 
+  /** Ferme le bandeau sans annuler : « Annuler » est sans effet dès cet instant, même pendant l'animation de sortie. */
+  fermer(): void {
+    if (this.termine) {
+      return;
+    }
+    this.termine = true;
+    this.suspendre();
+    this.reference.dismiss();
+  }
+
   protected survoler(dessus: boolean): void {
     this.survol = dessus;
     this.actualiser();
@@ -130,20 +141,46 @@ export class BandeauAnnulerContenu {
 
 /**
  * Bandeau « Annuler » : confirme un geste courant fait sans confirmation et laisse 8 s pour l'annuler. Un seul à la
- * fois : en afficher un nouveau ferme le précédent sans l'annuler (son opération reste faite). Le message est
- * annoncé aux lecteurs d'écran par `LiveAnnouncer` (la région vive du snackbar est coupée pour ne pas le dire deux
- * fois).
+ * fois : en afficher un nouveau ferme le précédent sans l'annuler (son opération reste faite). Le bandeau se ferme
+ * de même, sans annuler, dès qu'une navigation commence (`NavigationStart`), quelle que soit la page : « Annuler » ne
+ * vise jamais une page quittée. L'appelant passe son `DestroyRef` : une réponse arrivée après sa destruction n'ouvre
+ * aucun bandeau, et sa destruction ferme le sien. Le message est annoncé aux lecteurs d'écran par `LiveAnnouncer` (la région vive du
+ * snackbar est coupée pour ne pas le dire deux fois).
  */
 @Injectable({ providedIn: 'root' })
 export class BandeauAnnuler {
   private readonly snackBar = inject(MatSnackBar);
   private readonly annonceur = inject(LiveAnnouncer);
+  /** Bandeau ouvert, s'il y en a un. */
+  private ouvert: MatSnackBarRef<BandeauAnnulerContenu> | null = null;
 
-  afficher(message: string, annuler: () => unknown): void {
-    this.snackBar.openFromComponent<BandeauAnnulerContenu, DonneesBandeauAnnuler>(
+  constructor() {
+    // Service racine : l'abonnement vit autant que l'application.
+    inject(Router).events.subscribe((evenement) => {
+      if (evenement instanceof NavigationStart) {
+        this.ouvert?.instance.fermer();
+      }
+    });
+  }
+
+  afficher(message: string, annuler: () => unknown, appelant?: DestroyRef): void {
+    if (appelant?.destroyed) {
+      return;
+    }
+    // Le bandeau remplacé est terminé dès maintenant : son « Annuler » est sans effet pendant sa sortie.
+    this.ouvert?.instance.fermer();
+    const reference = this.snackBar.openFromComponent<BandeauAnnulerContenu, DonneesBandeauAnnuler>(
       BandeauAnnulerContenu,
       { data: { message, annuler }, politeness: 'off' },
     );
+    this.ouvert = reference;
+    const desabonner = appelant?.onDestroy(() => reference.instance.fermer());
+    reference.afterDismissed().subscribe(() => {
+      desabonner?.();
+      if (this.ouvert === reference) {
+        this.ouvert = null;
+      }
+    });
     void this.annonceur.announce(message, 'polite');
   }
 }

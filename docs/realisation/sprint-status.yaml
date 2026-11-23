@@ -194,7 +194,7 @@ action_items:
       par rapport aux gestes, ressource.introuvable traduit comme image indisponible
       (B-4, B-5, B-6)"
     owner: "dev, avant l Epic 3"
-    status: open
+    status: done
     ref: "docs/realisation/epic-2-retro-2026-11-22.md"
   - id: "epic-2-retro-item-14-un-code-d-erreur-stable-par-condition-im"
     epic: 2

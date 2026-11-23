@@ -225,6 +225,7 @@ describe('EncartMotsDejaIllustres', () => {
     expect(afficher).toHaveBeenCalledWith(
       '« galette » écarté des mots déjà illustrés.',
       expect.any(Function),
+      expect.anything(),
     );
 
     afficher.mock.calls[0][1]();
@@ -495,6 +496,22 @@ describe('EncartMotsDejaIllustres', () => {
     bouton('Reprendre « étalé »').click();
     serveur
       .expectOne(URL_REUTILISATION)
+      .flush({ code: 'preparation.mot_deja_illustre' }, { status: 409, statusText: 'Conflict' });
+    await stabiliser();
+    serveur.expectOne(URL_REPRISES).flush([]);
+    await stabiliser();
+
+    expect(bandeau()).toBe(
+      "« étalé » n'a pas pu être repris. Ce mot a déjà une image dans la préparation.",
+    );
+  });
+
+  it('404 ressource.introuvable (Préparation ou Mot disparu) : message générique du code', async () => {
+    await ouvrir([ETALE]);
+
+    bouton('Reprendre « étalé »').click();
+    serveur
+      .expectOne(URL_REUTILISATION)
       .flush({ code: 'ressource.introuvable' }, { status: 404, statusText: 'Not Found' });
     await stabiliser();
     serveur.expectOne(URL_REPRISES).flush([]);
@@ -503,5 +520,137 @@ describe('EncartMotsDejaIllustres', () => {
     expect(bandeau()).toBe(
       "« étalé » n'a pas pu être repris. Cet élément n'existe plus. Rechargez la page.",
     );
+  });
+
+  it('refus sous verrou (409 ressource.introuvable) : « image indisponible », puis l’Encart est rechargé', async () => {
+    await ouvrir([ETALE, GALETTE]);
+
+    bouton('Reprendre « étalé »').click();
+    serveur
+      .expectOne(URL_REUTILISATION)
+      .flush({ code: 'ressource.introuvable' }, { status: 409, statusText: 'Conflict' });
+    await stabiliser();
+    serveur.expectOne(URL_REPRISES).flush([GALETTE]);
+    await stabiliser();
+
+    expect(bandeau()).toBe("« étalé » n'a pas pu être repris : son image n'est plus disponible.");
+    expect(boutonTexte('Réessayer')).toBeUndefined();
+    expect(formes()).toEqual(['galette']);
+  });
+
+  describe('relecture pendant un geste', () => {
+    it('relecture puis écart : le candidat écarté ne revient pas ; la relecture relancée garde le Mot rendu par la page', async () => {
+      await ouvrir([ETALE, GALETTE, RENARD]);
+
+      // Retrait de « four » de la Grille : la page relit l'Encart, où « four » doit revenir.
+      void fixture.componentInstance.recharger();
+      const relecture = serveur.expectOne(URL_REPRISES);
+      bouton('Écarter « galette »').click();
+      serveur
+        .expectOne(`/api/preparations/p1/ecartes/${GALETTE.motId}`)
+        .flush(null, { status: 204, statusText: 'No Content' });
+      await stabiliser();
+      expect(formes()).toEqual(['étalé', 'renard']);
+
+      // Réponse partie avant l'écart : ignorée, la lecture est relancée.
+      relecture.flush([ETALE, reprise('four'), GALETTE, RENARD]);
+      await stabiliser();
+      expect(formes()).toEqual(['étalé', 'renard']);
+
+      serveur.expectOne(URL_REPRISES).flush([ETALE, reprise('four'), RENARD]);
+      await stabiliser();
+
+      expect(formes()).toEqual(['étalé', 'four', 'renard']);
+    });
+
+    it('deux relectures croisées : seule la plus récente écrit, même arrivée la première', async () => {
+      await ouvrir([ETALE]);
+
+      void fixture.componentInstance.recharger();
+      void fixture.componentInstance.recharger();
+      const [premiere, seconde] = serveur.match(URL_REPRISES);
+      seconde.flush([ETALE, GALETTE]);
+      await stabiliser();
+      premiere.flush([RENARD]);
+      await stabiliser();
+
+      expect(formes()).toEqual(['étalé', 'galette']);
+    });
+
+    it('relecture pendant l’annulation d’un écart : la réponse périmée est relancée, le Mot rendu reste', async () => {
+      await ouvrir([ETALE, GALETTE]);
+      bouton('Écarter « galette »').click();
+      serveur
+        .expectOne(`/api/preparations/p1/ecartes/${GALETTE.motId}`)
+        .flush(null, { status: 204, statusText: 'No Content' });
+      await stabiliser();
+
+      void fixture.componentInstance.recharger();
+      const relecture = serveur.expectOne(URL_REPRISES);
+      afficher.mock.calls[0][1]();
+      serveur
+        .expectOne(`/api/preparations/p1/ecartes/${GALETTE.motId}`)
+        .flush(null, { status: 204, statusText: 'No Content' });
+      await stabiliser();
+      // Relecture de l'annulation : la plus récente.
+      serveur.expectOne(URL_REPRISES).flush([ETALE, GALETTE]);
+      await stabiliser();
+      relecture.flush([ETALE]);
+      await stabiliser();
+
+      expect(formes()).toEqual(['étalé', 'galette']);
+    });
+
+    it('relecture puis reprise : le candidat repris ne revient pas à l’arrivée de la relecture', async () => {
+      await ouvrir([ETALE, GALETTE, RENARD]);
+
+      void fixture.componentInstance.recharger();
+      const relecture = serveur.expectOne(URL_REPRISES);
+      bouton('Reprendre « étalé »').click();
+      serveur.expectOne(URL_REUTILISATION).flush(ajoute(ETALE, 3));
+      await stabiliser();
+      expect(formes()).toEqual(['galette', 'renard']);
+
+      relecture.flush([ETALE, GALETTE, RENARD]);
+      await stabiliser();
+      expect(formes()).toEqual(['galette', 'renard']);
+      // Lecture relancée, après la reprise.
+      serveur.expectOne(URL_REPRISES).flush([GALETTE, RENARD]);
+      await stabiliser();
+
+      expect(formes()).toEqual(['galette', 'renard']);
+      expect(ajoutes).toEqual([[ajoute(ETALE, 3)]]);
+    });
+
+    it('relecture puis « Tout reprendre » : les candidats repris ne reviennent pas', async () => {
+      await ouvrir([ETALE, GALETTE]);
+
+      void fixture.componentInstance.recharger();
+      const relecture = serveur.expectOne(URL_REPRISES);
+      boutonTexte('Tout reprendre').click();
+      serveur
+        .expectOne({ url: URL_REPRISES, method: 'POST' })
+        .flush([ajoute(ETALE, 3), ajoute(GALETTE, 4)]);
+      await stabiliser();
+      expect(racine.querySelector('section.encart')).toBeNull();
+
+      relecture.flush([ETALE, GALETTE]);
+      await stabiliser();
+      expect(racine.querySelector('section.encart')).toBeNull();
+      serveur.expectOne(URL_REPRISES).flush([]);
+      await stabiliser();
+
+      expect(racine.querySelector('section.encart')).toBeNull();
+    });
+
+    it('relecture seule : la liste relue remplace l’Encart', async () => {
+      await ouvrir([ETALE, GALETTE]);
+
+      void fixture.componentInstance.recharger();
+      serveur.expectOne(URL_REPRISES).flush([RENARD, ETALE]);
+      await stabiliser();
+
+      expect(formes()).toEqual(['renard', 'étalé']);
+    });
   });
 });

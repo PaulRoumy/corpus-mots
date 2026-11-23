@@ -5,6 +5,7 @@ import {
   ComponentRef,
   Component,
   computed,
+  DestroyRef,
   effect,
   ElementRef,
   inject,
@@ -673,6 +674,7 @@ export class Preparation {
   private readonly confirmation = inject(DialogueConfirmation);
   private readonly injecteur = inject(Injector);
   private readonly bandeauAnnuler = inject(BandeauAnnuler);
+  private readonly destruction = inject(DestroyRef);
   private readonly dialogues = inject(MatDialog);
   /** Seules écritures de la liste des Mots. */
   private readonly grille = inject(GrilleMots);
@@ -1244,6 +1246,7 @@ export class Preparation {
         this.bandeauAnnuler.afficher(
           `« ${retire.forme} » retiré de la préparation.`,
           () => void this.retablirMot(preparationId, retire, numero),
+          this.destruction,
         );
       }
     } catch (erreur) {

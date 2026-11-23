@@ -1,7 +1,8 @@
 import { LiveAnnouncer } from '@angular/cdk/a11y';
-import { ErrorHandler } from '@angular/core';
+import { DestroyRef, ErrorHandler } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { MATERIAL_ANIMATIONS } from '@angular/material/core';
+import { provideRouter, Router } from '@angular/router';
 import { BandeauAnnuler, DUREE_BANDEAU_ANNULER_MS } from './bandeau-annuler';
 
 describe('BandeauAnnuler', () => {
@@ -18,6 +19,11 @@ describe('BandeauAnnuler', () => {
       rethrowApplicationErrors: false,
       providers: [
         { provide: MATERIAL_ANIMATIONS, useValue: { animationsDisabled: true } },
+        provideRouter([
+          { path: 'preparations', children: [] },
+          { path: 'preparations/:id', children: [] },
+          { path: 'administration/comptes', children: [] },
+        ]),
         { provide: LiveAnnouncer, useValue: { announce: annonce, clear: vi.fn() } },
         // Une erreur levée dans un écouteur de clic part à l'ErrorHandler d'Angular.
         { provide: ErrorHandler, useValue: { handleError: erreurs } },
@@ -39,8 +45,8 @@ describe('BandeauAnnuler', () => {
     await vi.advanceTimersByTimeAsync(0);
   }
 
-  function afficher(message: string, annuler: () => void) {
-    bandeau.afficher(message, annuler);
+  function afficher(message: string, annuler: () => void, appelant?: DestroyRef) {
+    bandeau.afficher(message, annuler, appelant);
     TestBed.tick();
   }
 
@@ -155,5 +161,121 @@ describe('BandeauAnnuler', () => {
     expect(annulerSecond).toHaveBeenCalledTimes(1);
     expect(annulerPremier).not.toHaveBeenCalled();
     expect(bandeaux()).toHaveLength(0);
+  });
+
+  describe('navigation', () => {
+    async function naviguer(url: string) {
+      await TestBed.inject(Router).navigateByUrl(url);
+      await avancer(500);
+    }
+
+    it('retrait puis « Mes préparations » : bandeau fermé, opération inverse jamais appelée', async () => {
+      const annuler = vi.fn();
+      afficher('« chat » retiré de la préparation.', annuler);
+      await avancer(2000);
+      await naviguer('/preparations');
+      expect(bandeaux()).toHaveLength(0);
+      expect(annuler).not.toHaveBeenCalled();
+    });
+
+    it('« Annuler » cliqué juste après le début de la navigation, bandeau encore affiché : sans effet', async () => {
+      const annuler = vi.fn();
+      afficher('« chat » retiré de la préparation.', annuler);
+      const bouton = boutonAnnuler(bandeaux()[0]);
+      const navigation = TestBed.inject(Router).navigateByUrl('/preparations');
+      // `NavigationStart` est émis, mais la vue du bandeau n'est pas encore retirée.
+      expect(bouton.isConnected).toBe(true);
+      bouton.click();
+      await navigation;
+      await avancer(500);
+      expect(annuler).not.toHaveBeenCalled();
+      expect(bandeaux()).toHaveLength(0);
+    });
+
+    it('passage à une autre Préparation : bandeau fermé', async () => {
+      await naviguer('/preparations/1');
+      const annuler = vi.fn();
+      afficher('« chat » écarté des mots déjà illustrés.', annuler);
+      await naviguer('/preparations/2');
+      expect(bandeaux()).toHaveLength(0);
+      expect(annuler).not.toHaveBeenCalled();
+    });
+
+    it('comptes : bandeau fermé à la navigation, l’action reste faite', async () => {
+      await naviguer('/administration/comptes');
+      const annuler = vi.fn();
+      afficher('Compte désactivé.', annuler);
+      await naviguer('/preparations');
+      expect(bandeaux()).toHaveLength(0);
+      expect(annuler).not.toHaveBeenCalled();
+    });
+
+    it('un bandeau ouvert après une navigation s’affiche et son « Annuler » fonctionne', async () => {
+      const premier = vi.fn();
+      afficher('Premier.', premier);
+      await naviguer('/preparations');
+      const second = vi.fn();
+      afficher('Second.', second);
+      await avancer(500);
+      expect(bandeaux()).toHaveLength(1);
+      boutonAnnuler(bandeaux()[0]).click();
+      await avancer(500);
+      expect(second).toHaveBeenCalledTimes(1);
+      expect(premier).not.toHaveBeenCalled();
+    });
+  });
+
+  it('« Annuler » du bandeau remplacé, cliqué avant sa sortie : sans effet', async () => {
+    const annulerPremier = vi.fn();
+    afficher('Premier mot retiré.', annulerPremier);
+    const ancien = boutonAnnuler(bandeaux()[0]);
+    bandeau.afficher('Second mot retiré.', vi.fn());
+    ancien.click();
+    await avancer(500);
+    expect(annulerPremier).not.toHaveBeenCalled();
+  });
+
+  describe('appelant détruit', () => {
+    function appelant() {
+      let detruit = false;
+      const rappels: (() => void)[] = [];
+      const ref = {
+        get destroyed() {
+          return detruit;
+        },
+        onDestroy(rappel: () => void) {
+          rappels.push(rappel);
+          return () => rappels.splice(rappels.indexOf(rappel), 1);
+        },
+      } as unknown as DestroyRef;
+      return {
+        ref,
+        detruire: () => {
+          detruit = true;
+          [...rappels].forEach((rappel) => rappel());
+        },
+      };
+    }
+
+    it('réponse arrivée après la destruction de l’appelant : aucun bandeau', async () => {
+      const page = appelant();
+      page.detruire();
+      const annuler = vi.fn();
+      afficher('« chat » retiré de la préparation.', annuler, page.ref);
+      await avancer(500);
+      expect(bandeaux()).toHaveLength(0);
+      expect(annonce).not.toHaveBeenCalled();
+    });
+
+    it('destruction de l’appelant : son bandeau se ferme sans annuler', async () => {
+      const page = appelant();
+      const annuler = vi.fn();
+      afficher('« chat » retiré de la préparation.', annuler, page.ref);
+      expect(bandeaux()).toHaveLength(1);
+      page.detruire();
+      await avancer(500);
+      expect(bandeaux()).toHaveLength(0);
+      expect(annuler).not.toHaveBeenCalled();
+    });
   });
 });

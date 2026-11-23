@@ -1,5 +1,12 @@
 import { LiveAnnouncer } from '@angular/cdk/a11y';
-import { ChangeDetectionStrategy, Component, inject, OnInit, signal } from '@angular/core';
+import {
+  ChangeDetectionStrategy,
+  Component,
+  DestroyRef,
+  inject,
+  OnInit,
+  signal,
+} from '@angular/core';
 import {
   AbstractControl,
   FormControl,
@@ -261,6 +268,7 @@ export class Comptes implements OnInit {
   private readonly api = inject(Api);
   private readonly annonceur = inject(LiveAnnouncer);
   private readonly bandeauAnnuler = inject(BandeauAnnuler);
+  private readonly destruction = inject(DestroyRef);
   private readonly compteCourant = inject(CompteCourant);
 
   protected readonly libellesAction = LIBELLES_ACTION;
@@ -340,6 +348,7 @@ export class Comptes implements OnInit {
         this.bandeauAnnuler.afficher(
           message,
           () => void this.agir(compte, INVERSES[action], false),
+          this.destruction,
         );
       } else {
         this.annonceur.announce(message);
