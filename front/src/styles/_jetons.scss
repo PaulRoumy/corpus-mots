@@ -220,6 +220,9 @@ $typographie-material: (
   --cm-largeur-vignette-banque-min: 150px;
   --cm-hauteur-photo-banque: 108px;
   --cm-taille-image-banque: 96px;
+  // Vignette de la Banque dont la Carte d'identité est ouverte (story 3.1, partie 2) : anneau `primary` de 2 px
+  // (DESIGN.md › case-selection, selected-card-ring).
+  --cm-epaisseur-anneau-vignette-ouverte: 2px;
   // Panneau Carte d'identité (key-banque.html › `.cid`, `dl.ro`, story 2.6) : grande vignette de 176 px, colonne des
   // intitulés de 132 px ; collé en haut du contenu à côté de la Grille, il tient dans la zone visible du contenu (écran
   // moins la barre supérieure de la coquille, 80 px : marges de 16 px et Bouton « + » de 48 px, et moins les marges

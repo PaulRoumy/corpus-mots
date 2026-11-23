@@ -361,7 +361,11 @@ type Source = 'module' | 'theme';
   // État de la Grille et région `aria-live` propres à la page : une autre page repart de zéro.
   providers: [GrilleMots, Annonces],
   changeDetection: ChangeDetectionStrategy.OnPush,
-  styleUrls: ['../commun/page-rubrique.scss', './preparation.scss'],
+  styleUrls: [
+    '../commun/page-rubrique.scss',
+    '../commun/disposition-panneau.scss',
+    './preparation.scss',
+  ],
   template: `
     <div
       class="disposition"

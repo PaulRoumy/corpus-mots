@@ -245,3 +245,6 @@
 - source_spec: `docs/realisation/spec-3-1-1-grille-de-la-banque.md`
   summary: Banque — pagination par décalage (une Image retirée entre deux « Afficher plus » fait sauter la première de la page suivante ; une pagination par clé la réglerait), absence d'index sur `image.etat` (pages tardives non mesurées) et miniatures toutes demandées à l'affichage (chargement à l'entrée dans l'écran). À reprendre avec les filtres de la story 3.2 ou quand la Banque grossira.
   evidence: Revue de la story 3.1 partie 1, lignes 10 à 12 du journal de tri.
+- source_spec: `docs/realisation/spec-3-1-2-carte-identite-dans-la-banque.md`
+  summary: Panneaux latéraux — la logique plein écran sous 600 px, page inerte et focus rendu est recopiée entre Préparation et Banque (à partager au troisième usage) ; le seuil `Breakpoints.XSmall` n'est vérifié par aucun test, les deux specs remplaçant `BreakpointObserver` sans regarder la requête.
+  evidence: Revue de la story 3.1 partie 2, lignes 9 et 11 du journal de tri.

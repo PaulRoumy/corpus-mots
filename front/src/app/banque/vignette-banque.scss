@@ -1,11 +1,38 @@
-// Vignette d'Image de la Banque (key-banque.html › `.vg`, `.meta`, `.own`, `.st.ver`).
+// Vignette d'Image de la Banque (key-banque.html › `.vg`, `.meta`, `.own`, `.st.ver`) : un bouton qui ouvre le Panneau
+// Carte d'identité (story 3.1, partie 2).
 :host {
+  display: block;
+}
+
+.vignette {
   display: flex;
   flex-direction: column;
   gap: var(--cm-espace-2);
-  padding: var(--cm-espace-2) var(--cm-espace-2) var(--cm-espace-2);
+  box-sizing: border-box;
+  width: 100%;
+  height: 100%;
+  padding: var(--cm-espace-2);
+  border: none;
   border-radius: var(--cm-arrondi-md);
   background: var(--mat-sys-surface-container-low);
+  color: inherit;
+  font: inherit;
+  text-align: start;
+  cursor: pointer;
+}
+
+// Carte d'identité ouverte sur cette Image : fond `primary-container` et anneau `primary` (DESIGN.md ›
+// selected-card-background, selected-card-ring), distincts de l'anneau de focus seul.
+.vignette--ouverte {
+  outline: var(--cm-epaisseur-anneau-vignette-ouverte) solid var(--mat-sys-primary);
+  background: var(--mat-sys-primary-container);
+  color: var(--mat-sys-on-primary-container);
+}
+
+.vignette__description {
+  display: flex;
+  flex-direction: column;
+  gap: var(--cm-espace-2);
 }
 
 .vignette__photo {
@@ -55,7 +82,6 @@
 }
 
 .vignette__proprietaire {
-  margin: 0;
   font: var(--cm-typo-label-sm);
   color: var(--mat-sys-on-surface-variant);
 }
