@@ -73,8 +73,9 @@ public class ImageRepository implements PanacheRepositoryBase<Image, UUID> {
 
     /**
      * Page de la Banque, réservée à {@code vocabulaire.service.Images} (règle ArchUnit) : les Images qui satisfont
-     * {@code condition} (SQL sur {@code image} sous l'alias {@code i}, écrite par {@code VisibiliteImages} et jamais
-     * ailleurs, AD-2) avec ses {@code parametres}, filtrées et paginées en base, avec Mot, Sens et Sections dans la même
+     * {@code condition} (SQL sur {@code image} sous l'alias {@code i} : critère de visibilité écrit par
+     * {@code VisibiliteImages} et jamais ailleurs, AD-2, suivi en ET des filtres paramétrés de {@code Images}) avec ses
+     * {@code parametres}, filtrées et paginées en base, avec Mot, Sens et Sections dans la même
      * requête (aucune requête par Image). Ordre : forme du Mot (sans tenir compte de la casse ni des accents, clés
      * comparées en collation {@code C} : même ordre sur tout hôte), puis Sens, puis Image la plus récente d'abord, puis
      * identifiant ; les Images d'un même Sens restent contiguës d'une page à l'autre.
@@ -111,6 +112,20 @@ public class ImageRepository implements PanacheRepositoryBase<Image, UUID> {
         var requete = getEntityManager().createNativeQuery("select count(*) from image i where " + condition);
         parametres.forEach(requete::setParameter);
         return ((Number) requete.getSingleResult()).longValue();
+    }
+
+    /**
+     * Propriétaires distincts des Images qui satisfont {@code condition} (SQL sur {@code image} sous l'alias {@code i},
+     * écrite par {@code VisibiliteImages}, AD-2), réservé à {@code vocabulaire.service.Images} (règle ArchUnit), par
+     * identifiant croissant.
+     */
+    public List<UUID> proprietairesBanque(String condition, Map<String, Object> parametres) {
+        var requete = getEntityManager().createNativeQuery(
+                "select distinct i.proprietaire_id from image i where " + condition + " order by i.proprietaire_id");
+        parametres.forEach(requete::setParameter);
+        @SuppressWarnings("unchecked")
+        List<UUID> proprietaires = requete.getResultList();
+        return proprietaires;
     }
 
     /** Refuse un paramètre du critère qui porterait le nom d'un paramètre de pagination de la requête. */

@@ -84,13 +84,22 @@ public class ImagesDeTest {
 
     /** Insère un lien de cette Image vers un Mot de Préparation (identifiants quelconques) de cet enseignant. */
     public void lien(UUID imageId, UUID enseignant, UUID albumId) {
+        lien(imageId, enseignant, albumId, "ms");
+    }
+
+    /**
+     * Insère un lien de cette Image vers un Mot de Préparation (identifiants quelconques) de cet enseignant, dans une
+     * Préparation de cette Section ({@code ps}, {@code ms}, {@code gs}).
+     */
+    public void lien(UUID imageId, UUID enseignant, UUID albumId, String section) {
         QuarkusTransaction.requiringNew().run(() -> entityManager.createNativeQuery(
                 "insert into lien_image (preparation_id, preparation_mot_id, image_id, enseignant_id, album_id,"
-                        + " section, origine) values (uuidv7(), uuidv7(), :image, :enseignant, :album, 'ms',"
+                        + " section, origine) values (uuidv7(), uuidv7(), :image, :enseignant, :album, :section,"
                         + " 'reutilisee')")
                 .setParameter("image", imageId)
                 .setParameter("enseignant", enseignant)
                 .setParameter("album", albumId)
+                .setParameter("section", section)
                 .executeUpdate());
     }
 

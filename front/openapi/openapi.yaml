@@ -1751,12 +1751,49 @@ paths:
         \ d'abord"
       operationId: listerImagesBanque
       parameters:
+      - description: Album d'origine de l'Image (image d'album)
+        schema:
+          format: uuid
+          type: string
+        name: albumId
+        in: query
+      - description: Catégorie grammaticale du Sens de l'Image
+        schema:
+          type: string
+          enum:
+          - nom
+          - verbe
+          - adjectif
+          - adverbe
+          - autre
+        name: categorie
+        in: query
+      - description: Module de l'Image
+        schema:
+          format: uuid
+          type: string
+        name: moduleId
+        in: query
+      - description: "Mot exact, sans tenir compte de la casse, des accents ni de\
+          \ l'article initial (« la Citrouille » trouve « citrouille ») ; vide ou\
+          \ réduit à un article, ne filtre pas"
+        schema:
+          maxLength: 100
+          type: string
+        name: mot
+        in: query
       - description: "Numéro de page, à partir de 0"
         schema:
           minimum: 0
           type: integer
           default: 0
         name: page
+        in: query
+      - description: Propriétaire de l'Image (voir listerProprietairesBanque)
+        schema:
+          format: uuid
+          type: string
+        name: proprietaireId
         in: query
       - description: "mes-mots (par défaut) : mes Images, versées ou non ; banque\
           \ : les Images versées de tous ; tout : l'union des deux"
@@ -1769,6 +1806,22 @@ paths:
           - tout
         name: provenance
         in: query
+      - description: "Section cochée sur l'Image ; avec Mes mots, aussi la Section\
+          \ d'une de mes Préparations qui utilise l'Image"
+        schema:
+          type: string
+          enum:
+          - ps
+          - ms
+          - gs
+        name: section
+        in: query
+      - description: Sens de l'Image
+        schema:
+          format: uuid
+          type: string
+        name: sensId
+        in: query
       - description: "Taille de la page, de 1 à 100 (100 par défaut)"
         schema:
           maximum: 100
@@ -1776,6 +1829,22 @@ paths:
           type: integer
           default: 100
         name: taille
+        in: query
+      - description: Thème de l'Image
+        schema:
+          format: uuid
+          type: string
+        name: themeId
+        in: query
+      - description: Type de l'Image
+        schema:
+          type: string
+          enum:
+          - image_album
+          - image_libre
+          - photo_personnelle
+          - inconnu
+        name: typeImage
         in: query
       responses:
         "200":
@@ -1803,6 +1872,23 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/MesMotsImageDto"
+      tags:
+      - Images Resource
+  /api/images/proprietaires:
+    get:
+      summary: "Propriétaires proposables dans le filtre propriétaire de la Banque\
+        \ : l'enseignant connecté d'abord, puis les collègues qui ont versé au moins\
+        \ une Image ; identifiants seuls, noms résolus par l'annuaire"
+      operationId: listerProprietairesBanque
+      responses:
+        "200":
+          description: Identifiants des propriétaires proposables
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/UUID"
       tags:
       - Images Resource
   /api/images/{id}:

@@ -42,7 +42,13 @@ class BanqueImagesResourceTest {
 
     static final String CLAIRE = "0190f0a0-0000-7000-8000-000000000b01";
     static final String ZOE = "0190f0a0-0000-7000-8000-000000000b02";
+    static final String LEA = "0190f0a0-0000-7000-8000-000000000b03";
+    /** Collègue dont l'identifiant se classe avant celui de Claire. */
+    static final String AVANT = "0190f0a0-0000-7000-8000-000000000a01";
     static final UUID ALBUM = UUID.fromString("0190f0a0-0000-7000-8000-000000000b99");
+    static final UUID ALBUM_ORIGINE = UUID.fromString("0190f0a0-0000-7000-8000-000000000b98");
+    static final UUID MODULE = UUID.fromString("0190f0a0-0000-7000-8000-000000000b97");
+    static final UUID THEME = UUID.fromString("0190f0a0-0000-7000-8000-000000000b96");
 
     @Inject
     EnseignantsDeTest enseignants;
@@ -231,6 +237,291 @@ class BanqueImagesResourceTest {
         assertEquals(pourUne, pourCent);
     }
 
+    // Story 3.2, partie 1 : filtres. Formes propres à cette classe (narval, okapi, giroflée, sarcelle, tatou, harfang,
+    // axolotl, ouistiti) : un Sens créé ailleurs avec une autre catégorie fausserait les filtres.
+
+    /** Combinaison : {@code mot=narval&section=gs&categorie=verbe}, en ET entre eux et avec la provenance. */
+    @Test
+    void lesFiltresSeCombinentEnEtAvecLaProvenance() {
+        UUID claire = UUID.fromString(CLAIRE);
+        UUID zoe = UUID.fromString(ZOE);
+        UUID nager = sens("narval", "nager", "verbe");
+        UUID animal = sens("narval", "animal marin", "nom");
+        UUID courir = sens("okapi", "courir", "verbe");
+        UUID retenue = imageClassee(claire, nager, "privee", "gs");
+        imageClassee(claire, nager, "privee", "ms");
+        imageClassee(claire, animal, "privee", "gs");
+        imageClassee(claire, courir, "privee", "gs");
+        UUID collegueVersee = imageClassee(zoe, nager, "versee", "gs");
+        imageClassee(zoe, nager, "privee", "gs");
+        Map<String, String> filtres = Map.of("mot", "narval", "section", "gs", "categorie", "verbe");
+
+        assertEquals(Set.of(retenue), identifiants(filtrer("mes-mots", filtres).statusCode(200)
+                .body("total", equalTo(1))));
+        assertEquals(Set.of(collegueVersee), identifiants(filtrer("banque", filtres).statusCode(200)
+                .body("total", equalTo(1))));
+        assertEquals(Set.of(retenue, collegueVersee), identifiants(filtrer("tout", filtres).statusCode(200)
+                .body("total", equalTo(2))));
+    }
+
+    /** Tolérance de la détection : casse, accents et article initial ; le Mot exact, sans recherche par préfixe. */
+    @ParameterizedTest
+    @ValueSource(strings = { "la Giroflee", "  GIROFLÉE ", "giroflée", "une giroflée" })
+    void leFiltreMotToleLaCasseLesAccentsEtLArticle(String saisie) {
+        UUID claire = UUID.fromString(CLAIRE);
+        UUID fleur = images.image(claire, sens("giroflée", "fleur", "nom"), "privee", new byte[] { 1 },
+                new byte[] { 2 });
+        images.image(claire, sens("sarcelle", "oiseau", "nom"), "privee", new byte[] { 1 }, new byte[] { 2 });
+
+        assertEquals(Set.of(fleur), identifiants(filtrer("mes-mots", Map.of("mot", saisie)).statusCode(200)
+                .body("total", equalTo(1))));
+        filtrer("mes-mots", Map.of("mot", "girofl")).statusCode(200).body("total", equalTo(0));
+    }
+
+    /** Une saisie vide ou réduite à un article ne filtre pas sur le Mot. */
+    @ParameterizedTest
+    @ValueSource(strings = { "la", "l'", "Les", "   " })
+    void unArticleSeulNeFiltrePas(String saisie) {
+        UUID claire = UUID.fromString(CLAIRE);
+        UUID fleur = images.image(claire, sens("giroflée", "fleur", "nom"), "privee", new byte[] { 1 },
+                new byte[] { 2 });
+        UUID oiseau = images.image(claire, sens("sarcelle", "oiseau", "nom"), "privee", new byte[] { 1 },
+                new byte[] { 2 });
+
+        assertEquals(Set.of(fleur, oiseau), identifiants(filtrer("mes-mots", Map.of("mot", saisie)).statusCode(200)
+                .body("total", equalTo(2))));
+    }
+
+    /** Un Mot dont la seule Image est privée d'un collègue ne donne aucune Image, dans aucune provenance (AD-2). */
+    @ParameterizedTest
+    @ValueSource(strings = { "mes-mots", "banque", "tout" })
+    void unMotPresentSeulementChezUnCollegueNeDonneRien(String provenance) {
+        images.image(UUID.fromString(ZOE), sens("tatou", "animal", "nom"), "privee", new byte[] { 1 },
+                new byte[] { 2 });
+
+        filtrer(provenance, Map.of("mot", "tatou")).statusCode(200)
+                .body("total", equalTo(0))
+                .body("elements", hasSize(0));
+    }
+
+    /** Sous Mes mots, la Section d'une de mes Préparations qui lie l'Image suffit. */
+    @Test
+    void sousMesMotsLaSectionDUneDeMesPreparationsRetientLImage() {
+        UUID claire = UUID.fromString(CLAIRE);
+        UUID sens = sens("harfang", "chouette", "nom");
+        UUID lieeEnGs = imageClassee(claire, sens, "privee", "ms");
+        images.lien(lieeEnGs, claire, ALBUM, "gs");
+        UUID lieeEnMs = imageClassee(claire, sens, "privee", "ms");
+        images.lien(lieeEnMs, claire, ALBUM, "ms");
+        UUID cocheeGs = imageClassee(claire, sens, "privee", "gs");
+
+        assertEquals(Set.of(lieeEnGs, cocheeGs), identifiants(filtrer("mes-mots", Map.of("section", "gs"))
+                .statusCode(200).body("total", equalTo(2))));
+    }
+
+    /** Sous Banque de l'école et Tout, seule la Section cochée compte : l'usage ne retient pas l'Image. */
+    @ParameterizedTest
+    @ValueSource(strings = { "banque", "tout" })
+    void horsMesMotsLUsageNeRetientPasLImage(String provenance) {
+        UUID claire = UUID.fromString(CLAIRE);
+        UUID sens = sens("harfang", "chouette", "nom");
+        UUID lieeEnGs = imageClassee(claire, sens, "versee", "ms");
+        images.lien(lieeEnGs, claire, ALBUM, "gs");
+        UUID cocheeGs = imageClassee(claire, sens, "versee", "gs");
+
+        assertEquals(Set.of(cocheeGs), identifiants(filtrer(provenance, Map.of("section", "gs")).statusCode(200)
+                .body("total", equalTo(1))));
+        // Sans filtre, l'Image liée est bien montrée par cette provenance.
+        assertTrue(identifiants(lister(provenance).statusCode(200)).contains(lieeEnGs));
+    }
+
+    /** Sous Mes mots, le lien d'un collègue vers mon Image, dans une Préparation de GS, ne la retient pas. */
+    @Test
+    void lUsageDUnCollegueNeRetientPasMonImage() {
+        UUID claire = UUID.fromString(CLAIRE);
+        UUID sens = sens("harfang", "chouette", "nom");
+        UUID lieeParZoe = imageClassee(claire, sens, "versee", "ms");
+        images.lien(lieeParZoe, UUID.fromString(ZOE), ALBUM, "gs");
+
+        filtrer("mes-mots", Map.of("section", "gs")).statusCode(200).body("total", equalTo(0));
+        assertEquals(Set.of(lieeParZoe), identifiants(filtrer("mes-mots", Map.of("section", "ms")).statusCode(200)));
+    }
+
+    /** Le filtre propriétaire ne montre que ce que la provenance montre : les seules Images versées d'un collègue. */
+    @Test
+    void leFiltreProprietaireNeMontreQueSesImagesVisibles() {
+        UUID claire = UUID.fromString(CLAIRE);
+        UUID zoe = UUID.fromString(ZOE);
+        UUID sens = sens("ouistiti", "singe", "nom");
+        UUID zoeVersee = images.image(zoe, sens, "versee", new byte[] { 1 }, new byte[] { 2 });
+        images.image(zoe, sens, "privee", new byte[] { 1 }, new byte[] { 2 });
+        UUID miennePrivee = images.image(claire, sens, "privee", new byte[] { 1 }, new byte[] { 2 });
+        UUID mienneVersee = images.image(claire, sens, "versee", new byte[] { 1 }, new byte[] { 2 });
+
+        assertEquals(Set.of(zoeVersee), identifiants(filtrer("tout", Map.of("proprietaireId", ZOE)).statusCode(200)
+                .body("total", equalTo(1))));
+        assertEquals(Set.of(miennePrivee, mienneVersee),
+                identifiants(filtrer("tout", Map.of("proprietaireId", CLAIRE)).statusCode(200)));
+        filtrer("mes-mots", Map.of("proprietaireId", ZOE)).statusCode(200).body("total", equalTo(0));
+    }
+
+    /** Chaque autre filtre (Sens, Album d'origine, Module, Thème, type, catégorie) ne retient que ses Images. */
+    @Test
+    void chaqueFiltreNeRetientQueSesImages() {
+        UUID claire = UUID.fromString(CLAIRE);
+        UUID amphibien = sens("axolotl", "amphibien", "nom");
+        UUID jouet = sens("axolotl", "jouet", "autre");
+        UUID dAlbum = images.image(claire, amphibien, "privee", "image_album", "usage_pedagogique_album", null, null,
+                ALBUM_ORIGINE);
+        // Une image libre qui porterait un album_id n'a pas d'Album d'origine.
+        UUID libreAvecAlbum = images.image(claire, amphibien, "privee", "image_libre", "cc0_domaine_public", "test",
+                null, ALBUM_ORIGINE);
+        UUID classee = images.image(claire, jouet, "privee", new byte[] { 1 }, new byte[] { 2 });
+        images.classer(classee, MODULE, List.of(THEME), List.of());
+        UUID photo = images.image(claire, jouet, "privee", "photo_personnelle", "droits_auteur_enseignant", null, null,
+                null);
+
+        assertEquals(Set.of(dAlbum), filtrees(Map.of("albumId", ALBUM_ORIGINE.toString())));
+        assertEquals(Set.of(classee), filtrees(Map.of("moduleId", MODULE.toString())));
+        assertEquals(Set.of(classee), filtrees(Map.of("themeId", THEME.toString())));
+        assertEquals(Set.of(photo), filtrees(Map.of("typeImage", "photo_personnelle")));
+        assertEquals(Set.of(classee, photo), filtrees(Map.of("sensId", jouet.toString())));
+        assertEquals(Set.of(classee, photo), filtrees(Map.of("categorie", "autre")));
+        assertEquals(Set.of(dAlbum, libreAvecAlbum), filtrees(Map.of("categorie", "nom")));
+        assertEquals(Set.of(classee), filtrees(Map.of("themeId", THEME.toString(), "typeImage", "image_libre")));
+        // Un paramètre vide ne filtre pas.
+        assertEquals(Set.of(dAlbum, libreAvecAlbum, classee, photo), filtrees(Map.of("themeId", "", "section", "")));
+    }
+
+    /** Liste des propriétaires : moi, toujours, puis les collègues qui ont versé ; jamais celui qui n'a rien versé. */
+    @Test
+    void lesProprietairesSontMoiEtLesColleguesQuiOntVerse() {
+        enseignants.seulsActifs(CLAIRE, ZOE, LEA, AVANT);
+        UUID sens = sens("ouistiti", "singe", "nom");
+        UUID lea = UUID.fromString(LEA);
+        images.image(lea, sens, "privee", new byte[] { 1 }, new byte[] { 2 });
+        images.image(lea, sens, "abandonnee", new byte[] { 1 }, new byte[] { 2 });
+        images.image(UUID.fromString(CLAIRE), sens, "privee", new byte[] { 1 }, new byte[] { 2 });
+
+        assertEquals(List.of(CLAIRE), proprietaires());
+
+        images.image(UUID.fromString(ZOE), sens, "versee", new byte[] { 1 }, new byte[] { 2 });
+        images.image(UUID.fromString(ZOE), sens, "versee", new byte[] { 1 }, new byte[] { 2 });
+        assertEquals(List.of(CLAIRE, ZOE), proprietaires());
+
+        // Moi qui verse à mon tour : toujours une seule fois, en tête.
+        images.image(UUID.fromString(CLAIRE), sens, "versee", new byte[] { 1 }, new byte[] { 2 });
+        assertEquals(List.of(CLAIRE, ZOE), proprietaires());
+
+        // Un collègue dont l'identifiant précède le mien : moi d'abord, puis les autres par identifiant.
+        images.image(UUID.fromString(AVANT), sens, "versee", new byte[] { 1 }, new byte[] { 2 });
+        assertEquals(List.of(CLAIRE, AVANT, ZOE), proprietaires());
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = { "mot", "sensId", "section", "albumId", "moduleId", "themeId", "categorie", "typeImage",
+            "proprietaireId" })
+    void unFiltreRepeteEstRefuse(String nom) {
+        String valeur = switch (nom) {
+            case "mot" -> "narval";
+            case "section" -> "gs";
+            case "categorie" -> "nom";
+            case "typeImage" -> "image_libre";
+            default -> THEME.toString();
+        };
+        given().queryParam(nom, valeur, valeur).when().get("/api/images").then()
+                .statusCode(400)
+                .contentType(ProblemeDto.MEDIA_TYPE)
+                .body("code", equalTo("requete.invalide"));
+        given().queryParam(nom, valeur).when().get("/api/images").then().statusCode(200);
+    }
+
+    @Test
+    void unMotTropLongEstRefuse() {
+        String limite = "a".repeat(Lexique.LONGUEUR_MAX_FORME);
+
+        given().queryParam("mot", "  " + limite + "  ").when().get("/api/images").then().statusCode(200);
+        given().queryParam("mot", limite + "a").when().get("/api/images").then()
+                .statusCode(400)
+                .contentType(ProblemeDto.MEDIA_TYPE)
+                .body("code", equalTo("requete.invalide"));
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = { "section=cp", "albumId=abc", "typeImage=dessin", "categorie=pronom", "sensId=1-2-3-4-5",
+            "moduleId=abc", "themeId=0190f0a0-0000-7000-8000", "proprietaireId=moi" })
+    void unFiltreInvalideEstRefuse(String parametre) {
+        String[] cle = parametre.split("=", 2);
+        given().queryParam(cle[0], cle[1]).when().get("/api/images").then()
+                .statusCode(400)
+                .contentType(ProblemeDto.MEDIA_TYPE)
+                .body("code", equalTo("requete.invalide"));
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = { "themeId", "albumId", "moduleId", "sensId", "proprietaireId" })
+    void unIdentifiantInconnuDonneUneListeVide(String nom) {
+        UUID claire = UUID.fromString(CLAIRE);
+        images.image(claire, sens("ouistiti", "singe", "nom"), "versee", new byte[] { 1 }, new byte[] { 2 });
+
+        filtrer("tout", Map.of(nom, "0190f0a0-0000-7000-8000-00000000beef")).statusCode(200)
+                .body("total", equalTo(0))
+                .body("elements", hasSize(0));
+    }
+
+    /** NFR-4, filtres compris : 500 Images en base, la première page filtrée répond en moins de 2 s. */
+    @Test
+    void laPremierePageFiltreeDeCinqCentsImagesRepondEnMoinsDeDeuxSecondes() {
+        // 250 Images versées de Zoé et 250 de Claire : 500 en base, Mes mots de Claire non vide.
+        String prefixe = insererEnMasse(UUID.fromString(ZOE), 250);
+        insererEnMasse(UUID.fromString(CLAIRE), 250);
+        Map<String, String> filtres = Map.of("section", "ms", "typeImage", "image_libre", "categorie", "nom",
+                "proprietaireId", ZOE);
+        filtrer("banque", filtres).statusCode(200); // échauffement : connexions et plans de requête
+        filtrer("mes-mots", Map.of("section", "gs")).statusCode(200);
+        proprietaires();
+
+        chronometrer("banque filtrée", () -> filtrer("banque", filtres).statusCode(200)
+                .body("total", equalTo(250)).body("elements", hasSize(100)));
+        chronometrer("mot", () -> filtrer("tout", Map.of("mot", prefixe + "7", "section", "ms")).statusCode(200)
+                .body("total", equalTo(1)));
+        // Mes mots + Section : la branche « lien de l'enseignant » est évaluée pour chacune des 250 Images.
+        chronometrer("Mes mots, section par usage", () -> filtrer("mes-mots", Map.of("section", "gs"))
+                .statusCode(200).body("total", equalTo(0)));
+        chronometrer("Mes mots, section cochée", () -> filtrer("mes-mots", Map.of("section", "ms"))
+                .statusCode(200).body("total", equalTo(250)).body("elements", hasSize(100)));
+        chronometrer("propriétaires", () -> assertEquals(List.of(CLAIRE, ZOE), proprietaires()));
+    }
+
+    private static void chronometrer(String nom, Runnable requete) {
+        long debut = System.nanoTime();
+        requete.run();
+        long millis = (System.nanoTime() - debut) / 1_000_000;
+        assertTrue(millis < 2000, nom + " en " + millis + " ms");
+    }
+
+    private ValidatableResponse filtrer(String provenance, Map<String, String> filtres) {
+        var requete = given().queryParam("provenance", provenance);
+        filtres.forEach(requete::queryParam);
+        return requete.when().get("/api/images").then();
+    }
+
+    private Set<UUID> filtrees(Map<String, String> filtres) {
+        return identifiants(filtrer("mes-mots", filtres).statusCode(200));
+    }
+
+    private static List<String> proprietaires() {
+        return given().when().get("/api/images/proprietaires").then().statusCode(200)
+                .extract().jsonPath().getList("$", String.class);
+    }
+
+    /** Image libre de ce propriétaire, à cet état, cochée dans cette seule Section. */
+    private UUID imageClassee(UUID proprietaire, UUID sens, String etat, String section) {
+        UUID image = images.image(proprietaire, sens, etat, new byte[] { 1 }, new byte[] { 2 });
+        images.classer(image, null, List.of(), List.of(section));
+        return image;
+    }
+
     private ValidatableResponse lister(String provenance) {
         var requete = given();
         if (provenance != null) {
@@ -259,10 +550,12 @@ class BanqueImagesResourceTest {
     }
 
     /**
-     * Insère {@code nombre} Images versées de ce propriétaire, une par Mot nouveau, avec Section et fichier, en cinq
-     * requêtes.
+     * Insère {@code nombre} Images versées de ce propriétaire, une par Mot nouveau ({@code <préfixe><n>}, n de 1 à
+     * {@code nombre}), image libre de Sens « sens » (nom), Section {@code ms}, avec fichier, en cinq requêtes.
+     *
+     * @return le préfixe des Mots du lot
      */
-    private void insererEnMasse(UUID proprietaire, int nombre) {
+    private String insererEnMasse(UUID proprietaire, int nombre) {
         String prefixe = "masse" + UUID.randomUUID().toString().substring(0, 8);
         // Chaque requête ne reçoit que ses propres paramètres ; tous sont typés par cast, rien n'est laissé à l'inférence.
         String desMotsDuLot = " join sens s on s.id = i.sens_id join mot m on m.id = s.mot_id"
@@ -284,6 +577,7 @@ class BanqueImagesResourceTest {
                     + " select i.id, decode('01', 'hex'), decode('02', 'hex'), 'image/png', 10, 10 from image i"
                     + desMotsDuLot, Map.of("prefixe", prefixe));
         });
+        return prefixe;
     }
 
     private void executer(String sql, Map<String, Object> parametres) {

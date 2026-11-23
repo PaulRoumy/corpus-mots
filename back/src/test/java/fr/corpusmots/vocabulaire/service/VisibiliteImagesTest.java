@@ -7,6 +7,7 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.CsvSource;
 import org.junit.jupiter.params.provider.EnumSource;
@@ -70,5 +71,13 @@ class VisibiliteImagesTest {
         assertEquals(critere.parametres().keySet(), nommes);
         assertEquals("versee", critere.parametres().get("visibiliteVersee"));
         assertEquals(provenance != ProvenanceImages.BANQUE, critere.parametres().containsValue(CLAIRE));
+    }
+
+    @Test
+    void leCritereDesProprietairesNeRetientQueLesImagesVersees() {
+        VisibiliteImages.CritereImages critere = visibilite.critereAyantVerse();
+
+        assertEquals("(i.etat = :visibiliteVersee)", critere.condition());
+        assertEquals(java.util.Map.of("visibiliteVersee", "versee"), critere.parametres());
     }
 }

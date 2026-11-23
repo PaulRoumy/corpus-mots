@@ -10,7 +10,9 @@ import fr.corpusmots.vocabulaire.service.ClasserImageCommande;
 import fr.corpusmots.vocabulaire.service.FichierImageVue;
 import fr.corpusmots.vocabulaire.service.FichierTeleverseVue;
 import fr.corpusmots.vocabulaire.service.FichiersImages;
+import fr.corpusmots.vocabulaire.service.FiltresBanqueCommande;
 import fr.corpusmots.vocabulaire.service.Images;
+import fr.corpusmots.vocabulaire.service.Lexique;
 import fr.corpusmots.vocabulaire.service.Licence;
 import fr.corpusmots.vocabulaire.service.ModifierDescriptionImageCommande;
 import fr.corpusmots.vocabulaire.service.ProvenanceImages;
@@ -32,8 +34,12 @@ import jakarta.ws.rs.core.HttpHeaders;
 import jakarta.ws.rs.core.MediaType;
 import jakarta.ws.rs.core.Request;
 import jakarta.ws.rs.core.Response;
+import jakarta.ws.rs.core.UriInfo;
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
+import java.util.function.Function;
+import java.util.regex.Pattern;
 import org.eclipse.microprofile.openapi.annotations.Operation;
 import org.eclipse.microprofile.openapi.annotations.enums.SchemaType;
 import org.eclipse.microprofile.openapi.annotations.media.Content;
@@ -46,7 +52,12 @@ import org.jboss.resteasy.reactive.ResponseStatus;
 /**
  * Images de l'enseignant connecté. {@code GET /images?provenance=mes-mots|banque|tout&page=&taille=} rend une page de
  * la Banque (FR-18), filtrée par {@code VisibiliteImages} (AD-2) ; une provenance inconnue ou une taille hors de 1 à 100
- * répond {@code 400 requete.invalide}. {@code POST /images} ajoute une Image dans Mes mots, sans Préparation (FR-13) ;
+ * répond {@code 400 requete.invalide}. Ses filtres facultatifs ({@code mot}, {@code sensId}, {@code section},
+ * {@code albumId}, {@code moduleId}, {@code themeId}, {@code categorie}, {@code typeImage}, {@code proprietaireId},
+ * FR-15) se combinent en ET avec la provenance ; un identifiant mal formé, une valeur inconnue, un filtre répété ou un
+ * {@code mot} trop long répond {@code 400 requete.invalide}. {@code GET /images/proprietaires} liste les propriétaires
+ * proposables de ce filtre : l'enseignant connecté et les collègues qui ont versé au moins une Image.
+ * {@code POST /images} ajoute une Image dans Mes mots, sans Préparation (FR-13) ;
  * {@code GET /images/{id}} rend la Carte d'identité d'une Image consultable (FR-14), sinon
  * {@code 404 ressource.introuvable} ; {@code PUT /images/{id}/description} en modifie le type, la licence, la source,
  * l'auteur et l'Album d'origine, par le seul propriétaire ({@code 403 image.reservee_au_proprietaire} pour les autres) ;
@@ -67,6 +78,10 @@ public class ImagesResource {
     static final String CACHE_FICHIER = "private, max-age=86400";
     static final String TAILLE_MINIATURE = "miniature";
     static final String TAILLE_GRANDE = "grande";
+    private static final Pattern UUID_CANONIQUE = Pattern.compile(
+            "[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}");
+    private static final List<String> FILTRES_BANQUE = List.of("mot", "sensId", "section", "albumId", "moduleId",
+            "themeId", "categorie", "typeImage", "proprietaireId");
 
     @Inject
     FichiersImages fichiers;
@@ -121,7 +136,47 @@ public class ImagesResource {
             @QueryParam("page") String page,
             @Parameter(description = "Taille de la page, de 1 à 100 (100 par défaut)",
                     schema = @Schema(type = SchemaType.INTEGER, minimum = "1", maximum = "100", defaultValue = "100"))
-            @QueryParam("taille") String taille) {
+            @QueryParam("taille") String taille,
+            @Parameter(description = "Mot exact, sans tenir compte de la casse, des accents ni de l'article initial"
+                    + " (« la Citrouille » trouve « citrouille ») ; vide ou réduit à un article, ne filtre pas",
+                    schema = @Schema(type = SchemaType.STRING, maxLength = Lexique.LONGUEUR_MAX_FORME))
+            @QueryParam("mot") String mot,
+            @Parameter(description = "Sens de l'Image", schema = @Schema(type = SchemaType.STRING, format = "uuid"))
+            @QueryParam("sensId") String sensId,
+            @Parameter(description = "Section cochée sur l'Image ; avec Mes mots, aussi la Section d'une de mes"
+                    + " Préparations qui utilise l'Image",
+                    schema = @Schema(type = SchemaType.STRING, enumeration = { "ps", "ms", "gs" }))
+            @QueryParam("section") String section,
+            @Parameter(description = "Album d'origine de l'Image (image d'album)",
+                    schema = @Schema(type = SchemaType.STRING, format = "uuid"))
+            @QueryParam("albumId") String albumId,
+            @Parameter(description = "Module de l'Image", schema = @Schema(type = SchemaType.STRING, format = "uuid"))
+            @QueryParam("moduleId") String moduleId,
+            @Parameter(description = "Thème de l'Image", schema = @Schema(type = SchemaType.STRING, format = "uuid"))
+            @QueryParam("themeId") String themeId,
+            @Parameter(description = "Catégorie grammaticale du Sens de l'Image",
+                    schema = @Schema(type = SchemaType.STRING,
+                            enumeration = { "nom", "verbe", "adjectif", "adverbe", "autre" }))
+            @QueryParam("categorie") String categorie,
+            @Parameter(description = "Type de l'Image",
+                    schema = @Schema(type = SchemaType.STRING,
+                            enumeration = { "image_album", "image_libre", "photo_personnelle", "inconnu" }))
+            @QueryParam("typeImage") String typeImage,
+            @Parameter(description = "Propriétaire de l'Image (voir listerProprietairesBanque)",
+                    schema = @Schema(type = SchemaType.STRING, format = "uuid"))
+            @QueryParam("proprietaireId") String proprietaireId,
+            @Context UriInfo uri) {
+        // Un filtre n'a qu'une valeur : répété, JAX-RS garderait la première en silence.
+        for (String filtre : FILTRES_BANQUE) {
+            List<String> valeurs = uri.getQueryParameters().get(filtre);
+            if (valeurs != null && valeurs.size() > 1) {
+                throw new ErreurMetier(400, "requete.invalide", "Filtre répété : " + filtre);
+            }
+        }
+        if (mot != null && mot.strip().length() > Lexique.LONGUEUR_MAX_FORME) {
+            throw new ErreurMetier(400, "requete.invalide",
+                    "Le mot dépasse " + Lexique.LONGUEUR_MAX_FORME + " caractères");
+        }
         // Absente ou vide (provenance=) : la valeur par défaut, Mes mots.
         ProvenanceImages choisie = provenance == null || provenance.isBlank() ? ProvenanceImages.MES_MOTS
                 : ProvenanceImages.deValeur(provenance)
@@ -130,7 +185,26 @@ public class ImagesResource {
         Integer numero = entier(page, "page");
         Integer nombre = entier(taille, "taille");
         Pagination pagination = Pagination.de(numero, nombre == null ? Pagination.TAILLE_MAX : nombre);
-        return PageImagesBanqueDto.de(images.banque(choisie, pagination));
+        FiltresBanqueCommande filtres = new FiltresBanqueCommande(mot, uuid(sensId, "sensId"),
+                valeur(section, Section::deValeur, "section"), uuid(albumId, "albumId"), uuid(moduleId, "moduleId"),
+                uuid(themeId, "themeId"), valeur(categorie, CategorieGrammaticale::deValeur, "categorie"),
+                valeur(typeImage, TypeImage::deValeur, "typeImage"), uuid(proprietaireId, "proprietaireId"));
+        return PageImagesBanqueDto.de(images.banque(choisie, filtres, pagination));
+    }
+
+    @GET
+    @Path("/proprietaires")
+    @Produces(MediaType.APPLICATION_JSON)
+    @Operation(operationId = "listerProprietairesBanque",
+            summary = "Propriétaires proposables dans le filtre propriétaire de la Banque : l'enseignant connecté"
+                    + " d'abord, puis les collègues qui ont versé au moins une Image ; identifiants seuls, noms"
+                    + " résolus par l'annuaire")
+    @APIResponse(responseCode = "200", description = "Identifiants des propriétaires proposables",
+            content = @Content(mediaType = MediaType.APPLICATION_JSON,
+                    schema = @Schema(type = SchemaType.ARRAY,
+                            implementation = UUID.class)))
+    public List<UUID> listerProprietaires() {
+        return images.proprietairesBanque();
     }
 
     @GET
@@ -284,14 +358,35 @@ public class ImagesResource {
 
     /** Album d'origine saisi, {@code null} s'il est vide. */
     private static UUID albumId(String saisie) {
+        return uuid(saisie, "album");
+    }
+
+    /**
+     * Identifiant d'un paramètre, {@code null} s'il est absent ou vide ; un texte qui n'est pas un UUID répond
+     * {@code 400 requete.invalide}.
+     */
+    private static UUID uuid(String saisie, String nom) {
         if (saisie == null || saisie.isBlank()) {
             return null;
         }
-        try {
-            return UUID.fromString(saisie.strip());
-        } catch (IllegalArgumentException erreur) {
-            throw new ErreurMetier(400, "requete.invalide", "Identifiant d'album mal formé");
+        // UUID.fromString accepte des formes abrégées (« 1-2-3-4-5 ») : seule la forme canonique est admise.
+        String texte = saisie.strip();
+        if (!UUID_CANONIQUE.matcher(texte).matches()) {
+            throw new ErreurMetier(400, "requete.invalide", "Identifiant mal formé : " + nom);
         }
+        return UUID.fromString(texte);
+    }
+
+    /**
+     * Valeur d'énumération d'un paramètre, {@code null} s'il est absent ou vide ; une valeur inconnue répond
+     * {@code 400 requete.invalide}.
+     */
+    private static <T> T valeur(String saisie, Function<String, Optional<T>> deValeur, String nom) {
+        if (saisie == null || saisie.isBlank()) {
+            return null;
+        }
+        return deValeur.apply(saisie.strip())
+                .orElseThrow(() -> new ErreurMetier(400, "requete.invalide", "Valeur inconnue : " + nom));
     }
 
     private static UsageFichierImage usage(String taille) {

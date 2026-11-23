@@ -75,8 +75,19 @@ public class VisibiliteImages {
     }
 
     /**
+     * Critère SQL des Images qui font d'un enseignant un propriétaire proposable dans le filtre propriétaire de la
+     * Banque (FR-15), à appliquer à la table {@code image} sous l'alias {@code i} : l'Image est {@code versee}. Un
+     * collègue qui n'a rien versé n'est donc jamais nommé ; l'enseignant connecté est ajouté par l'appelant. Écrit ici,
+     * à côté du critère de provenance, et nulle part ailleurs (AD-2).
+     */
+    CritereImages critereAyantVerse() {
+        return new CritereImages("(i.etat = :visibiliteVersee)", Map.of("visibiliteVersee", EtatImage.VERSEE.valeur()));
+    }
+
+    /**
      * Condition SQL sur la table {@code image} sous l'alias {@code i}, et ses paramètres nommés, produite par
-     * {@link #critereBanque} ; aucune autre classe n'écrit de condition de visibilité (AD-2).
+     * {@link #critereBanque} ou {@link #critereAyantVerse} ; aucune autre classe n'écrit de condition de visibilité
+     * (AD-2).
      */
     record CritereImages(String condition, Map<String, Object> parametres) {
     }

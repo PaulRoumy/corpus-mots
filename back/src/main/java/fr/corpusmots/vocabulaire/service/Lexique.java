@@ -63,6 +63,26 @@ public class Lexique {
         return sansArticle.isEmpty() ? texte : sansArticle;
     }
 
+    /**
+     * Clé d'une saisie de recherche (filtre Mot de la Banque, FR-15) : {@link #cle} de {@code normaliser(saisie)},
+     * à comparer à {@code mot.forme_recherche} par {@code unaccent}, comme la détection. Vide si la saisie est vide ou
+     * réduite à un article seul ({@code la}, {@code l'}…), même après retrait d'un article initial ({@code les la}) :
+     * elle ne cherche alors aucun Mot.
+     */
+    static Optional<String> cleDeRecherche(String saisie) {
+        String texte = nettoyer(saisie);
+        if (texte.isEmpty() || articleSeul(texte)) {
+            return Optional.empty();
+        }
+        String forme = normaliser(texte);
+        return articleSeul(forme) ? Optional.empty() : Optional.of(cle(forme));
+    }
+
+    /** Vrai si {@code texte}, déjà nettoyé, n'est qu'un article ({@code la}, {@code l'}…). */
+    private static boolean articleSeul(String texte) {
+        return ARTICLE_INITIAL.matcher(texte + " ").replaceFirst("").isBlank();
+    }
+
     /** Clé d'unicité d'une forme déjà normalisée : minuscules NFC, accents gardés ({@code mot.forme_cle}). */
     static String cle(String forme) {
         return Normalizer.normalize(forme.toLowerCase(Locale.ROOT), Normalizer.Form.NFC);

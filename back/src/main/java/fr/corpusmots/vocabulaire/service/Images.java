@@ -19,12 +19,15 @@ import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 import jakarta.transaction.Transactional;
 import java.text.Collator;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Comparator;
 import java.util.EnumSet;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
@@ -460,26 +463,134 @@ public class Images {
 
     /**
      * Page de la Banque de l'enseignant courant pour la provenance {@code provenance} (FR-18) : les Images retenues par
-     * le critère de {@link VisibiliteImages#critereBanque} (AD-2), filtrées, comptées et paginées en base, avec leur Mot,
-     * leur Sens et leurs Sections lus dans la même requête. Ordre : forme du Mot (sans casse ni accents), Sens, Image la
-     * plus récente d'abord, identifiant. Lecture seule ; n'appelle aucun autre module.
+     * le critère de {@link VisibiliteImages#critereBanque} (AD-2) et par les {@code filtres} (FR-15, voir
+     * {@link #conditionFiltres}), filtrées, comptées et paginées en base, avec leur Mot, leur Sens et leurs Sections lus
+     * dans la même requête. Les filtres ne font que restreindre ce que la provenance montre. Ordre : forme du Mot (sans
+     * casse ni accents), Sens, Image la plus récente d'abord, identifiant. Lecture seule ; n'appelle aucun autre module.
      */
     @Transactional
-    public PageImagesBanqueVue banque(ProvenanceImages provenance, Pagination pagination) {
+    public PageImagesBanqueVue banque(ProvenanceImages provenance, FiltresBanqueCommande filtres,
+            Pagination pagination) {
         UUID enseignantId = enseignantCourant.id();
         if (enseignantId == null || provenance == null) {
             return new PageImagesBanqueVue(List.of(), 0);
         }
         VisibiliteImages.CritereImages critere = visibilite.critereBanque(provenance, enseignantId);
-        long total = images.nombreBanque(critere.condition(), critere.parametres());
+        ConditionFiltres restriction = conditionFiltres(provenance,
+                filtres == null ? FiltresBanqueCommande.AUCUN : filtres, enseignantId);
+        String condition = restriction.condition().isEmpty() ? critere.condition()
+                : critere.condition() + " and " + restriction.condition();
+        // conditionFiltres entoure son bloc de parenthèses : aucun « or » d'un filtre n'élargit la visibilité (AD-2).
+        Map<String, Object> parametres = new HashMap<>(critere.parametres());
+        restriction.parametres().forEach((nom, valeur) -> {
+            if (parametres.putIfAbsent(nom, valeur) != null) {
+                throw new IllegalStateException("Paramètre de filtre homonyme d'un paramètre de visibilité : " + nom);
+            }
+        });
+        long total = images.nombreBanque(condition, parametres);
         if (total <= pagination.decalage()) {
             return new PageImagesBanqueVue(List.of(), total);
         }
-        List<ImageBanqueVue> elements = images.pageBanque(critere.condition(), critere.parametres(),
-                pagination.decalage(), pagination.taille()).stream()
+        List<ImageBanqueVue> elements = images.pageBanque(condition, parametres, pagination.decalage(),
+                pagination.taille()).stream()
                 .map(ligne -> imageBanque(ligne, enseignantId))
                 .toList();
         return new PageImagesBanqueVue(elements, total);
+    }
+
+    /**
+     * Propriétaires proposables dans le filtre propriétaire de la Banque (FR-15), par identifiant, sans nom (AD-20) :
+     * l'enseignant courant d'abord, toujours, puis les collègues qui ont au moins une Image {@code versee}
+     * ({@link VisibiliteImages#critereAyantVerse}). Un collègue qui n'a rien versé n'est jamais nommé. Lecture seule.
+     */
+    @Transactional
+    public List<UUID> proprietairesBanque() {
+        UUID enseignantId = enseignantCourant.id();
+        if (enseignantId == null) {
+            return List.of();
+        }
+        VisibiliteImages.CritereImages critere = visibilite.critereAyantVerse();
+        List<UUID> proprietaires = new ArrayList<>();
+        proprietaires.add(enseignantId);
+        images.proprietairesBanque(critere.condition(), critere.parametres()).stream()
+                .filter(proprietaire -> !proprietaire.equals(enseignantId))
+                .forEach(proprietaires::add);
+        return List.copyOf(proprietaires);
+    }
+
+    /**
+     * Conditions SQL des filtres de la Banque (FR-15), sur la table {@code image} sous l'alias {@code i}, combinées en ET
+     * et entourées de parenthèses, avec leurs paramètres nommés {@code filtre…} ; condition vide si aucun filtre. Aucun texte saisi n'entre dans le
+     * SQL : toute valeur passe par un paramètre. Ces conditions s'ajoutent en ET au critère de visibilité et ne
+     * l'élargissent jamais (AD-2).
+     * <ul>
+     *   <li>Mot : le Mot exact de la saisie, avec la tolérance de la détection ({@link Lexique#cleDeRecherche}, comparée
+     *       à {@code mot.forme_recherche} par {@code unaccent}) ; une saisie vide ou réduite à un article ne filtre
+     *       pas.</li>
+     *   <li>Section : cochée sur l'Image ; sous Mes mots, ou celle d'un lien de l'enseignant vers l'Image (Préparation
+     *       de cette Section). Le lien d'un collègue ne compte jamais.</li>
+     *   <li>Album : Album d'origine d'une image d'album. Module, Thème, type, propriétaire, Sens et catégorie du Sens :
+     *       égalité.</li>
+     * </ul>
+     */
+    static ConditionFiltres conditionFiltres(ProvenanceImages provenance, FiltresBanqueCommande filtres,
+            UUID enseignantId) {
+        List<String> conditions = new ArrayList<>();
+        Map<String, Object> parametres = new HashMap<>();
+        Lexique.cleDeRecherche(filtres.mot()).ifPresent(cle -> {
+            conditions.add("exists (select 1 from sens fs join mot fm on fm.id = fs.mot_id"
+                    + " where fs.id = i.sens_id and fm.forme_recherche = unaccent(:filtreMot))");
+            parametres.put("filtreMot", cle);
+        });
+        if (filtres.sensId() != null) {
+            conditions.add("i.sens_id = :filtreSens");
+            parametres.put("filtreSens", filtres.sensId());
+        }
+        if (filtres.section() != null) {
+            String cochee = "exists (select 1 from image_section fse where fse.image_id = i.id"
+                    + " and fse.section = :filtreSection)";
+            if (provenance == ProvenanceImages.MES_MOTS) {
+                conditions.add("(" + cochee + " or exists (select 1 from lien_image fl where fl.image_id = i.id"
+                        + " and fl.enseignant_id = :filtreEnseignant and fl.section = :filtreSection))");
+                parametres.put("filtreEnseignant", enseignantId);
+            } else {
+                conditions.add(cochee);
+            }
+            parametres.put("filtreSection", filtres.section().valeur());
+        }
+        if (filtres.albumId() != null) {
+            conditions.add("(i.album_id = :filtreAlbum and i.type_image = :filtreTypeAlbum)");
+            parametres.put("filtreAlbum", filtres.albumId());
+            parametres.put("filtreTypeAlbum", TypeImage.IMAGE_ALBUM.valeur());
+        }
+        if (filtres.moduleId() != null) {
+            conditions.add("i.module_id = :filtreModule");
+            parametres.put("filtreModule", filtres.moduleId());
+        }
+        if (filtres.themeId() != null) {
+            conditions.add("exists (select 1 from image_theme fth where fth.image_id = i.id"
+                    + " and fth.theme_id = :filtreTheme)");
+            parametres.put("filtreTheme", filtres.themeId());
+        }
+        if (filtres.categorie() != null) {
+            conditions.add("exists (select 1 from sens fsc where fsc.id = i.sens_id"
+                    + " and fsc.categorie = :filtreCategorie)");
+            parametres.put("filtreCategorie", filtres.categorie().valeur());
+        }
+        if (filtres.typeImage() != null) {
+            conditions.add("i.type_image = :filtreType");
+            parametres.put("filtreType", filtres.typeImage().valeur());
+        }
+        if (filtres.proprietaireId() != null) {
+            conditions.add("i.proprietaire_id = :filtreProprietaire");
+            parametres.put("filtreProprietaire", filtres.proprietaireId());
+        }
+        return new ConditionFiltres(conditions.isEmpty() ? "" : "(" + String.join(" and ", conditions) + ")",
+                Map.copyOf(parametres));
+    }
+
+    /** Conditions des filtres de la Banque et leurs paramètres nommés, produites par {@link #conditionFiltres}. */
+    record ConditionFiltres(String condition, Map<String, Object> parametres) {
     }
 
     private ImageBanqueVue imageBanque(ImageBanqueLigne ligne, UUID enseignantId) {

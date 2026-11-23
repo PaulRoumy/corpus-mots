@@ -51,12 +51,13 @@ class ArchitectureTest {
     void seulImagesAppelleLaRequeteDeLaBanque() {
         noClasses().that().doNotHaveFullyQualifiedName(ReglesArchitecture.RACINE + ".vocabulaire.service.Images")
                 .should().callMethodWhere(new DescribedPredicate<JavaMethodCall>(
-                        "un appel à ImageRepository.pageBanque ou nombreBanque") {
+                        "un appel à ImageRepository.pageBanque, nombreBanque ou proprietairesBanque") {
                     @Override
                     public boolean test(JavaMethodCall appel) {
                         return appel.getTargetOwner().getFullName()
                                 .equals(ReglesArchitecture.RACINE + ".vocabulaire.persistance.ImageRepository")
-                                && (appel.getName().equals("pageBanque") || appel.getName().equals("nombreBanque"));
+                                && (appel.getName().equals("pageBanque") || appel.getName().equals("nombreBanque")
+                                        || appel.getName().equals("proprietairesBanque"));
                     }
                 })
                 .because("AD-2 : la condition de visibilité de la Banque n'est écrite que par VisibiliteImages")
