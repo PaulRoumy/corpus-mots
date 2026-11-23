@@ -4,6 +4,7 @@ import {
   ChangeDetectionStrategy,
   Component,
   computed,
+  DestroyRef,
   effect,
   ElementRef,
   inject,
@@ -77,22 +78,24 @@ type Etat =
  * et texte, jamais la couleur seule). Il s'ouvre sur le Sens retenu et la liste se limite à ses Images (`sensId`) ; si
  * le Sens retenu est « à compléter », il propose en plus « Tous les sens », choisi d'emblée, et la liste montre les
  * Images de tous les Sens. Choisir un autre Sens l'enregistre aussitôt (`PUT …/sens`, champ désactivé pendant
- * l'envoi) : le Mot renvoyé est émis par `sensChange` (la page met la Carte à jour, sans fermer le panneau), la liste
+ * l'envoi) : le Mot renvoyé est passé au rappel `appliquerSens` (la page met la Carte à jour, sans fermer le panneau), la liste
  * est relue pour ce Sens et le focus reste sur le champ. En échec, le champ revient au Sens précédent et le message
  * s'affiche dans le panneau. Choisir le Sens déjà retenu n'enregistre rien. Un seul Sens possible : texte en lecture.
  *
  * Création de Sens (story 2.8, partie 2) : « Nouveau sens », sous le Sens (champ ou texte), déplie la Création de Sens
  * partagée (`CreationSens`), catégorie préremplie avec celle du Sens retenu. Le Sens créé ou réutilisé (`POST …/sens`)
- * devient le Sens retenu comme un choix dans le champ (Mot émis par `sensChange`, liste relue pour ce Sens), puis le
+ * devient le Sens retenu comme un choix dans le champ (Mot passé à `appliquerSens`, liste relue pour ce Sens), puis le
  * focus va au champ Sens.
  *
  * Les Images sont les options d'une liste (`role="listbox"`) qui prend le focus une fois chargée : ↑ ↓ déplacent le
  * choix (sans boucler), Entrée ou un clic retiennent l'Image, avec le même rendu et le même nom accessible que dans la
  * détection (`VignetteProposition`). L'Image actuelle porte « actuelle » ; la retenir ferme le panneau sans requête.
- * Une autre Image est liée par `PUT …/image` (origine `reutilisee`) et le Mot renvoyé est émis par `choisi` ; la page
- * ferme le panneau. En échec, le message s'affiche dans le panneau, qui reste ouvert ; une Image qui n'est plus
- * disponible (ou passée à un autre Mot) affiche « Cette image n'est plus disponible. » et la liste est relue.
- * Si le panneau passe à un autre Mot pendant un envoi, la réponse de l'ancien est ignorée. Sans Image : « Aucune
+ * Une autre Image est liée par `PUT …/image` (origine `reutilisee`) et le Mot renvoyé est passé au rappel
+ * `appliquerChoix` ; la page ferme le panneau s'il montre encore ce Mot. En échec, le message s'affiche dans le panneau,
+ * qui reste ouvert ; une Image qui n'est plus disponible (ou passée à un autre Mot) affiche « Cette image n'est plus
+ * disponible. » et la liste est relue. Les rappels sont appelés pour toute réponse réussie, même si le panneau a été
+ * fermé ou est passé à un autre Mot pendant l'envoi (modèle `[appliquer]` de la Carte d'identité) ; un échec, lui,
+ * n'est affiché que si le panneau montre encore le Mot concerné. Sans Image : « Aucune
  * image pour ce mot. ». « Ajouter une image » émet `ajouterImage` avec son bouton (la page ouvre le Dialogue « Téléverser une
  * image »). Échap et « Fermer » émettent `fermer`, sans requête.
  */
@@ -266,10 +269,19 @@ export class PanneauChoixImage {
   readonly preparationId = input.required<string>();
   /** Mot de Préparation dont l'Image est choisie. */
   readonly mot = input.required<MotPreparationDto>();
-  /** Image liée au Mot, renvoyé par le back. */
-  readonly choisi = output<MotPreparationDto>();
-  /** Sens retenu changé dans le panneau : le Mot renvoyé par le back (Image éventuellement déliée). */
-  readonly sensChange = output<MotPreparationDto>();
+  /**
+   * Rappel de la page pour une Image liée : le Mot renvoyé par le back, et `encoreAffiche`, vrai si ce panneau montre
+   * toujours ce Mot (faux s'il a été fermé, même rouvert depuis, ou est passé à un autre Mot). Appelé pour toute
+   * réponse réussie (B-2, rétrospective de l'Epic 2) ; la page ne ferme le panneau et ne déplace le focus que si
+   * `encoreAffiche`.
+   */
+  readonly appliquerChoix =
+    input.required<(mot: MotPreparationDto, encoreAffiche: boolean) => void>();
+  /**
+   * Rappel de la page pour un Sens retenu changé ou créé : le Mot renvoyé par le back (Image éventuellement déliée).
+   * Appelé pour toute réponse réussie, même panneau fermé ou passé à un autre Mot.
+   */
+  readonly appliquerSens = input.required<(mot: MotPreparationDto) => void>();
   readonly fermer = output<void>();
   readonly ouvrirCarteIdentite = output<void>();
   /** « Ajouter une image », avec son bouton, auquel le focus revient si le dialogue est fermé sans rien enregistrer. */
@@ -363,6 +375,12 @@ export class PanneauChoixImage {
   private readonly motId = computed(() => this.mot().id);
 
   constructor() {
+    // Panneau fermé : les réponses en cours ne touchent plus au panneau (ni message, ni relecture, ni focus) ; leurs
+    // rappels sont tout de même appelés.
+    inject(DestroyRef).onDestroy(() => {
+      this.envoiCourant++;
+      this.derniereLecture++;
+    });
     effect(() => {
       const preparationId = this.preparationId();
       const motId = this.motId();
@@ -453,15 +471,13 @@ export class PanneauChoixImage {
     // Pas de changement de Sens ni de filtre pendant le choix d'une Image.
     this.champSens.disable({ emitEvent: false });
     this.message.set(null);
+    let mot: MotPreparationDto;
     try {
-      const mot = await this.api.invoke(choisirImageMotPreparation, {
+      mot = await this.api.invoke(choisirImageMotPreparation, {
         id: this.preparationId(),
         motPreparationId: motId,
         body: { imageId: image.id },
       });
-      if (numero === this.envoiCourant && motId === this.mot().id) {
-        this.choisi.emit(mot);
-      }
     } catch (erreur) {
       if (numero !== this.envoiCourant || motId !== this.mot().id) {
         return;
@@ -473,12 +489,16 @@ export class PanneauChoixImage {
       } else {
         this.message.set(messageErreur(erreur));
       }
+      return;
     } finally {
       if (numero === this.envoiCourant) {
         this.envoiEnCours.set(false);
         this.champSens.enable({ emitEvent: false });
       }
     }
+    // Hors du try : une erreur de la page n'est pas prise pour un échec de la requête. Même panneau fermé ou passé à
+    // un autre Mot, la Carte prend le Mot enregistré.
+    this.appliquerChoix()(mot, numero === this.envoiCourant && motId === this.mot().id);
   }
 
   /** « fruit (nom) » ; le libellé seul sans catégorie. */
@@ -510,20 +530,13 @@ export class PanneauChoixImage {
     this.envoiEnCours.set(true);
     this.champSens.disable({ emitEvent: false });
     this.message.set(null);
+    let mot: MotPreparationDto;
     try {
-      const mot = await this.api.invoke(changerSensMotPreparation, {
+      mot = await this.api.invoke(changerSensMotPreparation, {
         id: this.preparationId(),
         motPreparationId: motId,
         body: { sensId: valeur },
       });
-      if (numero !== this.envoiCourant || motId !== this.mot().id) {
-        // Panneau passé à un autre Mot : la Carte de l'ancien prend quand même le Mot enregistré, rien d'autre ne change.
-        this.sensChange.emit(mot);
-        return;
-      }
-      this.definirFiltre(valeur);
-      this.sensChange.emit(mot);
-      void this.lire(this.preparationId(), motId);
     } catch (erreur) {
       if (numero !== this.envoiCourant || motId !== this.mot().id) {
         return;
@@ -536,6 +549,7 @@ export class PanneauChoixImage {
       } else {
         this.message.set(messageErreur(erreur));
       }
+      return;
     } finally {
       if (numero === this.envoiCourant) {
         this.envoiEnCours.set(false);
@@ -544,11 +558,19 @@ export class PanneauChoixImage {
         afterNextRender(() => this.selectSens()?.focus(), { injector: this.injecteur });
       }
     }
+    // Hors du try : une erreur de la page n'est pas prise pour un échec de la requête. Panneau fermé ou passé à un
+    // autre Mot : la Carte de l'ancien prend quand même le Mot enregistré, rien d'autre ne change.
+    const encoreAffiche = numero === this.envoiCourant && motId === this.mot().id;
+    this.appliquerSens()(mot);
+    if (encoreAffiche) {
+      this.definirFiltre(valeur);
+      void this.lire(this.preparationId(), motId);
+    }
   }
 
   /**
    * Création de Sens (story 2.8, partie 2) : le Sens tapé est créé ou réutilisé et retenu (`POST …/sens`), comme un
-   * choix dans le champ : le Mot renvoyé est émis par `sensChange` (Image d'un autre Sens déliée), le champ passe sur ce
+   * choix dans le champ : le Mot renvoyé est passé à `appliquerSens` (Image d'un autre Sens déliée), le champ passe sur ce
    * Sens et la liste est relue pour lui. En échec, la promesse est rejetée : la Création de Sens affiche le message.
    */
   protected readonly creerSens = async (nouveau: NouveauSens): Promise<void> => {
@@ -563,8 +585,8 @@ export class PanneauChoixImage {
         motPreparationId: motId,
         body: nouveau,
       });
-      // Même passé à un autre Mot, la Carte de l'ancien prend le Mot enregistré.
-      this.sensChange.emit(mot);
+      // Même panneau fermé ou passé à un autre Mot, la Carte de l'ancien prend le Mot enregistré.
+      this.appliquerSens()(mot);
       if (numero !== this.envoiCourant || motId !== this.mot().id) {
         // Rien n'est sélectionné dans ce panneau : la Création de Sens ne se replie pas pour le nouveau Mot.
         throw new Error('Création de Sens pour un Mot précédent');

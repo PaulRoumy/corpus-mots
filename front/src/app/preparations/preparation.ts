@@ -25,6 +25,7 @@ import {
 } from '@angular/forms';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { MatButtonModule } from '@angular/material/button';
+import { MatDialog } from '@angular/material/dialog';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatIconModule } from '@angular/material/icon';
 import { MatInputModule } from '@angular/material/input';
@@ -327,12 +328,15 @@ type Source = 'module' | 'theme';
  * illustrer ») ouvre à droite, sur 400 px, le Panneau de choix d'Image du Mot, chargé à la demande (import
  * dynamique), sans masquer la Grille ; une autre vignette le remplace. L'Image choisie, ou téléversée par « Ajouter une image » (qui
  * remplace l'actuelle), met à jour la Carte ; le panneau se ferme, le focus revient à la vignette et « Image de
- * « farine » changée. » est annoncé. « Fermer » ou Échap le ferment sans rien changer.
+ * « farine » changée. » est annoncé. « Fermer » ou Échap le ferment sans rien changer. Une réponse arrivée après
+ * la fermeture du panneau, ou après son passage à un autre Mot, met quand même la Carte à jour et s'annonce, sans
+ * fermer ni déplacer le focus (rappels `appliquerChoix` et `appliquerSens`).
  *
  * Carte d'identité (story 2.6, partie 1) : « Carte d'identité » dans le Panneau de choix d'Image ouvre à sa place le
  * Panneau Carte d'identité de l'Image. Un seul panneau latéral est ouvert à la fois. « Fermer » ou Échap le ferment et
  * rendent le focus à la vignette ; retirer le Mot le ferme aussi. Sous 600 px de large, le panneau couvre l'écran et
- * la page dessous est inerte.
+ * la page dessous est inerte. Un panneau latéral dont le Mot disparaît de la Grille à une relecture se ferme, « « loup »
+ * n'est plus dans la préparation. » est annoncé et le focus va au Champ de saisie rapide.
  *
  * Sous le champ, l'Encart « mots déjà illustrés » (story 2.9, `EncartMotsDejaIllustres`) propose les Mots déjà
  * illustrés pour l'Album ; les Mots qu'il reprend arrivent en fin de Grille et le compteur suit. Quand il disparaît
@@ -669,6 +673,7 @@ export class Preparation {
   private readonly confirmation = inject(DialogueConfirmation);
   private readonly injecteur = inject(Injector);
   private readonly bandeauAnnuler = inject(BandeauAnnuler);
+  private readonly dialogues = inject(MatDialog);
   /** Seules écritures de la liste des Mots. */
   private readonly grille = inject(GrilleMots);
   /** Seule écriture de la région `aria-live`. */
@@ -887,8 +892,9 @@ export class Preparation {
         const panneau = emplacement.createComponent(PanneauChoixImage);
         panneau.location.nativeElement.classList.add('disposition__panneau');
         panneau.instance.fermer.subscribe(() => this.fermerChoixImage());
-        panneau.instance.choisi.subscribe((change) => this.appliquerChoixImage(change));
-        panneau.instance.sensChange.subscribe((change) => this.appliquerChangementSens(change));
+        // Rappels plutôt que sorties : une réponse s'applique même panneau fermé ou passé à un autre Mot (B-2).
+        panneau.setInput('appliquerChoix', this.appliquerChoixImage);
+        panneau.setInput('appliquerSens', this.appliquerChangementSens);
         panneau.instance.ouvrirCarteIdentite.subscribe(() => {
           const courant = this.motChoixImage();
           if (courant !== null) {
@@ -996,25 +1002,31 @@ export class Preparation {
   /**
    * Mots de la Préparation ; en échec, leur propre Bandeau d'erreur, l'En-tête reste affiché. Une écriture locale
    * pendant la lecture (ajout, reprise, retrait, Thème, Sens, Image) l'emporte : la liste lue est ignorée, sans fusion,
-   * puis relue au plus `relances` fois.
+   * puis relue au plus `relances` fois. Vrai si la liste lue a fermé un panneau latéral dont le Mot n'y est plus (le
+   * focus est alors déjà envoyé au Champ de saisie rapide).
    */
-  async chargerMots(id: string, relances = 0): Promise<void> {
+  async chargerMots(id: string, relances = 0): Promise<boolean> {
     const numero = this.dernierChargement;
     this.erreurMots.set(null);
     for (let reste = relances; reste >= 0; reste--) {
       const revision = this.grille.revision();
       try {
         const mots = await this.api.invoke(listerMotsPreparation, { id });
-        if (numero !== this.dernierChargement || this.grille.charger(mots, revision)) {
-          return;
+        if (numero !== this.dernierChargement) {
+          return false;
+        }
+        const avant = this.mots();
+        if (this.grille.charger(mots, revision)) {
+          return this.fermerPanneauSansMot(avant);
         }
       } catch (erreur) {
         if (numero === this.dernierChargement) {
           this.erreurMots.set(messageErreur(erreur));
         }
-        return;
+        return false;
       }
     }
+    return false;
   }
 
   /**
@@ -1402,8 +1414,9 @@ export class Preparation {
     const numero = this.dernierChargement;
     this.erreurPictogramme.set(message);
     // Le Mot a changé ailleurs : la relecture repart si un geste local l'a rendue périmée.
-    await this.chargerMots(preparation.id, 2);
-    if (numero === this.dernierChargement) {
+    const panneauFerme = await this.chargerMots(preparation.id, 2);
+    // Un panneau fermé faute de Mot a déjà envoyé le focus au Champ de saisie rapide.
+    if (numero === this.dernierChargement && !panneauFerme) {
       this.focaliserApresRendu(this.mots()?.find((autre) => autre.id === mot.id));
     }
   }
@@ -1441,23 +1454,36 @@ export class Preparation {
   }
 
   /**
-   * Image choisie dans le Panneau de choix d'Image (ou téléversée depuis lui) : la Carte prend le Mot renvoyé (vignette,
-   * badge, Sens), le panneau se ferme, le focus revient à la vignette et le changement est annoncé.
+   * Image choisie dans le Panneau de choix d'Image (ou téléversée depuis lui), rappel `appliquerChoix` : la Carte prend
+   * le Mot renvoyé (vignette, badge, Sens) et le changement est annoncé. Si le panneau qui a envoyé le choix montre
+   * encore ce Mot (`encoreAffiche`), il se ferme et le focus revient à la vignette ; fermé (même rouvert depuis) ou
+   * passé à un autre Mot pendant l'envoi, rien d'autre ne bouge. Mot sorti de la Grille entre-temps : rien n'est écrit,
+   * annoncé ni focalisé.
    */
-  protected appliquerChoixImage(change: MotPreparationDto): void {
-    this.remplacerMotIllustre(change);
-    this.choixOuvert.set(null);
+  protected readonly appliquerChoixImage = (
+    change: MotPreparationDto,
+    encoreAffiche: boolean,
+  ): void => {
+    if (!this.remplacerMotIllustre(change)) {
+      return;
+    }
     this.annonces.annoncer(`Image de « ${change.forme} » changée.`);
-    this.rendreFocusVignette(change.id);
-  }
+    if (encoreAffiche && this.choixOuvert() === change.id) {
+      this.choixOuvert.set(null);
+      this.rendreFocusVignette(change.id);
+    }
+  };
 
   /**
-   * Sens changé dans le Panneau de choix d'Image : la Carte prend le Mot renvoyé (Sens, « à illustrer » si l'Image a été
-   * déliée), le panneau reste ouvert et le changement est annoncé.
+   * Sens changé ou créé dans le Panneau de choix d'Image, rappel `appliquerSens` : la Carte prend le Mot renvoyé (Sens,
+   * « à illustrer » si l'Image a été déliée), même panneau fermé entre-temps, et le changement est annoncé ; le panneau
+   * et le focus ne bougent pas. Mot sorti de la Grille entre-temps : rien n'est écrit ni annoncé.
    */
-  protected appliquerChangementSens(change: MotPreparationDto): void {
+  protected readonly appliquerChangementSens = (change: MotPreparationDto): void => {
     const avant = this.mots()?.find((mot) => mot.id === change.id);
-    this.grille.remplacer(change);
+    if (!this.grille.remplacer(change)) {
+      return;
+    }
     const imageRetiree = !!avant?.image && !change.image;
     // Même format que le champ Sens : « libellé (catégorie) ».
     const sens = change.sens.categorie
@@ -1466,7 +1492,7 @@ export class Preparation {
     this.annonces.annoncer(
       `Sens de « ${change.forme} » : ${sens}.${imageRetiree ? ' Image retirée.' : ''}`,
     );
-  }
+  };
 
   /**
    * « Ajouter une image » du Panneau de choix d'Image : ouvre le Dialogue « Téléverser une image » pour ce Mot ; l'Image
@@ -1489,7 +1515,7 @@ export class Preparation {
     if (illustre === undefined || numero !== this.dernierChargement) {
       return;
     }
-    this.appliquerChoixImage(illustre);
+    this.appliquerChoixImage(illustre, this.choixOuvert() === illustre.id);
   }
 
   /**
@@ -1515,6 +1541,29 @@ export class Preparation {
     const ouverte = this.carteOuverte();
     this.carteOuverte.set(null);
     this.rendreFocusVignette(ouverte?.motId ?? null);
+  }
+
+  /**
+   * Après une relecture des Mots : si le Mot du panneau latéral ouvert (Panneau de choix d'Image ou Carte d'identité)
+   * n'est plus dans la Grille, le panneau se ferme (la page redevient active en plein écran), sa disparition est
+   * annoncée et le focus va au Champ de saisie rapide (B-3, rétrospective de l'Epic 2), sauf si un dialogue est ouvert :
+   * il garde le focus. `avant` : la Grille avant la relecture, pour nommer le Mot. Vrai si un panneau a été fermé.
+   */
+  private fermerPanneauSansMot(avant: readonly MotPreparationDto[] | null): boolean {
+    const motId = this.choixOuvert() ?? this.carteOuverte()?.motId ?? null;
+    if (motId === null || this.mots()?.some((mot) => mot.id === motId)) {
+      return false;
+    }
+    this.choixOuvert.set(null);
+    this.carteOuverte.set(null);
+    const forme = avant?.find((mot) => mot.id === motId)?.forme;
+    if (forme !== undefined) {
+      this.annonces.annoncer(`« ${forme} » n'est plus dans la préparation.`);
+    }
+    if (this.dialogues.openDialogs.length === 0) {
+      afterNextRender(() => this.saisieRapide()?.focus(), { injector: this.injecteur });
+    }
+    return true;
   }
 
   /** Après le rendu, focus à la vignette de la Carte du Mot `motId`, ou au Champ de saisie rapide sans elle. */

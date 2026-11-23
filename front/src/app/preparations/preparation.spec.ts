@@ -4330,6 +4330,28 @@ describe('Preparation (En-tête)', () => {
       expect(panneau()).toBeNull();
       serveur.expectOne(`${URL_MOTS}/${CITROUILLE.id}`);
     });
+
+    it('relecture sans le Mot affiché : panneau fermé, focus au champ, disparition annoncée (B-3)', async () => {
+      await ouvrirGrille();
+      await ouvrirCarte('citrouille');
+      serveur.expectOne(`/api/images/${IMAGE_1}`);
+
+      void (
+        fixture.componentInstance as unknown as { chargerMots(id: string): Promise<boolean> }
+      ).chargerMots(ID);
+      await stabiliser();
+      serveur
+        .expectOne((requete) => requete.method === 'GET' && requete.url === URL_MOTS)
+        .flush([GALETTE, POTIRON]);
+      await stabiliser();
+
+      expect(panneau()).toBeNull();
+      expect(cartes()).toEqual(['galette', 'potiron']);
+      expect(document.activeElement).toBe(
+        racine.querySelector<HTMLInputElement>('app-saisie-rapide input'),
+      );
+      expect(texte('p[aria-live="polite"]')).toBe("« citrouille » n'est plus dans la préparation.");
+    });
   });
 
   describe('Panneau de choix d’Image (story 2.7, partie 3)', () => {
@@ -4815,6 +4837,337 @@ describe('Preparation (En-tête)', () => {
       expect(panneau()).toBeNull();
       serveur.expectOne(`${URL_MOTS}/${FARINE.id}`);
     });
+
+    describe('réponse après fermeture et Mot disparu (rétrospective de l’Epic 2, B-2 et B-3)', () => {
+      const CHUTE = {
+        id: '0190f0a0-0000-7000-8000-0000000d0099',
+        libelle: 'chute',
+        categorie: 'nom',
+      };
+      const champSaisie = () => racine.querySelector<HTMLInputElement>('app-saisie-rapide input')!;
+      const annonce = () => texte('p[aria-live="polite"]');
+      const motsPage = () =>
+        (fixture.componentInstance as unknown as { mots(): MotPreparationDto[] }).mots();
+      const fermer = () =>
+        panneau()!.querySelector<HTMLButtonElement>('button[aria-label="Fermer"]')!.click();
+
+      /** Relecture des Mots lancée par la page, servie avec `mots`. */
+      async function relire(mots: MotPreparationDto[]) {
+        void (
+          fixture.componentInstance as unknown as { chargerMots(id: string): Promise<boolean> }
+        ).chargerMots(ID);
+        await stabiliser();
+        serveur
+          .expectOne((requete) => requete.method === 'GET' && requete.url === URL_MOTS)
+          .flush(mots);
+        await stabiliser();
+      }
+
+      async function choisirSensChute() {
+        panneau()!.querySelector<HTMLElement>('.mat-mdc-select-trigger')!.click();
+        await stabiliser();
+        [...document.querySelectorAll<HTMLElement>('.cdk-overlay-pane mat-option')]
+          .find((option) => option.textContent?.trim() === 'chute (nom)')!
+          .click();
+        await stabiliser();
+        return serveur.expectOne(`${URL_MOTS}/${FARINE.id}/sens`);
+      }
+
+      it('Image choisie puis « Fermer » avant la réponse : la Carte prend l’Image, le compteur suit, annonce, focus inchangé', async () => {
+        await ouvrirGrille();
+        racine
+          .querySelector<HTMLButtonElement>(
+            'app-carte-mot button[aria-label="Choisir une image pour « galette »"]',
+          )!
+          .click();
+        await stabiliser();
+        serveur.expectOne(lecturePropositions(`${URL_MOTS}/${GALETTE.id}/propositions`)).flush({
+          ...PROPOSITIONS,
+          motId: GALETTE.motId,
+          forme: 'galette',
+          images: [proposition(IMAGE_Z)],
+        });
+        await stabiliser();
+        options()[0].click();
+        await stabiliser();
+        const requete = serveur.expectOne(`${URL_MOTS}/${GALETTE.id}/image`);
+
+        fermer();
+        await stabiliser();
+        expect(panneau()).toBeNull();
+        champSaisie().focus();
+        requete.flush({ ...GALETTE, illustre: true, image: image(IMAGE_Z) });
+        await stabiliser();
+
+        expect(motsPage()[0].image?.id).toBe(IMAGE_Z);
+        expect(texte('.entete__compteur')).toBe('2 mots, 2 déjà illustrés');
+        expect(annonce()).toBe('Image de « galette » changée.');
+        expect(document.activeElement).toBe(champSaisie());
+        expect(panneau()).toBeNull();
+      });
+
+      it('Image choisie puis Échap avant la réponse : la Carte prend l’Image, annonce, focus resté à la vignette', async () => {
+        await ouvrirGrille();
+        await ouvrirChoix();
+        options()[0].click();
+        await stabiliser();
+        const requete = serveur.expectOne(URL_IMAGE);
+
+        liste().dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+        await stabiliser();
+        expect(panneau()).toBeNull();
+        expect(document.activeElement).toBe(vignette('farine'));
+        requete.flush({ ...FARINE, image: image(IMAGE_Y) });
+        await stabiliser();
+
+        expect(motsPage()[1].image?.id).toBe(IMAGE_Y);
+        expect(annonce()).toBe('Image de « farine » changée.');
+        expect(document.activeElement).toBe(vignette('farine'));
+        expect(panneau()).toBeNull();
+      });
+
+      it('Image choisie puis vignette d’un autre Mot : la Carte du premier est mise à jour, le panneau reste sur l’autre', async () => {
+        await ouvrirGrille();
+        await ouvrirChoix();
+        options()[0].click();
+        await stabiliser();
+        const requete = serveur.expectOne(URL_IMAGE);
+
+        racine
+          .querySelector<HTMLButtonElement>(
+            'app-carte-mot button[aria-label="Choisir une image pour « galette »"]',
+          )!
+          .click();
+        await stabiliser();
+        serveur
+          .expectOne(lecturePropositions(`${URL_MOTS}/${GALETTE.id}/propositions`))
+          .flush({ ...PROPOSITIONS, motId: GALETTE.motId, forme: 'galette', images: [] });
+        await stabiliser();
+        const focus = document.activeElement;
+        requete.flush({ ...FARINE, image: image(IMAGE_Y) });
+        await stabiliser();
+
+        expect(motsPage()[1].image?.id).toBe(IMAGE_Y);
+        expect(panneau()).not.toBeNull();
+        expect(panneau()!.querySelector('.choix-image__forme')?.textContent).toBe('galette');
+        expect(annonce()).toBe('Image de « farine » changée.');
+        expect(document.activeElement).toBe(focus);
+      });
+
+      it('Sens changé puis « Fermer » avant la réponse : la Carte prend le Sens, Image retirée, annonce, sans relecture', async () => {
+        await ouvrirGrille();
+        await ouvrirChoix({
+          ...PROPOSITIONS,
+          sens: [...PROPOSITIONS.sens, { ...CHUTE, aCompleter: false }],
+        });
+        const requete = await choisirSensChute();
+
+        fermer();
+        await stabiliser();
+        expect(panneau()).toBeNull();
+        requete.flush({ ...FARINE, sens: CHUTE, illustre: false, image: null });
+        await stabiliser();
+
+        expect(motsPage()[1].sens).toEqual(CHUTE);
+        expect(motsPage()[1].image).toBeNull();
+        expect(annonce()).toBe('Sens de « farine » : chute (nom). Image retirée.');
+        // Focus non déplacé : ni au champ, ni à un panneau rouvert.
+        expect(document.activeElement).not.toBe(champSaisie());
+        expect(panneau()).toBeNull();
+        serveur.expectNone(lecturePropositions(URL_PROPOSITIONS));
+      });
+
+      it('« Créer le sens » puis « Fermer » avant la réponse : la Carte prend le Sens créé', async () => {
+        const POUDRE = {
+          id: '0190f0a0-0000-7000-8000-0000000d0098',
+          libelle: 'poudre',
+          categorie: 'nom',
+        };
+        await ouvrirGrille();
+        await ouvrirChoix();
+        [...panneau()!.querySelectorAll<HTMLButtonElement>('button')]
+          .find((bouton) => bouton.textContent?.replace(/\s+/g, ' ').trim() === 'Nouveau sens')!
+          .click();
+        await stabiliser();
+        const libelle = panneau()!.querySelector<HTMLInputElement>('.creation-sens__libelle')!;
+        libelle.value = 'poudre';
+        libelle.dispatchEvent(new Event('input'));
+        await stabiliser();
+        [...panneau()!.querySelectorAll<HTMLButtonElement>('button')]
+          .find((bouton) => bouton.textContent?.trim() === 'Créer le sens')!
+          .click();
+        await stabiliser();
+        const requete = serveur.expectOne(`${URL_MOTS}/${FARINE.id}/sens`);
+
+        fermer();
+        await stabiliser();
+        expect(panneau()).toBeNull();
+        requete.flush({ ...FARINE, sens: POUDRE, illustre: false, image: null });
+        await stabiliser();
+
+        expect(motsPage()[1].sens).toEqual(POUDRE);
+        expect(annonce()).toBe('Sens de « farine » : poudre (nom). Image retirée.');
+        serveur.expectNone(lecturePropositions(URL_PROPOSITIONS));
+      });
+
+      it('échec après fermeture : rien n’est affiché, la Grille ne change pas', async () => {
+        await ouvrirGrille();
+        await ouvrirChoix();
+        options()[0].click();
+        await stabiliser();
+        const requete = serveur.expectOne(URL_IMAGE);
+
+        fermer();
+        await stabiliser();
+        requete.error(new ProgressEvent('error'));
+        await stabiliser();
+
+        expect(panneau()).toBeNull();
+        expect(motsPage()[1]).toEqual(FARINE);
+        expect(annonce()).toBe('');
+        expect(racine.querySelector('.page app-bandeau-erreur')).toBeNull();
+        expect(document.activeElement).toBe(vignette('farine'));
+        serveur.expectNone(lecturePropositions(URL_PROPOSITIONS));
+      });
+
+      it('relecture sans le Mot du panneau : panneau fermé, focus au champ, disparition annoncée', async () => {
+        await ouvrirGrille();
+        await ouvrirChoix();
+
+        await relire([GALETTE]);
+
+        expect(panneau()).toBeNull();
+        expect(racine.querySelector('.disposition')?.classList).not.toContain(
+          'disposition--panneau',
+        );
+        expect(cartes()).toEqual(['galette']);
+        expect(document.activeElement).toBe(champSaisie());
+        expect(annonce()).toBe("« farine » n'est plus dans la préparation.");
+      });
+
+      it('Image choisie, « Fermer », puis panneau rouvert sur le même Mot avant la réponse : il reste ouvert, focus inchangé', async () => {
+        await ouvrirGrille();
+        await ouvrirChoix();
+        options()[0].click();
+        await stabiliser();
+        const requete = serveur.expectOne(URL_IMAGE);
+
+        fermer();
+        await stabiliser();
+        await ouvrirChoix();
+        expect(panneau()).not.toBeNull();
+        const focus = document.activeElement;
+        requete.flush({ ...FARINE, image: image(IMAGE_Y) });
+        await stabiliser();
+
+        expect(motsPage()[1].image?.id).toBe(IMAGE_Y);
+        expect(panneau()).not.toBeNull();
+        expect(document.activeElement).toBe(focus);
+        expect(annonce()).toBe('Image de « farine » changée.');
+      });
+
+      it('relecture sans le Mot du panneau pendant un dialogue ouvert : panneau fermé, le focus reste au dialogue', async () => {
+        await ouvrirGrille();
+        await ouvrirChoix();
+        panneau()!.querySelector<HTMLButtonElement>('.choix-image__ajouter')!.click();
+        await stabiliser();
+        expect(TestBed.inject(MatDialog).openDialogs).toHaveLength(1);
+
+        await relire([GALETTE]);
+
+        expect(panneau()).toBeNull();
+        expect(annonce()).toBe("« farine » n'est plus dans la préparation.");
+        expect(document.activeElement).not.toBe(champSaisie());
+        TestBed.inject(MatDialog).closeAll();
+        await stabiliser();
+      });
+
+      it('refus d’un pictogramme pendant que le panneau montre un autre Mot, relu absent : panneau fermé, focus au champ', async () => {
+        await ouvrirGrille();
+        serveur
+          .expectOne('/api/arasaac/suggestions?mot=galette')
+          .flush([{ idArasaac: 2459, motCle: 'galette' }]);
+        await stabiliser();
+        await ouvrirChoix();
+
+        racine
+          .querySelector<HTMLButtonElement>(
+            'app-carte-mot button[aria-label="Illustrer « galette » avec le pictogramme « galette »"]',
+          )!
+          .click();
+        await stabiliser();
+        serveur
+          .expectOne(`${URL_MOTS}/${GALETTE.id}/pictogramme`)
+          .flush(
+            { status: 409, code: 'preparation.mot_deja_illustre' },
+            { status: 409, statusText: 'Conflict' },
+          );
+        await stabiliser();
+        serveur
+          .expectOne((requete) => requete.method === 'GET' && requete.url === URL_MOTS)
+          .flush([GALETTE]);
+        await stabiliser();
+
+        expect(panneau()).toBeNull();
+        expect(cartes()).toEqual(['galette']);
+        expect(annonce()).toBe("« farine » n'est plus dans la préparation.");
+        expect(document.activeElement).toBe(champSaisie());
+      });
+
+      it('relecture qui garde le Mot du panneau : le panneau reste ouvert, rien n’est annoncé', async () => {
+        await ouvrirGrille();
+        await ouvrirChoix();
+
+        await relire([GALETTE, FARINE]);
+
+        expect(panneau()).not.toBeNull();
+        expect(annonce()).toBe('');
+      });
+
+      it('Image choisie pour un Mot retiré entre-temps : ni annonce, ni focus déplacé, Grille inchangée', async () => {
+        await ouvrirGrille();
+        await ouvrirChoix();
+        options()[0].click();
+        await stabiliser();
+        const requete = serveur.expectOne(URL_IMAGE);
+
+        racine
+          .querySelector<HTMLButtonElement>(
+            'app-carte-mot button[aria-label="Retirer « farine » de la préparation"]',
+          )!
+          .click();
+        await stabiliser();
+        serveur.expectOne(`${URL_MOTS}/${FARINE.id}`).flush(FARINE);
+        await stabiliser();
+        const focus = document.activeElement;
+        requete.flush({ ...FARINE, image: image(IMAGE_Y) });
+        await stabiliser();
+
+        expect(cartes()).toEqual(['galette']);
+        expect(annonce()).toBe('');
+        expect(document.activeElement).toBe(focus);
+        expect(panneau()).toBeNull();
+      });
+
+      it('Sens changé pour un Mot sorti de la Grille entre-temps : ni annonce, ni focus déplacé', async () => {
+        await ouvrirGrille();
+        await ouvrirChoix({
+          ...PROPOSITIONS,
+          sens: [...PROPOSITIONS.sens, { ...CHUTE, aCompleter: false }],
+        });
+        const requete = await choisirSensChute();
+
+        await relire([GALETTE]);
+        expect(panneau()).toBeNull();
+        const message = annonce();
+        requete.flush({ ...FARINE, sens: CHUTE, illustre: false, image: null });
+        await stabiliser();
+
+        expect(cartes()).toEqual(['galette']);
+        expect(annonce()).toBe(message);
+        expect(document.activeElement).toBe(champSaisie());
+      });
+    });
   });
 
   describe('Grille et annonces (rétrospective de l’Epic 2, B-1 et B-7)', () => {
@@ -4866,7 +5219,7 @@ describe('Preparation (En-tête)', () => {
     const champSaisie = () => racine.querySelector<HTMLInputElement>('app-saisie-rapide input')!;
     const page = () =>
       fixture.componentInstance as unknown as {
-        chargerMots(id: string): Promise<void>;
+        chargerMots(id: string): Promise<boolean>;
         appliquerChangementSens(change: MotPreparationDto): void;
       };
 
@@ -4990,7 +5343,7 @@ describe('Preparation (En-tête)', () => {
       await ouvrirAvec([GALETTE, CITROUILLE]);
       const relecture = await relire();
 
-      // Sortie `sensChange` du Panneau de choix d'Image.
+      // Rappel `appliquerSens` du Panneau de choix d'Image.
       page().appliquerChangementSens({ ...CITROUILLE, sens: CHUTE });
       await stabiliser();
 
@@ -5155,11 +5508,11 @@ describe('Preparation (Carte d’identité sous 600 px)', () => {
       await stabiliser();
     }
     serveur.match(() => true);
-    return racine;
+    return { racine, fixture, serveur, stabiliser };
   }
 
   it('sous 600 px : le panneau couvre l’écran et la page dessous est inerte', async () => {
-    const racine = await ouvrirPanneau(true);
+    const { racine } = await ouvrirPanneau(true);
 
     expect(racine.querySelector('.disposition')?.classList).toContain('disposition--plein-ecran');
     expect(racine.querySelector('app-carte-identite')).not.toBeNull();
@@ -5167,7 +5520,7 @@ describe('Preparation (Carte d’identité sous 600 px)', () => {
   });
 
   it('sous 600 px, Panneau de choix d’Image seul : la page dessous est inerte', async () => {
-    const racine = await ouvrirPanneau(true, false);
+    const { racine } = await ouvrirPanneau(true, false);
 
     expect(racine.querySelector('app-panneau-choix-image')).not.toBeNull();
     expect(racine.querySelector('app-carte-identite')).toBeNull();
@@ -5176,12 +5529,27 @@ describe('Preparation (Carte d’identité sous 600 px)', () => {
   });
 
   it('au-delà : ni plein écran, ni page inerte', async () => {
-    const racine = await ouvrirPanneau(false);
+    const { racine } = await ouvrirPanneau(false);
 
     expect(racine.querySelector('.disposition')?.classList).not.toContain(
       'disposition--plein-ecran',
     );
     expect(racine.querySelector('app-carte-identite')).not.toBeNull();
+    expect(racine.querySelector('.page')?.hasAttribute('inert')).toBe(false);
+  });
+
+  it('sous 600 px, Mot du panneau disparu à une relecture : panneau fermé, la page redevient active (B-3)', async () => {
+    const { racine, fixture, serveur, stabiliser } = await ouvrirPanneau(true, false);
+
+    void (
+      fixture.componentInstance as unknown as { chargerMots(id: string): Promise<boolean> }
+    ).chargerMots(ID);
+    await stabiliser();
+    serveur.expectOne(`/api/preparations/${ID}/mots`).flush([]);
+    await stabiliser();
+    await stabiliser();
+
+    expect(racine.querySelector('app-panneau-choix-image')).toBeNull();
     expect(racine.querySelector('.page')?.hasAttribute('inert')).toBe(false);
   });
 });

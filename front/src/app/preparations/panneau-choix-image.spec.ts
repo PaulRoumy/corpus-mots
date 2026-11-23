@@ -135,6 +135,8 @@ describe('PanneauChoixImage', () => {
     });
     fixture = TestBed.createComponent(PanneauChoixImage);
     fixture.componentRef.setInput('preparationId', 'p1');
+    fixture.componentRef.setInput('appliquerChoix', () => undefined);
+    fixture.componentRef.setInput('appliquerSens', () => undefined);
     racine = fixture.nativeElement as HTMLElement;
     document.body.appendChild(racine);
   });
@@ -210,10 +212,17 @@ describe('PanneauChoixImage', () => {
     expect(liste().getAttribute('aria-activedescendant')).toBe('choix-image-i2');
   });
 
-  it('Entrée retient l’Image active : le Mot renvoyé est émis', async () => {
+  it('Entrée retient l’Image active : le Mot renvoyé est appliqué, panneau encore sur ce Mot', async () => {
     await ouvrir();
     const choisis: MotPreparationDto[] = [];
-    fixture.componentInstance.choisi.subscribe((mot) => choisis.push(mot));
+    const affiches: boolean[] = [];
+    fixture.componentRef.setInput(
+      'appliquerChoix',
+      (mot: MotPreparationDto, encoreAffiche: boolean) => {
+        choisis.push(mot);
+        affiches.push(encoreAffiche);
+      },
+    );
 
     touche('ArrowDown');
     touche('Enter');
@@ -226,6 +235,7 @@ describe('PanneauChoixImage', () => {
     await stabiliser();
 
     expect(choisis).toEqual([change]);
+    expect(affiches).toEqual([true]);
   });
 
   it('Image passée entre-temps à un autre Mot : traitée comme indisponible, la liste est relue', async () => {
@@ -252,7 +262,9 @@ describe('PanneauChoixImage', () => {
   it('passé à un autre Mot pendant un envoi : la réponse de l’ancien est ignorée, le nouveau reste utilisable', async () => {
     await ouvrir();
     const choisis: MotPreparationDto[] = [];
-    fixture.componentInstance.choisi.subscribe((mot) => choisis.push(mot));
+    fixture.componentRef.setInput('appliquerChoix', (mot: MotPreparationDto) => {
+      choisis.push(mot);
+    });
     options()[0].click();
     await stabiliser();
     const ancienne = serveur.expectOne(URL_IMAGE);
@@ -281,10 +293,17 @@ describe('PanneauChoixImage', () => {
     expect(choisis.map((mot) => mot.id)).toEqual(['mp2']);
   });
 
-  it('passé à un autre Mot pendant un envoi réussi : le Mot de l’ancien n’est pas émis', async () => {
+  it('passé à un autre Mot pendant un envoi réussi : le Mot de l’ancien est quand même appliqué, le nouveau reste intact', async () => {
     await ouvrir();
     const choisis: MotPreparationDto[] = [];
-    fixture.componentInstance.choisi.subscribe((mot) => choisis.push(mot));
+    const affiches: boolean[] = [];
+    fixture.componentRef.setInput(
+      'appliquerChoix',
+      (mot: MotPreparationDto, encoreAffiche: boolean) => {
+        choisis.push(mot);
+        affiches.push(encoreAffiche);
+      },
+    );
     options()[0].click();
     await stabiliser();
     const ancienne = serveur.expectOne(URL_IMAGE);
@@ -293,10 +312,61 @@ describe('PanneauChoixImage', () => {
     await stabiliser();
     serveur.expectOne(lecture('mp2')).flush(PROPOSITIONS);
     await stabiliser();
-    ancienne.flush(AVOCAT);
+    const lie = { ...AVOCAT, image: { ...AVOCAT.image!, id: 'i2' } };
+    ancienne.flush(lie);
     await stabiliser();
 
+    expect(choisis).toEqual([lie]);
+    expect(affiches).toEqual([false]);
+    expect(texte('.choix-image__forme')).toBe('avoine');
+    expect(racine.querySelector('.choix-image__message')).toBeNull();
+    serveur.expectNone(lecture('mp2'));
+  });
+
+  it('fermé pendant un envoi réussi : le Mot renvoyé est quand même appliqué, sans relecture', async () => {
+    await ouvrir();
+    const choisis: MotPreparationDto[] = [];
+    const affiches: boolean[] = [];
+    fixture.componentRef.setInput(
+      'appliquerChoix',
+      (mot: MotPreparationDto, encoreAffiche: boolean) => {
+        choisis.push(mot);
+        affiches.push(encoreAffiche);
+      },
+    );
+    options()[0].click();
+    await stabiliser();
+    const requete = serveur.expectOne(URL_IMAGE);
+
+    fixture.destroy();
+    const lie = { ...AVOCAT, image: { ...AVOCAT.image!, id: 'i2' } };
+    requete.flush(lie);
+    await tour();
+
+    expect(choisis).toEqual([lie]);
+    expect(affiches).toEqual([false]);
+    serveur.expectNone(lecture());
+  });
+
+  it('fermé pendant un envoi en échec : rien n’est appliqué ni relu', async () => {
+    await ouvrir();
+    const choisis: MotPreparationDto[] = [];
+    fixture.componentRef.setInput('appliquerChoix', (mot: MotPreparationDto) => {
+      choisis.push(mot);
+    });
+    options()[0].click();
+    await stabiliser();
+    const requete = serveur.expectOne(URL_IMAGE);
+
+    fixture.destroy();
+    requete.flush(
+      { status: 404, code: 'image.indisponible' },
+      { status: 404, statusText: 'Not Found' },
+    );
+    await tour();
+
     expect(choisis).toEqual([]);
+    serveur.expectNone(lecture());
   });
 
   it('aucune Image : « Aucune image pour ce mot. », sans liste', async () => {
@@ -415,8 +485,12 @@ describe('PanneauChoixImage', () => {
       const changes: MotPreparationDto[] = [];
       const choisis: MotPreparationDto[] = [];
       let fermetures = 0;
-      fixture.componentInstance.sensChange.subscribe((mot) => changes.push(mot));
-      fixture.componentInstance.choisi.subscribe((mot) => choisis.push(mot));
+      fixture.componentRef.setInput('appliquerSens', (mot: MotPreparationDto) => {
+        changes.push(mot);
+      });
+      fixture.componentRef.setInput('appliquerChoix', (mot: MotPreparationDto) => {
+        choisis.push(mot);
+      });
       fixture.componentInstance.fermer.subscribe(() => fermetures++);
 
       await choisirSens('métier (nom)');
@@ -446,7 +520,9 @@ describe('PanneauChoixImage', () => {
     it('après un Sens changé, choisir une Image la lie avec ce Sens', async () => {
       await ouvrir();
       const choisis: MotPreparationDto[] = [];
-      fixture.componentInstance.choisi.subscribe((mot) => choisis.push(mot));
+      fixture.componentRef.setInput('appliquerChoix', (mot: MotPreparationDto) => {
+        choisis.push(mot);
+      });
       await choisirSens('métier (nom)');
       serveur.expectOne(URL_SENS).flush(AVOCAT_METIER);
       await stabiliser();
@@ -486,7 +562,9 @@ describe('PanneauChoixImage', () => {
     it('échec : le champ revient au Sens précédent, message dans le panneau', async () => {
       await ouvrir();
       const changes: MotPreparationDto[] = [];
-      fixture.componentInstance.sensChange.subscribe((mot) => changes.push(mot));
+      fixture.componentRef.setInput('appliquerSens', (mot: MotPreparationDto) => {
+        changes.push(mot);
+      });
 
       await choisirSens('métier (nom)');
       serveur.expectOne(URL_SENS).error(new ProgressEvent('error'));
@@ -503,7 +581,9 @@ describe('PanneauChoixImage', () => {
     it('Sens qui n’est plus proposé : message dédié, champ revenu, liste relue pour le Sens précédent', async () => {
       await ouvrir();
       const changes: MotPreparationDto[] = [];
-      fixture.componentInstance.sensChange.subscribe((mot) => changes.push(mot));
+      fixture.componentRef.setInput('appliquerSens', (mot: MotPreparationDto) => {
+        changes.push(mot);
+      });
 
       await choisirSens('métier (nom)');
       serveur
@@ -590,7 +670,9 @@ describe('PanneauChoixImage', () => {
     it('passé à un autre Mot pendant l’enregistrement réussi : le Mot est émis, le panneau courant reste intact', async () => {
       await ouvrir();
       const changes: MotPreparationDto[] = [];
-      fixture.componentInstance.sensChange.subscribe((mot) => changes.push(mot));
+      fixture.componentRef.setInput('appliquerSens', (mot: MotPreparationDto) => {
+        changes.push(mot);
+      });
       await choisirSens('métier (nom)');
       const ancienne = serveur.expectOne(URL_SENS);
 
@@ -607,6 +689,23 @@ describe('PanneauChoixImage', () => {
       serveur.expectNone(lecture('mp2'));
       expect(valeurSens()).toBe('fruit (nom)');
       expect(racine.querySelector('mat-select')?.getAttribute('aria-disabled')).toBe('false');
+    });
+
+    it('fermé pendant l’enregistrement réussi : le Mot est quand même appliqué, sans relecture', async () => {
+      await ouvrir();
+      const changes: MotPreparationDto[] = [];
+      fixture.componentRef.setInput('appliquerSens', (mot: MotPreparationDto) => {
+        changes.push(mot);
+      });
+      await choisirSens('métier (nom)');
+      const requete = serveur.expectOne(URL_SENS);
+
+      fixture.destroy();
+      requete.flush(AVOCAT_METIER);
+      await tour();
+
+      expect(changes).toEqual([AVOCAT_METIER]);
+      serveur.expectNone(lecture());
     });
   });
 
@@ -646,7 +745,9 @@ describe('PanneauChoixImage', () => {
       await ouvrir();
       const changes: MotPreparationDto[] = [];
       let fermetures = 0;
-      fixture.componentInstance.sensChange.subscribe((mot) => changes.push(mot));
+      fixture.componentRef.setInput('appliquerSens', (mot: MotPreparationDto) => {
+        changes.push(mot);
+      });
       fixture.componentInstance.fermer.subscribe(() => fermetures++);
 
       await deplierEtSaisir(' chute ');
@@ -718,7 +819,9 @@ describe('PanneauChoixImage', () => {
     it('échec : message dans la Création de Sens, formulaire ouvert, aucun Mot émis', async () => {
       await ouvrir();
       const changes: MotPreparationDto[] = [];
-      fixture.componentInstance.sensChange.subscribe((mot) => changes.push(mot));
+      fixture.componentRef.setInput('appliquerSens', (mot: MotPreparationDto) => {
+        changes.push(mot);
+      });
       await deplierEtSaisir('chute');
 
       bouton('Créer le sens')!.click();
@@ -735,7 +838,9 @@ describe('PanneauChoixImage', () => {
     it('passé à un autre Mot : formulaire replié et vidé, la création de l’ancien ne se replie pas pour le nouveau', async () => {
       await ouvrir();
       const changes: MotPreparationDto[] = [];
-      fixture.componentInstance.sensChange.subscribe((mot) => changes.push(mot));
+      fixture.componentRef.setInput('appliquerSens', (mot: MotPreparationDto) => {
+        changes.push(mot);
+      });
       await deplierEtSaisir('chute');
       bouton('Créer le sens')!.click();
       await stabiliser();

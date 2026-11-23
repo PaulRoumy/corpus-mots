@@ -234,7 +234,11 @@
   evidence: Revue de la story 2.10, ligne 8 du journal de tri.
 - source_spec: `docs/realisation/spec-retro-e2-1-grille-mots.md`
   summary: Action 1 de la rétrospective de l'Epic 2, partie 2 : `appliquerChangementSens` et `appliquerChoixImage` n'annoncent rien et ne déplacent pas le focus quand `grille.remplacer` renvoie faux (Mot sorti de la Grille), avec B-2 et B-3.
+  status: fait (partie 2, spec-retro-e2-1-2-panneaux.md)
   evidence: Revue de la partie 1, ligne 4 du journal de tri.
 - source_spec: `docs/realisation/spec-retro-e2-1-grille-mots.md`
   summary: Action 2 de la rétrospective de l'Epic 2 : le Bandeau « Annuler » annonce par `LiveAnnouncer`, hors du service `Annonces` de la page ; à coordonner avec sa fermeture à la navigation (B-4).
   evidence: Revue de la partie 1, ligne 5 du journal de tri.
+- source_spec: `docs/realisation/spec-retro-e2-1-2-panneaux.md`
+  summary: Panneau de choix : deux réponses pour un même Mot venues de deux ouvertures successives du panneau peuvent s'appliquer dans le désordre, et un panneau rouvert pendant un changement de Sens garde le Sens et les propositions d'avant la réponse. Un numéro d'envoi par Mot tenu par la page réglerait les deux.
+  evidence: Revue de la partie 2, lignes 6 et 7 du journal de tri.
