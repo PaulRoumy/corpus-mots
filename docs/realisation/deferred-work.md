@@ -242,3 +242,6 @@
 - source_spec: `docs/realisation/spec-retro-e2-1-2-panneaux.md`
   summary: Panneau de choix : deux réponses pour un même Mot venues de deux ouvertures successives du panneau peuvent s'appliquer dans le désordre, et un panneau rouvert pendant un changement de Sens garde le Sens et les propositions d'avant la réponse. Un numéro d'envoi par Mot tenu par la page réglerait les deux.
   evidence: Revue de la partie 2, lignes 6 et 7 du journal de tri.
+- source_spec: `docs/realisation/spec-3-1-1-grille-de-la-banque.md`
+  summary: Banque — pagination par décalage (une Image retirée entre deux « Afficher plus » fait sauter la première de la page suivante ; une pagination par clé la réglerait), absence d'index sur `image.etat` (pages tardives non mesurées) et miniatures toutes demandées à l'affichage (chargement à l'entrée dans l'écran). À reprendre avec les filtres de la story 3.2 ou quand la Banque grossira.
+  evidence: Revue de la story 3.1 partie 1, lignes 10 à 12 du journal de tri.

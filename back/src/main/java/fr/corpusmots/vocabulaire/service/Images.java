@@ -2,6 +2,7 @@ package fr.corpusmots.vocabulaire.service;
 
 import fr.corpusmots.commun.api.ErreurMetier;
 import fr.corpusmots.commun.service.EnseignantCourant;
+import fr.corpusmots.commun.service.Pagination;
 import fr.corpusmots.commun.service.Section;
 import fr.corpusmots.referentiels.service.AlbumVue;
 import fr.corpusmots.referentiels.service.ModuleVue;
@@ -9,6 +10,7 @@ import fr.corpusmots.referentiels.service.ReferentielsService;
 import fr.corpusmots.referentiels.service.ThemeVue;
 import fr.corpusmots.vocabulaire.persistance.FichierLu;
 import fr.corpusmots.vocabulaire.persistance.Image;
+import fr.corpusmots.vocabulaire.persistance.ImageBanqueLigne;
 import fr.corpusmots.vocabulaire.persistance.ImageFichier;
 import fr.corpusmots.vocabulaire.persistance.ImageFichierRepository;
 import fr.corpusmots.vocabulaire.persistance.ImageRepository;
@@ -17,6 +19,7 @@ import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 import jakarta.transaction.Transactional;
 import java.text.Collator;
+import java.util.Arrays;
 import java.util.Comparator;
 import java.util.EnumSet;
 import java.util.HashSet;
@@ -455,12 +458,57 @@ public class Images {
         return rogne;
     }
 
+    /**
+     * Page de la Banque de l'enseignant courant pour la provenance {@code provenance} (FR-18) : les Images retenues par
+     * le critère de {@link VisibiliteImages#critereBanque} (AD-2), filtrées, comptées et paginées en base, avec leur Mot,
+     * leur Sens et leurs Sections lus dans la même requête. Ordre : forme du Mot (sans casse ni accents), Sens, Image la
+     * plus récente d'abord, identifiant. Lecture seule ; n'appelle aucun autre module.
+     */
+    @Transactional
+    public PageImagesBanqueVue banque(ProvenanceImages provenance, Pagination pagination) {
+        UUID enseignantId = enseignantCourant.id();
+        if (enseignantId == null || provenance == null) {
+            return new PageImagesBanqueVue(List.of(), 0);
+        }
+        VisibiliteImages.CritereImages critere = visibilite.critereBanque(provenance, enseignantId);
+        long total = images.nombreBanque(critere.condition(), critere.parametres());
+        if (total <= pagination.decalage()) {
+            return new PageImagesBanqueVue(List.of(), total);
+        }
+        List<ImageBanqueVue> elements = images.pageBanque(critere.condition(), critere.parametres(),
+                pagination.decalage(), pagination.taille()).stream()
+                .map(ligne -> imageBanque(ligne, enseignantId))
+                .toList();
+        return new PageImagesBanqueVue(elements, total);
+    }
+
+    private ImageBanqueVue imageBanque(ImageBanqueLigne ligne, UUID enseignantId) {
+        ImageVue image = vue(ligne.id(), ligne.proprietaireId(), ligne.etat(), ligne.typeImage(), ligne.licence(),
+                ligne.source(), enseignantId, visibilite);
+        List<Section> sections = ligne.sections() == null ? List.of()
+                : Arrays.stream(ligne.sections().split(","))
+                        .map(valeur -> Section.deValeur(valeur)
+                                .orElseThrow(() -> new IllegalStateException("Section inconnue : " + valeur)))
+                        .sorted()
+                        .toList();
+        return new ImageBanqueVue(image, sections, new MotVue(ligne.motId(), ligne.forme()),
+                new SensVue(ligne.sensId(), ligne.motId(), ligne.sensLibelle(), ligne.categorie()));
+    }
+
     /** Image vue par l'enseignant {@code enseignantId} : {@code reutilisable} vient de {@link VisibiliteImages}. */
     static ImageVue vue(Image image, UUID enseignantId, VisibiliteImages visibilite) {
-        TypeImage type = TypeImage.deValeur(image.typeImage())
-                .orElseThrow(() -> new IllegalStateException("Type inconnu de l'Image " + image.id()));
-        boolean aCompleter = type == TypeImage.IMAGE_LIBRE && (image.source() == null || image.licence() == null);
-        return new ImageVue(image.id(), image.proprietaireId(), VisibiliteImages.etat(image), null,
-                visibilite.proposable(image, enseignantId), type, aCompleter);
+        return vue(image.id(), image.proprietaireId(), image.etat(), image.typeImage(), image.licence(),
+                image.source(), enseignantId, visibilite);
+    }
+
+    private static ImageVue vue(UUID id, UUID proprietaireId, String valeurEtat, String valeurType, String licence,
+            String source, UUID enseignantId, VisibiliteImages visibilite) {
+        TypeImage type = TypeImage.deValeur(valeurType)
+                .orElseThrow(() -> new IllegalStateException("Type inconnu de l'Image " + id));
+        EtatImage etat = EtatImage.deValeur(valeurEtat)
+                .orElseThrow(() -> new IllegalStateException("État inconnu de l'Image " + id));
+        boolean aCompleter = type == TypeImage.IMAGE_LIBRE && (source == null || licence == null);
+        return new ImageVue(id, proprietaireId, etat, null, visibilite.proposable(proprietaireId, etat, enseignantId),
+                type, aCompleter);
     }
 }

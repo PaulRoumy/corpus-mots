@@ -12,7 +12,7 @@ import { provideIcones } from './commun/icones';
 const tour = () => new Promise((fin) => setTimeout(fin));
 
 /**
- * Préparations, Mon compte et les pages « Données personnelles » sont chargées à la demande : les importer d'avance
+ * Préparations, Banque, Mon compte et les pages « Données personnelles » sont chargées à la demande : les importer d'avance
  * pour que la navigation, donc la coquille et sa requête du compte, ne prennent pas plus de tours qu'une route
  * ordinaire.
  */
@@ -20,6 +20,7 @@ const precharger = () =>
   Promise.all([
     import('./preparations/preparations'),
     import('./preparations/preparation'),
+    import('./banque/banque'),
     import('./compte/mon-compte'),
     import('./compte/donnees-personnelles'),
   ]);
@@ -106,16 +107,32 @@ describe('App', () => {
     expect(TestBed.inject(Router).url).toBe('/preparations');
   });
 
-  it.each([
-    ['/banque', 'Banque', 'Aucune image.'],
-    ['/fiches', 'Fiches', 'Pas encore de fiche.'],
-  ])('%s : État vide, la phrase seule', async (url, titre, phrase) => {
-    const page = await ouvrir(url);
+  it('/banque : chargée à la demande, ouverte sur Mes mots', async () => {
+    const page = await ouvrir('/banque');
+    const serveur = TestBed.inject(HttpTestingController);
+    serveur
+      .expectOne('/api/images?page=0&provenance=mes-mots&taille=100')
+      .flush({ elements: [], total: 0 });
+    serveur.match('/api/enseignants').forEach((requete) => requete.flush([]));
+    await tour();
+    await tour();
 
-    expect(page.querySelector('h1')?.textContent).toBe(titre);
-    expect(page.querySelector('app-etat-vide')?.textContent?.trim()).toBe(phrase);
-    expect(page.querySelector('app-etat-vide a, app-etat-vide button')).toBeNull();
+    expect(page.querySelector('h1')?.textContent).toBe('Banque');
+    expect(page.querySelector('app-etat-vide')?.textContent).toContain(
+      'Aucune image dans Mes mots.',
+    );
   });
+
+  it.each([['/fiches', 'Fiches', 'Pas encore de fiche.']])(
+    '%s : État vide, la phrase seule',
+    async (url, titre, phrase) => {
+      const page = await ouvrir(url);
+
+      expect(page.querySelector('h1')?.textContent).toBe(titre);
+      expect(page.querySelector('app-etat-vide')?.textContent?.trim()).toBe(phrase);
+      expect(page.querySelector('app-etat-vide a, app-etat-vide button')).toBeNull();
+    },
+  );
 
   it('/mon-compte : nom affiché modifiable, e-mail et rôle', async () => {
     const page = await ouvrir('/mon-compte');

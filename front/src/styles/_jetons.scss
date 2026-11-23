@@ -215,6 +215,11 @@ $typographie-material: (
   // Bouton texte du Thème d'une Carte de Mot (story 2.3, partie 3) : cible de 24 px au moins (WCAG 2.5.8).
   --cm-hauteur-bouton-theme-mot: 24px;
 
+  // Grille de la Banque (key-banque.html › `.vgrid`, `.vg`, story 3.1) : vignettes de 150 px au moins, zone de l'image
+  // de 108 px de haut, miniature de 96 px au plus.
+  --cm-largeur-vignette-banque-min: 150px;
+  --cm-hauteur-photo-banque: 108px;
+  --cm-taille-image-banque: 96px;
   // Panneau Carte d'identité (key-banque.html › `.cid`, `dl.ro`, story 2.6) : grande vignette de 176 px, colonne des
   // intitulés de 132 px ; collé en haut du contenu à côté de la Grille, il tient dans la zone visible du contenu (écran
   // moins la barre supérieure de la coquille, 80 px : marges de 16 px et Bouton « + » de 48 px, et moins les marges

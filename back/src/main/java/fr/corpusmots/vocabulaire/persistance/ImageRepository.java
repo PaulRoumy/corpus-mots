@@ -5,6 +5,7 @@ import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.persistence.LockModeType;
 import java.util.Collection;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -68,6 +69,55 @@ public class ImageRepository implements PanacheRepositoryBase<Image, UUID> {
                 .setParameter("album", albumId)
                 .setParameter("type", typeImageAlbum)
                 .getResultList();
+    }
+
+    /**
+     * Page de la Banque, réservée à {@code vocabulaire.service.Images} (règle ArchUnit) : les Images qui satisfont
+     * {@code condition} (SQL sur {@code image} sous l'alias {@code i}, écrite par {@code VisibiliteImages} et jamais
+     * ailleurs, AD-2) avec ses {@code parametres}, filtrées et paginées en base, avec Mot, Sens et Sections dans la même
+     * requête (aucune requête par Image). Ordre : forme du Mot (sans tenir compte de la casse ni des accents, clés
+     * comparées en collation {@code C} : même ordre sur tout hôte), puis Sens, puis Image la plus récente d'abord, puis
+     * identifiant ; les Images d'un même Sens restent contiguës d'une page à l'autre.
+     *
+     * @throws IllegalArgumentException si un paramètre du critère s'appelle {@code decalage} ou {@code taille}
+     */
+    public List<ImageBanqueLigne> pageBanque(String condition, Map<String, Object> parametres, int decalage,
+            int taille) {
+        verifierParametres(parametres);
+        var requete = getEntityManager().createNativeQuery(
+                "select i.id, i.proprietaire_id, i.etat, i.type_image, i.licence, i.source,"
+                        + " (select string_agg(se.section, ',') from image_section se where se.image_id = i.id),"
+                        + " m.id, m.forme, s.id, s.libelle, s.categorie"
+                        + " from image i join sens s on s.id = i.sens_id join mot m on m.id = s.mot_id"
+                        + " where " + condition
+                        + " order by m.forme_recherche collate \"C\", m.forme_cle collate \"C\", m.id,"
+                        + " unaccent(lower(s.libelle)) collate \"C\", s.libelle_cle collate \"C\", s.id,"
+                        + " i.cree_le desc, i.id"
+                        + " offset :decalage limit :taille");
+        parametres.forEach(requete::setParameter);
+        @SuppressWarnings("unchecked")
+        List<Object[]> lignes = requete.setParameter("decalage", decalage).setParameter("taille", taille)
+                .getResultList();
+        return lignes.stream()
+                .map(ligne -> new ImageBanqueLigne((UUID) ligne[0], (UUID) ligne[1], (String) ligne[2],
+                        (String) ligne[3], (String) ligne[4], (String) ligne[5], (String) ligne[6], (UUID) ligne[7],
+                        (String) ligne[8], (UUID) ligne[9], (String) ligne[10], (String) ligne[11]))
+                .toList();
+    }
+
+    /** Nombre d'Images qui satisfont {@code condition} (voir {@link #pageBanque}), compté en base. */
+    public long nombreBanque(String condition, Map<String, Object> parametres) {
+        verifierParametres(parametres);
+        var requete = getEntityManager().createNativeQuery("select count(*) from image i where " + condition);
+        parametres.forEach(requete::setParameter);
+        return ((Number) requete.getSingleResult()).longValue();
+    }
+
+    /** Refuse un paramètre du critère qui porterait le nom d'un paramètre de pagination de la requête. */
+    private static void verifierParametres(Map<String, Object> parametres) {
+        if (parametres.containsKey("decalage") || parametres.containsKey("taille")) {
+            throw new IllegalArgumentException("Paramètre de critère réservé à la pagination : decalage ou taille");
+        }
     }
 
     /** Vrai si au moins une Image, de n'importe quel enseignant et à n'importe quel état, porte le Thème. */

@@ -614,6 +614,83 @@ components:
           - desactive
           - suppression_en_cours
           - supprime
+    ImageBanqueDto:
+      type: object
+      required:
+      - id
+      - proprietaireId
+      - etat
+      - reutilisable
+      - versee
+      - typeImage
+      - sections
+      - motId
+      - forme
+      - sensId
+      - sensLibelle
+      properties:
+        id:
+          $ref: "#/components/schemas/UUID"
+        proprietaireId:
+          $ref: "#/components/schemas/UUID"
+        etat:
+          type: string
+          enum:
+          - privee
+          - versee
+          - abandonnee
+          - supprimee
+        aRemplacer:
+          type:
+          - string
+          - "null"
+          description: "État « à remplacer », calculé à la lecture ; null tant que\
+            \ l'Image reste disponible"
+          enum:
+          - retiree
+          - supprimee
+        reutilisable:
+          type: boolean
+          description: Vrai si l'enseignant connecté peut réutiliser cette Image
+        versee:
+          type: boolean
+          description: Vrai si l'Image est versée dans la Banque de l'école
+        typeImage:
+          type: string
+          enum:
+          - image_album
+          - image_libre
+          - photo_personnelle
+          - inconnu
+        sections:
+          description: "Sections cochées, dans l'ordre PS, MS, GS"
+          type: array
+          items:
+            $ref: "#/components/schemas/SectionImageDto"
+        motId:
+          description: "Identifiant du Mot du Lexique, partagé par l'école"
+          type: string
+          $ref: "#/components/schemas/UUID"
+        forme:
+          type: string
+          description: "Première forme saisie dans l'école, sans article"
+        sensId:
+          $ref: "#/components/schemas/UUID"
+        sensLibelle:
+          type: string
+          description: « à compléter » pour le Sens par défaut
+        categorie:
+          type:
+          - string
+          - "null"
+          description: "Catégorie grammaticale du Sens, null si elle reste à complé\
+            ter"
+          enum:
+          - nom
+          - verbe
+          - adjectif
+          - adverbe
+          - autre
     InvitationDto:
       type: object
       required:
@@ -943,6 +1020,19 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/CartePreparationDto"
+        total:
+          type: integer
+          format: int64
+    PageImagesBanqueDto:
+      type: object
+      required:
+      - elements
+      - total
+      properties:
+        elements:
+          type: array
+          items:
+            $ref: "#/components/schemas/ImageBanqueDto"
         total:
           type: integer
           format: int64
@@ -1655,6 +1745,47 @@ paths:
       tags:
       - Enseignants Resource
   /api/images:
+    get:
+      summary: "Images de la Banque pour une provenance : Mes mots (par défaut), Banque\
+        \ de l'école ou Tout ; par forme du Mot, puis Sens, puis les plus récentes\
+        \ d'abord"
+      operationId: listerImagesBanque
+      parameters:
+      - description: "Numéro de page, à partir de 0"
+        schema:
+          minimum: 0
+          type: integer
+          default: 0
+        name: page
+        in: query
+      - description: "mes-mots (par défaut) : mes Images, versées ou non ; banque\
+          \ : les Images versées de tous ; tout : l'union des deux"
+        schema:
+          type: string
+          default: mes-mots
+          enum:
+          - mes-mots
+          - banque
+          - tout
+        name: provenance
+        in: query
+      - description: "Taille de la page, de 1 à 100 (100 par défaut)"
+        schema:
+          maximum: 100
+          minimum: 1
+          type: integer
+          default: 100
+        name: taille
+        in: query
+      responses:
+        "200":
+          description: Page d'Images et nombre total d'Images de la provenance
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PageImagesBanqueDto"
+      tags:
+      - Images Resource
     post:
       summary: "Ajouter une Image dans Mes mots de l'enseignant connecté, sans Pré\
         paration ; le Mot est créé s'il n'existe pas"

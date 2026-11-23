@@ -2,6 +2,7 @@ package fr.corpusmots.vocabulaire.api;
 
 import fr.corpusmots.commun.api.ErreurMetier;
 import fr.corpusmots.commun.service.EnseignantCourant;
+import fr.corpusmots.commun.service.Pagination;
 import fr.corpusmots.commun.service.Section;
 import fr.corpusmots.vocabulaire.service.AjouterImageCommande;
 import fr.corpusmots.vocabulaire.service.CategorieGrammaticale;
@@ -12,6 +13,7 @@ import fr.corpusmots.vocabulaire.service.FichiersImages;
 import fr.corpusmots.vocabulaire.service.Images;
 import fr.corpusmots.vocabulaire.service.Licence;
 import fr.corpusmots.vocabulaire.service.ModifierDescriptionImageCommande;
+import fr.corpusmots.vocabulaire.service.ProvenanceImages;
 import fr.corpusmots.vocabulaire.service.ReductionImages;
 import fr.corpusmots.vocabulaire.service.TypeImage;
 import fr.corpusmots.vocabulaire.service.UsageFichierImage;
@@ -42,7 +44,9 @@ import org.eclipse.microprofile.openapi.annotations.responses.APIResponse;
 import org.jboss.resteasy.reactive.ResponseStatus;
 
 /**
- * Images de l'enseignant connecté. {@code POST /images} ajoute une Image dans Mes mots, sans Préparation (FR-13) ;
+ * Images de l'enseignant connecté. {@code GET /images?provenance=mes-mots|banque|tout&page=&taille=} rend une page de
+ * la Banque (FR-18), filtrée par {@code VisibiliteImages} (AD-2) ; une provenance inconnue ou une taille hors de 1 à 100
+ * répond {@code 400 requete.invalide}. {@code POST /images} ajoute une Image dans Mes mots, sans Préparation (FR-13) ;
  * {@code GET /images/{id}} rend la Carte d'identité d'une Image consultable (FR-14), sinon
  * {@code 404 ressource.introuvable} ; {@code PUT /images/{id}/description} en modifie le type, la licence, la source,
  * l'auteur et l'Album d'origine, par le seul propriétaire ({@code 403 image.reservee_au_proprietaire} pour les autres) ;
@@ -96,6 +100,36 @@ public class ImagesResource {
                 ajout.fichier.size(), ajout.typeImage, ajout.licence);
         return MesMotsImageDto.de(images.ajouterDansMesMots(new AjouterImageCommande(prepare.fichier(), ajout.mot,
                 prepare.typeImage(), prepare.licence(), ajout.source, ajout.auteur, albumId)));
+    }
+
+    @GET
+    @Produces(MediaType.APPLICATION_JSON)
+    @Operation(operationId = "listerImagesBanque",
+            summary = "Images de la Banque pour une provenance : Mes mots (par défaut), Banque de l'école ou Tout ;"
+                    + " par forme du Mot, puis Sens, puis les plus récentes d'abord")
+    @APIResponse(responseCode = "200", description = "Page d'Images et nombre total d'Images de la provenance",
+            content = @Content(mediaType = MediaType.APPLICATION_JSON,
+                    schema = @Schema(implementation = PageImagesBanqueDto.class)))
+    public PageImagesBanqueDto listerBanque(
+            @Parameter(description = "mes-mots (par défaut) : mes Images, versées ou non ; banque : les Images versées"
+                    + " de tous ; tout : l'union des deux",
+                    schema = @Schema(type = SchemaType.STRING, enumeration = { "mes-mots", "banque", "tout" },
+                            defaultValue = "mes-mots"))
+            @QueryParam("provenance") String provenance,
+            @Parameter(description = "Numéro de page, à partir de 0",
+                    schema = @Schema(type = SchemaType.INTEGER, minimum = "0", defaultValue = "0"))
+            @QueryParam("page") String page,
+            @Parameter(description = "Taille de la page, de 1 à 100 (100 par défaut)",
+                    schema = @Schema(type = SchemaType.INTEGER, minimum = "1", maximum = "100", defaultValue = "100"))
+            @QueryParam("taille") String taille) {
+        ProvenanceImages choisie = provenance == null ? ProvenanceImages.MES_MOTS
+                : ProvenanceImages.deValeur(provenance)
+                        .orElseThrow(() -> new ErreurMetier(400, "requete.invalide",
+                                "La provenance doit valoir mes-mots, banque ou tout"));
+        Integer numero = entier(page, "page");
+        Integer nombre = entier(taille, "taille");
+        Pagination pagination = Pagination.de(numero, nombre == null ? Pagination.TAILLE_MAX : nombre);
+        return PageImagesBanqueDto.de(images.banque(choisie, pagination));
     }
 
     @GET
@@ -230,6 +264,21 @@ public class ImagesResource {
         Response.ResponseBuilder reponse = inchange != null ? inchange
                 : Response.ok(fichier.octets(), fichier.typeMime());
         return reponse.tag(etiquette).header(HttpHeaders.CACHE_CONTROL, CACHE_FICHIER).build();
+    }
+
+    /**
+     * Entier d'un paramètre de requête, {@code null} s'il est absent : un texte non entier répond
+     * {@code 400 requete.invalide}, et non {@code 404} comme le ferait la conversion de JAX-RS.
+     */
+    private static Integer entier(String saisie, String nom) {
+        if (saisie == null) {
+            return null;
+        }
+        try {
+            return Integer.valueOf(saisie.strip());
+        } catch (NumberFormatException erreur) {
+            throw new ErreurMetier(400, "requete.invalide", nom + " doit être un nombre entier");
+        }
     }
 
     /** Album d'origine saisi, {@code null} s'il est vide. */

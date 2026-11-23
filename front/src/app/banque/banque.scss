@@ -1,0 +1,50 @@
+// Banque (key-banque.html › `.pagehd`, `.filters`, `.grp`, `.gh`, `.vgrid`), sans les filtres de la story 3.2.
+.banque__entete {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--cm-espace-3);
+}
+
+.banque__total {
+  font: var(--cm-typo-body-sm);
+  color: var(--mat-sys-on-surface-variant);
+}
+
+.groupe {
+  display: flex;
+  flex-direction: column;
+  gap: var(--cm-espace-2);
+}
+
+.groupe__entete {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--cm-espace-2);
+  margin: 0;
+  font: var(--cm-typo-title);
+  color: var(--mat-sys-on-surface);
+}
+
+.groupe__forme {
+  font: var(--cm-typo-word-cursive);
+}
+
+.groupe__compte {
+  font: var(--cm-typo-body-sm);
+  color: var(--mat-sys-on-surface-variant);
+}
+
+.groupe__vignettes {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(var(--cm-largeur-vignette-banque-min), 1fr));
+  gap: var(--cm-espace-3);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.banque__plus {
+  align-self: center;
+}

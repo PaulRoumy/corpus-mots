@@ -1,6 +1,5 @@
 import { inject } from '@angular/core';
 import { CanMatchFn, Router, Routes } from '@angular/router';
-import { Banque } from './banque/banque';
 import { PAGE_PUBLIQUE } from './commun/authentification/authentification';
 import { CompteCourant } from './commun/compte-courant';
 import { Coquille } from './coquille/coquille';
@@ -38,7 +37,12 @@ export const routes: Routes = [
         loadComponent: () => import('./preparations/preparation').then((m) => m.Preparation),
         title: 'Préparation · corpus-mots',
       },
-      { path: 'banque', component: Banque, title: 'Banque · corpus-mots' },
+      {
+        path: 'banque',
+        // Chargée à la demande : grille, vignettes et puces hors du paquet initial.
+        loadComponent: () => import('./banque/banque').then((m) => m.Banque),
+        title: 'Banque · corpus-mots',
+      },
       { path: 'fiches', component: Fiches, title: 'Fiches · corpus-mots' },
       {
         path: 'mon-compte',

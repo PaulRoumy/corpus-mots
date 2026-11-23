@@ -1,0 +1,61 @@
+// Vignette d'Image de la Banque (key-banque.html › `.vg`, `.meta`, `.own`, `.st.ver`).
+:host {
+  display: flex;
+  flex-direction: column;
+  gap: var(--cm-espace-2);
+  padding: var(--cm-espace-2) var(--cm-espace-2) var(--cm-espace-2);
+  border-radius: var(--cm-arrondi-md);
+  background: var(--mat-sys-surface-container-low);
+}
+
+.vignette__photo {
+  display: grid;
+  place-items: center;
+  height: var(--cm-hauteur-photo-banque);
+  overflow: hidden;
+  border-radius: var(--cm-arrondi-sm);
+  background: var(--mat-sys-surface);
+}
+
+.vignette__image {
+  max-width: var(--cm-taille-image-banque);
+  max-height: var(--cm-taille-image-banque);
+  object-fit: contain;
+}
+
+.vignette__repli {
+  width: var(--cm-taille-icone-grande);
+  height: var(--cm-taille-icone-grande);
+  color: var(--mat-sys-on-surface-variant);
+}
+
+.vignette__meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--cm-espace-1);
+}
+
+// Badge d'état « versée » : coche et libellé, jamais la couleur seule.
+.vignette__versee {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--cm-espace-1);
+  height: var(--cm-hauteur-badge);
+  padding: 0 var(--cm-espace-2);
+  border-radius: var(--cm-arrondi-sm);
+  background: var(--cm-etat-versee-fond);
+  color: var(--cm-etat-versee-texte);
+  font: var(--cm-typo-label-sm);
+  white-space: nowrap;
+}
+
+.vignette__versee-icone {
+  width: var(--cm-taille-icone-badge);
+  height: var(--cm-taille-icone-badge);
+}
+
+.vignette__proprietaire {
+  margin: 0;
+  font: var(--cm-typo-label-sm);
+  color: var(--mat-sys-on-surface-variant);
+}

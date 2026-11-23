@@ -2,9 +2,14 @@ package fr.corpusmots.vocabulaire.service;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
+import java.util.HashSet;
+import java.util.Set;
 import java.util.UUID;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.CsvSource;
+import org.junit.jupiter.params.provider.EnumSource;
 
 /**
  * Les trois prédicats d'AD-2. Aucun ne reçoit le rôle {@code admin} : l'administrateur n'y gagne rien (vérifié de bout
@@ -50,5 +55,20 @@ class VisibiliteImagesTest {
     @CsvSource({ "PRIVEE, false", "VERSEE, true" })
     void sansProprietaireSeuleUneImageVerseeEstProposable(EtatImage etat, boolean proposable) {
         assertEquals(proposable, visibilite.proposable(null, etat, CLAIRE));
+    }
+
+    @ParameterizedTest(name = "critère de la Banque {0}")
+    @EnumSource(ProvenanceImages.class)
+    void leCritereDeLaBanqueNommeExactementSesParametres(ProvenanceImages provenance) {
+        VisibiliteImages.CritereImages critere = visibilite.critereBanque(provenance, CLAIRE);
+        Set<String> nommes = new HashSet<>();
+        Matcher parametre = Pattern.compile(":([a-zA-Z]+)").matcher(critere.condition());
+        while (parametre.find()) {
+            nommes.add(parametre.group(1));
+        }
+
+        assertEquals(critere.parametres().keySet(), nommes);
+        assertEquals("versee", critere.parametres().get("visibiliteVersee"));
+        assertEquals(provenance != ProvenanceImages.BANQUE, critere.parametres().containsValue(CLAIRE));
     }
 }

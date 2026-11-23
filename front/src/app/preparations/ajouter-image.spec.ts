@@ -102,8 +102,10 @@ describe('« + › Ajouter une image »', () => {
 
     await remplirEtEnregistrer();
     serveur.expectOne('/api/images').flush(AJOUTEE, { status: 201, statusText: 'Created' });
-    await fin;
+    expect(await fin).toEqual(AJOUTEE);
     await stabiliser();
+
+    expect(TestBed.inject(AjouterImage).imagesAjoutees()).toBe(1);
 
     expect(dialogue()).toBeNull();
     expect(announce).toHaveBeenCalledWith(
@@ -121,9 +123,10 @@ describe('« + › Ajouter une image »', () => {
     await attendreDialogue();
 
     bouton('Annuler').click();
-    await fin;
+    expect(await fin).toBeUndefined();
     await stabiliser();
 
+    expect(TestBed.inject(AjouterImage).imagesAjoutees()).toBe(0);
     expect(announce).not.toHaveBeenCalled();
     expect(document.activeElement).toBe(declencheur);
   });
