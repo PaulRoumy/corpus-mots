@@ -122,7 +122,8 @@ public class ImagesResource {
             @Parameter(description = "Taille de la page, de 1 à 100 (100 par défaut)",
                     schema = @Schema(type = SchemaType.INTEGER, minimum = "1", maximum = "100", defaultValue = "100"))
             @QueryParam("taille") String taille) {
-        ProvenanceImages choisie = provenance == null ? ProvenanceImages.MES_MOTS
+        // Absente ou vide (provenance=) : la valeur par défaut, Mes mots.
+        ProvenanceImages choisie = provenance == null || provenance.isBlank() ? ProvenanceImages.MES_MOTS
                 : ProvenanceImages.deValeur(provenance)
                         .orElseThrow(() -> new ErreurMetier(400, "requete.invalide",
                                 "La provenance doit valoir mes-mots, banque ou tout"));
