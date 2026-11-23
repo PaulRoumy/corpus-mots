@@ -522,13 +522,13 @@ describe('EncartMotsDejaIllustres', () => {
     );
   });
 
-  it('refus sous verrou (409 ressource.introuvable) : « image indisponible », puis l’Encart est rechargé', async () => {
+  it('Image d’un autre Sens entre-temps (400 image.sens_different) : « image indisponible », puis l’Encart est rechargé', async () => {
     await ouvrir([ETALE, GALETTE]);
 
     bouton('Reprendre « étalé »').click();
     serveur
       .expectOne(URL_REUTILISATION)
-      .flush({ code: 'ressource.introuvable' }, { status: 409, statusText: 'Conflict' });
+      .flush({ code: 'image.sens_different' }, { status: 400, statusText: 'Bad Request' });
     await stabiliser();
     serveur.expectOne(URL_REPRISES).flush([GALETTE]);
     await stabiliser();

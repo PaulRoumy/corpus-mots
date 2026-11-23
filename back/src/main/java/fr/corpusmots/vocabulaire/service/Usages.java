@@ -33,7 +33,6 @@ public class Usages {
 
     static final String CODE_MOT_DEJA_ILLUSTRE = "preparation.mot_deja_illustre";
     static final String CODE_SENS_DIFFERENT = "image.sens_different";
-    static final String CODE_INTROUVABLE = "ressource.introuvable";
     static final String CODE_IMAGE_INDISPONIBLE = "image.indisponible";
     static final String CODE_SENS_INVALIDE = "preparation.sens_invalide";
 
@@ -110,7 +109,7 @@ public class Usages {
      * {@link VisibiliteImages#proposable proposable} et illustrer le Sens retenu pour ce Mot (AD-5, AD-14).
      *
      * @return l'Image liée, vue par l'enseignant courant
-     * @throws ErreurMetier {@code 404 ressource.introuvable} si l'Image n'existe pas ou ne lui est pas proposable ;
+     * @throws ErreurMetier {@code 404 image.indisponible} si l'Image n'existe pas ou ne lui est pas proposable ;
      *         {@code 400 image.sens_different} si elle illustre un autre Sens que le Sens retenu ;
      *         {@code 409 preparation.mot_deja_illustre} si le Mot a déjà une Image
      * @throws IllegalStateException si le Mot de Préparation n'a pas de Sens retenu
@@ -119,7 +118,7 @@ public class Usages {
     public ImageVue lierImage(LierImageCommande commande) {
         UUID enseignant = enseignantCourant.id();
         Image image = imageProposable(commande.imageId(), enseignant)
-                .orElseThrow(() -> new ErreurMetier(404, CODE_INTROUVABLE,
+                .orElseThrow(() -> new ErreurMetier(404, CODE_IMAGE_INDISPONIBLE,
                         "Aucune image proposable ne porte cet identifiant"));
         if (!image.sensId().equals(sensRetenu(commande.preparationMotId()))) {
             throw new ErreurMetier(400, CODE_SENS_DIFFERENT, "Cette image illustre un autre sens que le sens retenu");
@@ -176,7 +175,7 @@ public class Usages {
      *
      * @return l'Image liée, vue par l'enseignant courant
      * @throws ErreurMetier {@code 404 image.indisponible} si l'Image n'existe pas ou ne lui est pas proposable ;
-     *         {@code 400 preparation.sens_invalide} si elle illustre un autre Mot
+     *         {@code 400 image.sens_different} si elle illustre un autre Mot
      * @throws IllegalStateException si le Mot de Préparation n'a pas de Sens retenu
      */
     @Transactional
@@ -195,7 +194,7 @@ public class Usages {
         if (!image.sensId().equals(retenu.sensId())) {
             UUID motId = lexique.sens(retenu.sensId()).map(SensVue::motId).orElse(null);
             if (motId == null || lexique.sensDuMot(motId, image.sensId()).isEmpty()) {
-                throw new ErreurMetier(400, CODE_SENS_INVALIDE, "Cette image illustre un autre mot");
+                throw new ErreurMetier(400, CODE_SENS_DIFFERENT, "Cette image illustre un autre mot");
             }
             retenu.changerSens(image.sensId());
         }

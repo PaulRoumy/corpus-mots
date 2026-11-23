@@ -72,6 +72,7 @@ public class PreparationsService {
     static final String CODE_SENS_INVALIDE = "preparation.sens_invalide";
     static final String CODE_INTROUVABLE = "ressource.introuvable";
     static final String CODE_IMAGE_INDISPONIBLE = "image.indisponible";
+    static final String CODE_SENS_DIFFERENT = "image.sens_different";
     static final String CODE_NOM_TROP_LONG = "preparation.nom_trop_long";
     static final String CODE_MOT_DEJA_ILLUSTRE = "preparation.mot_deja_illustre";
 
@@ -424,9 +425,9 @@ public class PreparationsService {
      *
      * @throws ErreurMetier {@code 404 ressource.introuvable} si la Préparation n'existe pas ou appartient à un
      *         collègue, ou si le Mot n'existe pas ; {@code 404 image.indisponible} si l'Image n'existe pas ou ne lui est
-     *         pas proposable ; {@code 400 preparation.sens_invalide} si l'Image illustre un autre Mot ;
+     *         pas proposable ; {@code 400 image.sens_different} si l'Image illustre un autre Mot ;
      *         {@code 409 preparation.mot_deja_present} si le Mot figure déjà dans la Préparation. Si l'Image change entre
-     *         la lecture de son Sens et son verrou, {@code 404 ressource.introuvable} ou {@code 400 image.sens_different}
+     *         la lecture de son Sens et son verrou, {@code 404 image.indisponible} ou {@code 400 image.sens_different}
      *         ({@link Usages#lierImage})
      */
     @Transactional
@@ -440,7 +441,7 @@ public class PreparationsService {
                 .orElseThrow(() -> new ErreurMetier(404, CODE_IMAGE_INDISPONIBLE,
                         "Aucune image proposable ne porte cet identifiant"));
         if (lexique.sensDuMot(mot.id(), sensId).isEmpty()) {
-            throw new ErreurMetier(400, CODE_SENS_INVALIDE, "Cette image illustre un autre mot");
+            throw new ErreurMetier(400, CODE_SENS_DIFFERENT, "Cette image illustre un autre mot");
         }
         if (preparationMots.contient(preparation.id(), mot.id())) {
             throw new ErreurMetier(409, CODE_MOT_DEJA_PRESENT, "Ce mot figure déjà dans la préparation");
@@ -663,7 +664,7 @@ public class PreparationsService {
      * @throws ErreurMetier {@code 404 ressource.introuvable} si la Préparation n'existe pas ou appartient à un
      *         collègue, ou si le Mot de Préparation n'existe pas ou appartient à une autre Préparation ;
      *         {@code 404 image.indisponible} si l'Image n'existe pas ou ne lui est pas proposable ;
-     *         {@code 400 preparation.sens_invalide} si l'Image illustre un autre Mot
+     *         {@code 400 image.sens_different} si l'Image illustre un autre Mot
      */
     @Transactional
     public MotPreparationVue remplacerImage(UUID id, UUID motPreparationId, UUID imageId) {

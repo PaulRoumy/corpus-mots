@@ -221,7 +221,7 @@ class ChoixImagePreparationResourceTest {
         UUID motPreparation = UUID.fromString(reutiliser(cote.id(), x));
         String avant = etat(motPreparation);
 
-        refus(choisir(preparation, motPreparation, dAutreMot), 400, "preparation.sens_invalide");
+        refus(choisir(preparation, motPreparation, dAutreMot), 400, "image.sens_different");
         assertEquals(avant, etat(motPreparation));
     }
 

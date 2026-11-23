@@ -2259,7 +2259,7 @@ describe('Preparation (En-tête)', () => {
       serveur.match((requete) => requete.url.endsWith('/detection'));
     });
 
-    it('Image devenue indisponible au contrôle sous verrou (404 ressource.introuvable) : message sous le champ, sans Bandeau', async () => {
+    it('autre refus définitif (404 ressource.introuvable, Mot disparu) : son message générique sous le champ, sans Bandeau', async () => {
       await ouvrir();
       champSaisie().focus();
       await detecter('farine', [motDetecte('farine', ['i1'])]);
@@ -2272,26 +2272,7 @@ describe('Preparation (En-tête)', () => {
       );
       await stabiliser();
 
-      expect(texte('.saisie-rapide__erreur')).toContain("Cette image n'est plus disponible.");
-      expect(champSaisie().value).toBe('farine');
-      expect(racine.querySelector('app-bandeau-erreur')).toBeNull();
-      serveur.match((requete) => requete.url.endsWith('/detection'));
-    });
-
-    it('autre refus définitif (400 preparation.sens_invalide) : son message sous le champ, sans Bandeau', async () => {
-      await ouvrir();
-      champSaisie().focus();
-      await detecter('farine', [motDetecte('farine', ['i1'])]);
-      touche('ArrowDown');
-      await entree();
-
-      reutilisation('i1').flush(
-        { status: 400, code: 'preparation.sens_invalide' },
-        { status: 400, statusText: 'Bad Request' },
-      );
-      await stabiliser();
-
-      expect(texte('.saisie-rapide__erreur')).toBe("Ce sens n'appartient pas à ce mot.");
+      expect(texte('.saisie-rapide__erreur')).toBe("Cet élément n'existe plus. Rechargez la page.");
       expect(champSaisie().value).toBe('farine');
       expect(racine.querySelector('app-bandeau-erreur')).toBeNull();
       serveur.match((requete) => requete.url.endsWith('/detection'));

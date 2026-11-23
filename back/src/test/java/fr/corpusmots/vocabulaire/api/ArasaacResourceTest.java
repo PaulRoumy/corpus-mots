@@ -191,7 +191,7 @@ class ArasaacResourceTest {
                 .then()
                 .statusCode(404)
                 .contentType("application/problem+json")
-                .body("code", equalTo("ressource.introuvable"));
+                .body("code", equalTo("arasaac.pictogramme_introuvable"));
     }
 
     @ParameterizedTest
@@ -203,7 +203,7 @@ class ArasaacResourceTest {
                 .when().get("/api/arasaac/pictogrammes/" + id)
                 .then()
                 .statusCode(404)
-                .body("code", equalTo("ressource.introuvable"));
+                .body("code", equalTo("arasaac.pictogramme_introuvable"));
 
         assertEquals(List.of(), source.pictogrammesDemandes);
     }

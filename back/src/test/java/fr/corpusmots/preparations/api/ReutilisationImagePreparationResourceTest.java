@@ -3,13 +3,19 @@ package fr.corpusmots.preparations.api;
 import static io.restassured.RestAssured.given;
 import static org.hamcrest.Matchers.equalTo;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 
 import fr.corpusmots.commun.api.EnseignantsDeTest;
+import fr.corpusmots.commun.api.ErreurMetier;
 import fr.corpusmots.commun.api.ProblemeDto;
+import fr.corpusmots.commun.service.Section;
 import fr.corpusmots.referentiels.api.ReferentielsDeTest;
 import fr.corpusmots.vocabulaire.api.ImagesDeTest;
 import fr.corpusmots.vocabulaire.service.Lexique;
+import fr.corpusmots.vocabulaire.service.LierImageCommande;
 import fr.corpusmots.vocabulaire.service.MotVue;
+import fr.corpusmots.vocabulaire.service.OrigineLien;
+import fr.corpusmots.vocabulaire.service.Usages;
 import io.quarkus.narayana.jta.QuarkusTransaction;
 import io.quarkus.test.junit.QuarkusTest;
 import io.quarkus.test.security.TestSecurity;
@@ -50,6 +56,9 @@ class ReutilisationImagePreparationResourceTest {
 
     @Inject
     Lexique lexique;
+
+    @Inject
+    Usages usages;
 
     @Inject
     EntityManager entityManager;
@@ -157,8 +166,39 @@ class ReutilisationImagePreparationResourceTest {
         sens(cote, "à compléter", null);
         UUID image = image(PAUL, sens(mot("côté"), "côté", "nom"), "privee");
 
-        refus(reutiliser(preparation, cote.id(), image), 400, "preparation.sens_invalide");
+        refus(reutiliser(preparation, cote.id(), image), 400, "image.sens_different");
         rienNEstEcrit();
+    }
+
+    @Test
+    void sousVerrouLImageNonProposableOuDUnAutreSensGardeLesMemesCodes() {
+        // Usages.lierImage revérifie sous verrou ce que reutiliserImage a lu avant : mêmes codes que le contrôle
+        // préalable si l'Image a changé entre-temps (rétrospective de l'Epic 2, constat C-2).
+        ajouter("farine");
+        UUID motPreparation = QuarkusTransaction.requiringNew().call(() -> (UUID) entityManager
+                .createNativeQuery("select id from preparation_mot where preparation_id = :preparation")
+                .setParameter("preparation", preparation)
+                .getSingleResult());
+        MotVue farine = mot("farine");
+        UUID sensAvant = sensRetenu(motPreparation);
+        UUID privee = image(ZOE, sensAvant, "privee");
+        UUID autreSens = image(PAUL, sens(farine, "poudre", "nom"), "privee");
+
+        for (UUID image : new UUID[] { privee, UUID.randomUUID() }) {
+            String cas = image.equals(privee) ? "image privée d'un collègue" : "image absente";
+            ErreurMetier erreur = assertThrows(ErreurMetier.class, () -> lier(motPreparation, image), cas);
+            assertEquals(404, erreur.status(), cas);
+            assertEquals("image.indisponible", erreur.code(), cas);
+        }
+        String cas = "image d'un autre sens";
+        ErreurMetier erreur = assertThrows(ErreurMetier.class, () -> lier(motPreparation, autreSens), cas);
+        assertEquals(400, erreur.status(), cas);
+        assertEquals("image.sens_different", erreur.code(), cas);
+        // Rien d'autre n'est écrit : le Mot ajouté reste seul, avec son Sens retenu, sans lien.
+        assertEquals(List.of("farine:1"), motsEnBase());
+        assertEquals(1L, nombre("select count(*) from sens_retenu"));
+        assertEquals(sensAvant, sensRetenu(motPreparation));
+        assertEquals(0L, nombre("select count(*) from lien_image"));
     }
 
     @Test
@@ -219,6 +259,11 @@ class ReutilisationImagePreparationResourceTest {
         return given().contentType(ContentType.JSON).body(corps)
                 .when().post("/api/preparations/" + preparationId + "/mots/reutilisation")
                 .then();
+    }
+
+    private void lier(UUID motPreparation, UUID image) {
+        usages.lierImage(new LierImageCommande(preparation, motPreparation, image, pouleRousse, Section.MS,
+                OrigineLien.REUTILISEE));
     }
 
     private void ajouter(String saisie) {

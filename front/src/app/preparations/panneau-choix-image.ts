@@ -35,6 +35,7 @@ import { Annuaire } from '../commun/annuaire';
 import { BadgeTypeImage } from '../commun/badge-type-image/badge-type-image';
 import { CompteCourant } from '../commun/compte-courant';
 import { CreationSens, NouveauSens } from '../commun/creation-sens/creation-sens';
+import { CODES_IMAGE_INDISPONIBLE } from '../commun/erreurs/codes-image-indisponible';
 import { codeErreur, messageErreur } from '../commun/erreurs/message-erreur';
 import { ChargementImage, ImageSecurisee } from '../commun/image-securisee/image-securisee';
 import { Squelette } from '../commun/squelette/squelette';
@@ -57,9 +58,6 @@ export const MESSAGE_SENS_INDISPONIBLE = "Ce sens n'est plus proposé pour ce mo
 
 /** Refus d'un Sens qui n'est plus visible (liste lue périmée) : la liste est relue. */
 const CODE_SENS_INVALIDE = 'preparation.sens_invalide';
-
-/** Refus qui signalent une Image devenue indisponible entre la lecture et le choix. */
-const CODES_IMAGE_INDISPONIBLE = new Set(['image.indisponible', 'preparation.sens_invalide']);
 
 type Etat =
   | { readonly nom: 'chargement' }

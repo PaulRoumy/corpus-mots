@@ -62,6 +62,7 @@ import { CarteIdentite } from '../commun/carte-identite/carte-identite';
 import { ChampThemes, themesParNom } from '../commun/champ-themes/champ-themes';
 import { CompteCourant } from '../commun/compte-courant';
 import { DialogueConfirmation } from '../commun/dialogue-confirmation/dialogue-confirmation';
+import { CODES_IMAGE_INDISPONIBLE } from '../commun/erreurs/codes-image-indisponible';
 import {
   codeErreur,
   erreurPassagere,
@@ -204,16 +205,6 @@ export function messageEchecAjout(echec: EchecAjout): string {
   const verbe = echec.ajouts.length === 1 ? "n'a pas été ajouté" : "n'ont pas été ajoutés";
   return `${mots} ${verbe}. ${echec.message}`;
 }
-
-/**
- * Refus d'une réutilisation dont l'Image n'est plus proposable ou a changé de Sens, y compris au contrôle sous verrou
- * (`ressource.introuvable`) : « image indisponible » sous le champ.
- */
-const CODES_IMAGE_INDISPONIBLE: ReadonlySet<string> = new Set([
-  'image.indisponible',
-  'image.sens_different',
-  'ressource.introuvable',
-]);
 
 /**
  * Refus d'un Mot déjà présent, qui le nomme : l'enseignant peut déjà taper le Mot suivant quand il s'affiche.
@@ -1175,8 +1166,9 @@ export class Preparation {
         return;
       }
       if (image !== undefined && code !== null) {
-        // Refus définitif : « Réessayer » échouerait de nouveau. La saisie remise relance la détection : l'enseignant
-        // choisit une autre Image, ou Entrée sans Image.
+        // Refus définitif : « Réessayer » échouerait de nouveau. Image indisponible : la saisie remise relance la
+        // détection, l'enseignant choisit une autre Image ou Entrée sans Image. Autre refus (Préparation ou Mot
+        // disparu, `ressource.introuvable`) : son message sous le champ, la saisie est remise.
         this.saisieRapide()?.refuser(
           CODES_IMAGE_INDISPONIBLE.has(code)
             ? MESSAGES_PAR_CODE['image.indisponible']

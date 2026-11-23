@@ -62,16 +62,16 @@ public class SuggestionsArasaac {
     /**
      * Fichier PNG du pictogramme {@code idArasaac}, sans copie (ni en base ni sur disque).
      *
-     * @throws ErreurMetier {@code 404 ressource.introuvable} si ARASAAC ne le connaît pas, ou sans appel pour un
+     * @throws ErreurMetier {@code 404 arasaac.pictogramme_introuvable} si ARASAAC ne le connaît pas, ou sans appel pour un
      *         identifiant nul ou négatif ; {@code 503 arasaac.indisponible} si ARASAAC ne répond pas
      */
     public byte[] pictogramme(long idArasaac) {
         if (idArasaac <= 0) {
-            throw new ErreurMetier(404, "ressource.introuvable", "Pictogramme ARASAAC inconnu : " + idArasaac);
+            throw new ErreurMetier(404, CODE_PICTOGRAMME_INTROUVABLE, "Pictogramme ARASAAC inconnu : " + idArasaac);
         }
         try {
             return source.pictogramme(idArasaac)
-                    .orElseThrow(() -> new ErreurMetier(404, "ressource.introuvable",
+                    .orElseThrow(() -> new ErreurMetier(404, CODE_PICTOGRAMME_INTROUVABLE,
                             "Pictogramme ARASAAC inconnu : " + idArasaac));
         } catch (ArasaacIndisponible erreur) {
             throw indisponible(erreur);

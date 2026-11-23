@@ -238,7 +238,7 @@ describe('PanneauChoixImage', () => {
     expect(affiches).toEqual([true]);
   });
 
-  it('Image passée entre-temps à un autre Mot : traitée comme indisponible, la liste est relue', async () => {
+  it('Image passée entre-temps à un autre Mot (400 image.sens_different) : traitée comme indisponible, la liste est relue', async () => {
     await ouvrir();
 
     options()[2].click();
@@ -246,7 +246,7 @@ describe('PanneauChoixImage', () => {
     serveur
       .expectOne(URL_IMAGE)
       .flush(
-        { status: 400, code: 'preparation.sens_invalide' },
+        { status: 400, code: 'image.sens_different' },
         { status: 400, statusText: 'Bad Request' },
       );
     await stabiliser();

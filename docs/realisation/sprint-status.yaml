@@ -202,5 +202,5 @@ action_items:
       un autre Sens, pictogramme inconnu ; une seule liste de codes image indisponible
       dans le front (C-2)"
     owner: "dev, avec l action 2"
-    status: open
+    status: done
     ref: "docs/realisation/epic-2-retro-2026-11-22.md"

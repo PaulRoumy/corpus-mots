@@ -1,4 +1,3 @@
-import { HttpErrorResponse } from '@angular/common/http';
 import {
   afterNextRender,
   ChangeDetectionStrategy,
@@ -30,6 +29,7 @@ import { MotPreparationDto } from '../api/models/mot-preparation-dto';
 import { RepriseMotPreparationDto } from '../api/models/reprise-mot-preparation-dto';
 import { BandeauAnnuler } from '../commun/bandeau-annuler/bandeau-annuler';
 import { BandeauErreur } from '../commun/bandeau-erreur/bandeau-erreur';
+import { CODES_IMAGE_INDISPONIBLE } from '../commun/erreurs/codes-image-indisponible';
 import { codeErreur, erreurPassagere, messageErreur } from '../commun/erreurs/message-erreur';
 import { ChargementImage, ImageSecurisee } from '../commun/image-securisee/image-securisee';
 
@@ -54,23 +54,6 @@ export function libelleSensReprise(reprise: RepriseMotPreparationDto): string {
     : reprise.sens.libelle;
 }
 
-/** Refus d'une reprise dont l'Image n'est plus proposable ou n'illustre plus ce Mot. */
-const CODES_IMAGE_INDISPONIBLE: ReadonlySet<string> = new Set([
-  'image.indisponible',
-  'image.sens_different',
-  'preparation.sens_invalide',
-]);
-
-/**
- * Refus sous verrou : `409 ressource.introuvable`, renvoyé par `Usages.lierImage` quand l'Image cesse d'être
- * proposable. Un `404 ressource.introuvable` (Préparation ou Mot disparu) garde son message générique.
- */
-function refusSousVerrou(erreur: unknown, code: string | null): boolean {
-  return (
-    code === 'ressource.introuvable' && erreur instanceof HttpErrorResponse && erreur.status === 409
-  );
-}
-
 /** Nombre maximal de Mots par requête « Tout reprendre » (le back refuse au-delà). */
 export const REPRISES_PAR_LOT = 200;
 
@@ -88,7 +71,7 @@ export function messageRefusReprise(forme: string, erreur: unknown): string {
   if (code === 'preparation.mot_deja_present') {
     return `« ${forme} » est déjà dans la préparation.`;
   }
-  if ((code !== null && CODES_IMAGE_INDISPONIBLE.has(code)) || refusSousVerrou(erreur, code)) {
+  if (code !== null && CODES_IMAGE_INDISPONIBLE.has(code)) {
     return `« ${forme} » n'a pas pu être repris : son image n'est plus disponible.`;
   }
   return `« ${forme} » n'a pas pu être repris. ${messageErreur(erreur)}`;
