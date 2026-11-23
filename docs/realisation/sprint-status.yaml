@@ -186,7 +186,7 @@ action_items:
       panneaux fermés avec focus rendu, une seule écriture aria-live, état de la Grille
       sorti dans un service (B-1, B-2, B-3, B-7, A-1)"
     owner: "dev, avant l Epic 3"
-    status: open
+    status: done
     ref: "docs/realisation/epic-2-retro-2026-11-22.md"
   - id: "epic-2-retro-item-13-encart-et-bandeau-annuler-fermeture-à-la"
     epic: 2
