@@ -56,6 +56,24 @@ export function raisonVersement(code: string, licence: LicenceImage): string {
   return estRefusVersement(code) ? RAISONS[code] : RAISON_INCONNUE;
 }
 
+/** Message de partage après le versement de plusieurs Images. */
+export const MESSAGE_VERSEMENT_PLURIEL =
+  "Les images restent les vôtres. Les collègues peuvent les utiliser, personne ne peut les modifier.";
+
+/** Raisons propres au versement en lot : l'Image d'un collègue, ou une Image qui n'est plus visible. */
+const RAISONS_LOT: Readonly<Record<string, string>> = {
+  'image.reservee_au_proprietaire': "image d'un collègue",
+  'image.indisponible': 'image indisponible',
+};
+
+/**
+ * Raison d'une Image refusée par un versement en lot (`refusees[].code`) : celles de `raisonVersement`, plus « image
+ * d'un collègue » et « image indisponible ».
+ */
+export function raisonRefusLot(code: string, licence: LicenceImage): string {
+  return Object.hasOwn(RAISONS_LOT, code) ? RAISONS_LOT[code] : raisonVersement(code, licence);
+}
+
 /** Phrase affichée sous « Verser » indisponible : « Verser indisponible : source à préciser. » */
 export function phraseVersementIndisponible(code: string, licence: LicenceImage): string {
   return `Verser indisponible : ${raisonVersement(code, licence)}.`;

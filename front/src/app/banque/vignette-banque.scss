@@ -1,7 +1,33 @@
 // Vignette d'Image de la Banque (key-banque.html › `.vg`, `.meta`, `.own`, `.st.ver`) : un bouton qui ouvre le Panneau
 // Carte d'identité (story 3.1, partie 2).
 :host {
+  // Case de sélection (story 3.3) : masquée et inerte au pointeur au repos ; visible au survol, au focus de la vignette
+  // (case ou bouton), sur toutes les vignettes dès qu'une sélection existe, et toujours sur un écran sans survol.
+  --case-selection-opacite: 0;
+  --case-selection-pointeur: none;
+
+  position: relative;
   display: block;
+}
+
+:host(:hover),
+:host(:focus-within),
+:host(.vignette-banque--selection-active) {
+  --case-selection-opacite: 1;
+  --case-selection-pointeur: auto;
+}
+
+@media (hover: none) {
+  :host {
+    --case-selection-opacite: 1;
+    --case-selection-pointeur: auto;
+  }
+}
+
+.vignette__case {
+  position: absolute;
+  inset-block-start: 0;
+  inset-inline-start: 0;
 }
 
 .vignette {
@@ -21,12 +47,17 @@
   cursor: pointer;
 }
 
-// Carte d'identité ouverte sur cette Image : fond `primary-container` et anneau `primary` (DESIGN.md ›
-// selected-card-background, selected-card-ring), distincts de l'anneau de focus seul.
-.vignette--ouverte {
-  outline: var(--cm-epaisseur-anneau-vignette-ouverte) solid var(--mat-sys-primary);
+// Vignette sélectionnée (story 3.3) : fond `primary-container` (DESIGN.md › case-selection, selected-card-background),
+// avec la case cochée : jamais la couleur seule.
+.vignette--selectionnee {
   background: var(--mat-sys-primary-container);
   color: var(--mat-sys-on-primary-container);
+}
+
+// Carte d'identité ouverte sur cette Image : anneau `primary` de 2 px (selected-card-ring), sans fond ; il se combine
+// avec le fond de la sélection.
+.vignette--ouverte {
+  outline: var(--cm-epaisseur-anneau-vignette-ouverte) solid var(--mat-sys-primary);
 }
 
 .vignette__description {

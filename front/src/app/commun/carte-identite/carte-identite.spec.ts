@@ -1803,5 +1803,59 @@ describe('CarteIdentite', () => {
       expect(repereVersee()).toBeUndefined();
       expect(bouton()?.textContent?.trim()).toBe(LIBELLE_VERSER);
     });
+
+    describe('actualiser', () => {
+      it('pendant la première lecture : une nouvelle lecture, dont le résultat s’affiche', async () => {
+        fixture.componentInstance.actualiser();
+        await stabiliser();
+        const lectures = serveur.match(`/api/images/${IMAGE}`);
+        expect(lectures).toHaveLength(2);
+        lectures[1].flush(VERSEE);
+        await stabiliser();
+        lectures[0].flush(VERSABLE);
+        await stabiliser();
+
+        expect(repereVersee()).toBe('versée');
+        expect(bouton()).toBeNull();
+      });
+
+      it('enregistrement en cours : relue après lui, la saisie non enregistrée reste', async () => {
+        await servir(VERSABLE);
+        const emises = appliquees();
+        await saisirSource('Wikimedia');
+        const enregistrement = serveur.expectOne(URL_DESCRIPTION);
+        const auteur = racine.querySelector<HTMLInputElement>('input.carte-identite__auteur')!;
+        auteur.value = 'Claire';
+        auteur.dispatchEvent(new Event('input'));
+        await stabiliser();
+
+        fixture.componentInstance.actualiser();
+        await stabiliser();
+        serveur.expectNone(`/api/images/${IMAGE}`);
+
+        enregistrement.flush({ ...VERSABLE, source: 'Wikimedia' });
+        await stabiliser();
+        serveur.expectOne(`/api/images/${IMAGE}`).flush({ ...VERSEE, source: 'Wikimedia' });
+        await stabiliser();
+
+        expect(repereVersee()).toBe('versée');
+        expect(auteur.value).toBe('Claire');
+        expect(emises.at(-1)).toEqual({ ...VERSEE, source: 'Wikimedia' });
+      });
+
+      it('ignorée après un changement d’Image', async () => {
+        await servir(VERSABLE);
+        await saisirSource('Wikimedia');
+        const enregistrement = serveur.expectOne(URL_DESCRIPTION);
+        fixture.componentInstance.actualiser();
+        fixture.componentRef.setInput('imageId', AUTRE);
+        await stabiliser();
+
+        enregistrement.flush({ ...VERSABLE, source: 'Wikimedia' });
+        await stabiliser();
+        serveur.expectNone(`/api/images/${IMAGE}`);
+        await servir({ ...CARTE, id: AUTRE }, AUTRE);
+      });
+    });
   });
 });

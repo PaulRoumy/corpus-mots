@@ -9,6 +9,7 @@ import {
 import { signal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { MATERIAL_ANIMATIONS } from '@angular/material/core';
+import { MatDialog, MatDialogRef } from '@angular/material/dialog';
 import { convertToParamMap, provideRouter, Router } from '@angular/router';
 import { RouterTestingHarness } from '@angular/router/testing';
 import { BehaviorSubject, map } from 'rxjs';
@@ -20,7 +21,13 @@ import { Annuaire, EtatAnnuaire } from '../commun/annuaire';
 import { CompteCourant } from '../commun/compte-courant';
 import { provideIcones } from '../commun/icones';
 import { AjouterImage } from '../preparations/ajouter-image';
-import { Banque, libelleImages, provenanceDeLUrl } from './banque';
+import {
+  Banque,
+  fusionnerResultat,
+  libelleImages,
+  provenanceDeLUrl,
+  recapitulatifVersement,
+} from './banque';
 import { MESSAGE_RESEAU } from '../commun/erreurs/message-erreur';
 import { MESSAGE_PRECISER_ALBUM } from './barre-filtres';
 import { filtresDeLUrl } from './filtres-banque';
@@ -170,6 +177,68 @@ describe('filtresDeLUrl', () => {
     });
     expect(filtresDeLUrl(convertToParamMap({ mot: 'a'.repeat(100) }))).toEqual({
       mot: 'a'.repeat(100),
+    });
+  });
+});
+
+describe('recapitulatifVersement et fusionnerResultat', () => {
+  const PARTAGE_1 =
+    "L'image reste la vôtre. Les collègues peuvent l'utiliser, personne ne peut la modifier.";
+
+  it('une versée : message de partage au singulier', () => {
+    expect(recapitulatifVersement({ versees: 1, dejaVersees: 0, refusees: [] })).toEqual({
+      partage: PARTAGE_1,
+      bilan: '1 image versée.',
+      refusees: [],
+    });
+  });
+
+  it('« Aucune image versée » avec une déjà versée (singulier), sans message de partage', () => {
+    expect(recapitulatifVersement({ versees: 0, dejaVersees: 1, refusees: [] })).toEqual({
+      partage: null,
+      bilan: 'Aucune image versée. 1 était déjà dans la banque.',
+      refusees: [],
+    });
+  });
+
+  it('toutes déjà versées', () => {
+    expect(recapitulatifVersement({ versees: 0, dejaVersees: 3, refusees: [] }).bilan).toBe(
+      'Aucune image versée. 3 étaient déjà dans la banque.',
+    );
+  });
+
+  it('fusion : une Image refusée deux fois ne compte qu’une fois, versée depuis elle ne l’est plus', () => {
+    const noms = new Map([
+      ['a', '« loup » (animal)'],
+      ['b', '« renard » (animal)'],
+    ]);
+    const acquis = fusionnerResultat(
+      { versees: 0, dejaVersees: 0, refusees: [] },
+      {
+        versees: [],
+        dejaVersees: [],
+        refusees: [
+          { imageId: 'a', code: 'image.versement.source_manquante', licence: null },
+          { imageId: 'b', code: 'image.indisponible', licence: null },
+        ],
+      },
+      noms,
+    );
+    const fusion = fusionnerResultat(
+      acquis,
+      {
+        versees: ['b'],
+        dejaVersees: [],
+        refusees: [{ imageId: 'a', code: 'image.versement.type_inconnu', licence: null }],
+      },
+      noms,
+    );
+    expect(fusion).toEqual({
+      versees: 1,
+      dejaVersees: 0,
+      refusees: [
+        { imageId: 'a', texte: "« loup » (animal) : type inconnu, précisez le type de l'image" },
+      ],
     });
   });
 });
@@ -1741,6 +1810,725 @@ describe('Banque', () => {
       await servir(requeteFiltree('mes-mots', { sensId: SENS_RENARD, section: 'ps' }), []);
 
       expect(texte(puceFiltre('sensId'))).toBe('Sens : renard (goupil)');
+    });
+  });
+
+  describe('sélection et Verser en lot', () => {
+    const ZOE = SOPHIE;
+    const RESEAU = { status: 0, statusText: 'Unknown Error' };
+    const caseDe = (index: number) =>
+      vignettes()[index].querySelector<HTMLInputElement>('app-case-selection input')!;
+    const cochees = () =>
+      vignettes()
+        .map((v, index) => (v.querySelector<HTMLInputElement>('input')!.checked ? index : -1))
+        .filter((index) => index >= 0);
+    const barre = () => racine.querySelector('.barre-actions-lot');
+    const nombreBarre = () => texte(racine.querySelector('.barre-actions-lot__nombre'));
+    const bilan = () => texte(racine.querySelector('.banque__bilan'));
+    const refusees = () =>
+      [...racine.querySelectorAll('.banque__refusees li')].map((li) => texte(li));
+    const requeteVersement = () =>
+      serveur.expectOne(
+        (requete) => requete.url === '/api/images/versements' && requete.method === 'POST',
+      );
+
+    async function cocher(index: number, plage = false) {
+      caseDe(index).dispatchEvent(
+        new MouseEvent('click', { bubbles: true, cancelable: true, shiftKey: plage }),
+      );
+      await stabiliser();
+    }
+
+    async function echap(element: Element) {
+      element.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+      await stabiliser();
+    }
+
+    async function verser() {
+      bouton('Verser')!.click();
+      await stabiliser();
+    }
+
+    it('cocher : case avant le bouton, nommée ; barre « 1 image sélectionnée » ; la Carte ne s’ouvre pas', async () => {
+      await ouvrirPage();
+      await servir(requeteImages('mes-mots'), images(3));
+      expect(barre()).toBeNull();
+
+      const vignette = vignettes()[0];
+      const focusables = [...vignette.querySelectorAll('input, button')];
+      expect(focusables.map((element) => element.tagName)).toEqual(['INPUT', 'BUTTON']);
+      expect(caseDe(0).getAttribute('aria-label')).toBe('Sélectionner « loup » (animal)');
+      expect(vignette.classList).not.toContain('vignette-banque--selection-active');
+
+      await cocher(0);
+
+      expect(cochees()).toEqual([0]);
+      expect(nombreBarre()).toBe('1 image sélectionnée');
+      expect(racine.querySelector('app-carte-identite')).toBeNull();
+      serveur.expectNone((requete) => /\/api\/images\/[^/]+$/.test(requete.url));
+      expect(vignette.querySelector('button.vignette')!.classList).toContain(
+        'vignette--selectionnee',
+      );
+      expect(vignette.querySelector('button.vignette')!.classList).not.toContain(
+        'vignette--ouverte',
+      );
+      // Toutes les cases restent visibles dès qu'une sélection existe.
+      expect(
+        vignettes().every((v) => v.classList.contains('vignette-banque--selection-active')),
+      ).toBe(true);
+      expect(texte(bouton('Verser'))).toBe('Verser');
+    });
+
+    it('clavier : la case focalisée, Espace (clic natif) la coche, le nombre est annoncé', async () => {
+      await ouvrirPage();
+      await servir(requeteImages('mes-mots'), images(2));
+
+      caseDe(1).focus();
+      caseDe(1).click();
+      await stabiliser();
+
+      expect(cochees()).toEqual([1]);
+      expect(document.activeElement).toBe(caseDe(1));
+      expect(announce).toHaveBeenCalledWith('1 image sélectionnée.', 'polite');
+      expect(racine.querySelector('app-carte-identite')).toBeNull();
+    });
+
+    it('plage : case 2 cochée, Maj+clic sur la case 5 → Images 2 à 5', async () => {
+      await ouvrirPage();
+      await servir(requeteImages('mes-mots'), images(6));
+
+      await cocher(1);
+      await cocher(4, true);
+
+      expect(cochees()).toEqual([1, 2, 3, 4]);
+      expect(nombreBarre()).toBe('4 images sélectionnées');
+    });
+
+    it('plage dans l’ordre de la grille, groupes par Sens compris', async () => {
+      await ouvrirPage();
+      // Ordre reçu : loup, renard, loup ; affiché : loup, loup, renard.
+      await servir(requeteImages('mes-mots'), [
+        image(),
+        image({ forme: 'renard', sensId: SENS_RENARD }),
+        image(),
+      ]);
+
+      await cocher(0);
+      await cocher(1, true);
+
+      expect(cochees()).toEqual([0, 1]);
+    });
+
+    it('tout : « Tout sélectionner » avec 2 pages chargées prend toutes les Images affichées', async () => {
+      await ouvrirPage();
+      await servir(requeteImages('mes-mots'), images(100), 230);
+      await cocher(0);
+      bouton('Afficher plus')!.click();
+      await stabiliser();
+      await servir(requeteImages('mes-mots', 1), images(100), 230);
+      // La sélection survit à « Afficher plus ».
+      expect(cochees()).toEqual([0]);
+
+      bouton('Tout sélectionner')!.click();
+      await stabiliser();
+
+      expect(nombreBarre()).toBe('200 images sélectionnées');
+      expect(cochees()).toHaveLength(200);
+    });
+
+    it('Échap : sélection vide, barre masquée, focus gardé ; depuis la barre, focus au titre', async () => {
+      await ouvrirPage();
+      await servir(requeteImages('mes-mots'), images(3));
+      await cocher(0);
+      caseDe(0).focus();
+
+      await echap(caseDe(0));
+
+      expect(cochees()).toEqual([]);
+      expect(barre()).toBeNull();
+      expect(document.activeElement).toBe(caseDe(0));
+      expect(announce).toHaveBeenLastCalledWith('Aucune image sélectionnée.', 'polite');
+
+      await cocher(1);
+      bouton('Tout sélectionner')!.focus();
+      await echap(bouton('Tout sélectionner')!);
+
+      expect(barre()).toBeNull();
+      expect(document.activeElement).toBe(racine.querySelector('h1'));
+    });
+
+    it('« Désélectionner » vide la sélection et rend le focus au titre', async () => {
+      await ouvrirPage();
+      await servir(requeteImages('mes-mots'), images(2));
+      await cocher(0);
+      bouton('Désélectionner')!.focus();
+      bouton('Désélectionner')!.click();
+      await stabiliser();
+
+      expect(cochees()).toEqual([]);
+      expect(barre()).toBeNull();
+      expect(document.activeElement).toBe(racine.querySelector('h1'));
+    });
+
+    it('Échap avec panneau : le panneau se ferme d’abord, la sélection reste', async () => {
+      await ouvrirPage();
+      const [loup, autre] = images(2);
+      await servir(requeteImages('mes-mots'), [loup, autre]);
+      await cocher(1);
+      vignettes()[0].querySelector<HTMLButtonElement>('button.vignette')!.click();
+      await stabiliser();
+      serveur.expectOne(`/api/images/${loup.id}`).flush(carteDe(loup));
+      await stabiliser();
+      servirMiniatures();
+      await stabiliser();
+      // La sélection survit à l'ouverture de la Carte.
+      expect(cochees()).toEqual([1]);
+
+      await echap(racine.querySelector('app-carte-identite aside')!);
+      expect(racine.querySelector('app-carte-identite')).toBeNull();
+      expect(cochees()).toEqual([1]);
+
+      // Panneau rouvert, Échap depuis la grille : il se ferme, la sélection reste encore.
+      vignettes()[0].querySelector<HTMLButtonElement>('button.vignette')!.click();
+      await stabiliser();
+      serveur.expectOne(`/api/images/${loup.id}`).flush(carteDe(loup));
+      await stabiliser();
+      await echap(caseDe(1));
+      expect(racine.querySelector('app-carte-identite')).toBeNull();
+      expect(cochees()).toEqual([1]);
+
+      await echap(caseDe(1));
+      expect(cochees()).toEqual([]);
+    });
+
+    it('filtre : la sélection se vide au changement de filtres', async () => {
+      await ouvrirPage();
+      await servir(requeteImages('mes-mots'), [
+        image(),
+        image({ forme: 'renard', sensId: SENS_RENARD }),
+      ]);
+      await cocher(0);
+      await cocher(1);
+
+      racine.querySelector<HTMLButtonElement>('.groupe__filtrer')!.click();
+      await stabiliser();
+      expect(barre()).toBeNull();
+      const requete = serveur.expectOne(
+        (r) => r.url === '/api/images' && r.params.get('sensId') === SENS_LOUP,
+      );
+      await servir(requete, [image()]);
+
+      expect(cochees()).toEqual([]);
+      expect(barre()).toBeNull();
+    });
+
+    it('rechargement : la sélection se réduit aux Images encore affichées', async () => {
+      await ouvrirPage();
+      const [a, b, c] = images(3);
+      await servir(requeteImages('mes-mots'), [a, b, c]);
+      await cocher(0);
+      await cocher(2);
+
+      imagesAjoutees.set(1);
+      await stabiliser();
+      await servir(requeteImages('mes-mots'), [a, b]);
+
+      expect(cochees()).toEqual([0]);
+      expect(nombreBarre()).toBe('1 image sélectionnée');
+    });
+
+    it('lot mixte : 1 versée avec le message de partage, refusées avec leur raison et gardées', async () => {
+      await ouvrirPage('/banque?provenance=tout');
+      const photo = image({ typeImage: 'photo_personnelle', versabilite: 'versable' });
+      const album = image({
+        typeImage: 'image_album',
+        versabilite: 'image.versement.image_album',
+      });
+      const deZoe = image({
+        proprietaireId: ZOE,
+        etat: 'versee',
+        versee: true,
+        forme: 'renard',
+        sensId: SENS_RENARD,
+        sensLibelle: 'goupil',
+      });
+      await servir(requeteImages('tout'), [photo, album, deZoe]);
+      await cocher(0);
+      bouton('Tout sélectionner')!.click();
+      await stabiliser();
+
+      await verser();
+      const requete = requeteVersement();
+      expect(requete.request.body).toEqual({ imageIds: [photo.id, album.id, deZoe.id] });
+      // Pendant l'envoi : « Versement… », sélection figée.
+      expect(texte(racine.querySelector('.banque__verser'))).toBe('Versement…');
+      expect(caseDe(0).getAttribute('aria-disabled')).toBe('true');
+      await cocher(0);
+      expect(cochees()).toEqual([0, 1, 2]);
+      expect(bouton('Tout sélectionner')!.getAttribute('aria-disabled')).toBe('true');
+
+      requete.flush({
+        versees: [photo.id],
+        dejaVersees: [],
+        refusees: [
+          { imageId: album.id, code: 'image.versement.image_album', licence: null },
+          { imageId: deZoe.id, code: 'image.reservee_au_proprietaire', licence: null },
+        ],
+      });
+      await stabiliser();
+
+      // Seul le bilan est dans la région vive ; la liste est hors de celle-ci.
+      expect(racine.querySelector('.banque__bilan')?.getAttribute('role')).toBe('status');
+      expect(racine.querySelector('[role="status"] .banque__refusees')).toBeNull();
+      expect(texte(racine.querySelector('.banque__partage'))).toBe(
+        "L'image reste la vôtre. Les collègues peuvent l'utiliser, personne ne peut la modifier.",
+      );
+      expect(texte(racine.querySelector('.banque__bilan'))).toBe('1 image versée.');
+      expect(refusees()).toEqual([
+        "« loup » (animal) : une image d'album reste dans Mes mots",
+        "« renard » (goupil) : image d'un collègue",
+      ]);
+      expect(texte(vignettes()[0].querySelector('.vignette__meta'))).toContain('versée');
+      expect(cochees()).toEqual([1, 2]);
+      expect(nombreBarre()).toBe('2 images sélectionnées');
+      expect(caseDe(0).hasAttribute('aria-disabled')).toBe(false);
+
+      // Le geste de sélection suivant ferme le récapitulatif.
+      await cocher(0);
+      expect(bilan()).toBe('');
+    });
+
+    it('licence : « licence à préciser » sans licence, « licence non partageable » avec pixabay', async () => {
+      await ouvrirPage();
+      const [sans, avec] = images(2);
+      await servir(requeteImages('mes-mots'), [sans, avec]);
+      await cocher(0);
+      bouton('Tout sélectionner')!.click();
+      await stabiliser();
+
+      await verser();
+      requeteVersement().flush({
+        versees: [],
+        dejaVersees: [],
+        refusees: [
+          { imageId: sans.id, code: 'image.versement.licence_non_versable', licence: null },
+          { imageId: avec.id, code: 'image.versement.licence_non_versable', licence: 'pixabay' },
+        ],
+      });
+      await stabiliser();
+
+      expect(racine.querySelector('.banque__partage')).toBeNull();
+      expect(texte(racine.querySelector('.banque__bilan'))).toBe('Aucune image versée.');
+      expect(refusees()).toEqual([
+        '« loup » (animal) : licence à préciser',
+        '« loup » (animal) : licence non partageable',
+      ]);
+    });
+
+    it('déjà versées : comptées à part, sorties de la sélection ; récapitulatif fermé, focus au titre', async () => {
+      await ouvrirPage();
+      const [a, b, c] = images(3);
+      await servir(requeteImages('mes-mots'), [a, b, c]);
+      await cocher(0);
+      bouton('Tout sélectionner')!.click();
+      await stabiliser();
+
+      bouton('Verser')!.focus();
+      await verser();
+      requeteVersement().flush({ versees: [a.id], dejaVersees: [b.id, c.id], refusees: [] });
+      await stabiliser();
+
+      expect(texte(racine.querySelector('.banque__bilan'))).toBe(
+        '1 image versée. 2 étaient déjà dans la banque.',
+      );
+      expect(cochees()).toEqual([]);
+      // Plus rien de sélectionné : « Verser » disparaît, la barre reste pour le récapitulatif.
+      expect(bouton('Verser')).toBeUndefined();
+      expect(nombreBarre()).toBe('Aucune image sélectionnée');
+      const fermer = racine.querySelector<HTMLButtonElement>(
+        'button[aria-label="Fermer le récapitulatif"]',
+      )!;
+      expect(document.activeElement).toBe(fermer);
+
+      fermer.click();
+      await stabiliser();
+      expect(barre()).toBeNull();
+      expect(document.activeElement).toBe(racine.querySelector('h1'));
+    });
+
+    it('gros lot : 650 Images, 500 puis 150 ; échec du second, Bandeau, « Réessayer » finit le lot', async () => {
+      await ouvrirPage();
+      const toutes = images(650);
+      await servir(requeteImages('mes-mots'), toutes, 650);
+      await cocher(0);
+      bouton('Tout sélectionner')!.click();
+      await stabiliser();
+      expect(nombreBarre()).toBe('650 images sélectionnées');
+
+      await verser();
+      const premier = requeteVersement();
+      expect(premier.request.body.imageIds).toEqual(toutes.slice(0, 500).map((i) => i.id));
+      premier.flush({ versees: toutes.slice(0, 500).map((i) => i.id), dejaVersees: [], refusees: [] });
+      await stabiliser();
+      const second = requeteVersement();
+      expect(second.request.body.imageIds).toEqual(toutes.slice(500).map((i) => i.id));
+      second.flush(null, RESEAU);
+      await stabiliser();
+
+      expect(bandeau()).toBe(MESSAGE_RESEAU);
+      // Le premier paquet reste appliqué et résumé avec le Bandeau.
+      expect(bilan()).toBe('500 images versées.');
+      expect(texte(vignettes()[0].querySelector('.vignette__meta'))).toContain('versée');
+      expect(texte(vignettes()[500].querySelector('.vignette__meta'))).not.toContain('versée');
+      expect(nombreBarre()).toBe('150 images sélectionnées');
+
+      // Sélection rendue après l'échec : une Image désélectionnée n'est pas renvoyée ; le récapitulatif reste.
+      await cocher(500);
+      expect(nombreBarre()).toBe('149 images sélectionnées');
+      expect(bilan()).toBe('500 images versées.');
+
+      bouton('Réessayer')!.click();
+      await stabiliser();
+      const reprise = requeteVersement();
+      expect(reprise.request.body.imageIds).toEqual(toutes.slice(501).map((i) => i.id));
+      reprise.flush({ versees: toutes.slice(501).map((i) => i.id), dejaVersees: [], refusees: [] });
+      await stabiliser();
+
+      expect(bandeau()).toBeUndefined();
+      expect(bilan()).toBe('649 images versées.');
+      expect(texte(racine.querySelector('.banque__partage'))).toBe(
+        'Les images restent les vôtres. Les collègues peuvent les utiliser, personne ne peut les modifier.',
+      );
+    }, 20_000);
+
+    it('gros lot sans échec : deux appels, un seul récapitulatif', async () => {
+      await ouvrirPage();
+      const toutes = images(650);
+      await servir(requeteImages('mes-mots'), toutes, 650);
+      await cocher(0);
+      bouton('Tout sélectionner')!.click();
+      await stabiliser();
+
+      await verser();
+      requeteVersement().flush({
+        versees: toutes.slice(0, 500).map((i) => i.id),
+        dejaVersees: [],
+        refusees: [],
+      });
+      await stabiliser();
+      expect(bilan()).toBe('');
+      requeteVersement().flush({
+        versees: toutes.slice(500).map((i) => i.id),
+        dejaVersees: [],
+        refusees: [],
+      });
+      await stabiliser();
+
+      expect(bilan()).toBe('650 images versées.');
+    }, 20_000);
+
+    it('erreur réseau : Bandeau, grille et sélection inchangées, « Réessayer » renvoie le lot', async () => {
+      await ouvrirPage();
+      const [a, b] = images(2);
+      await servir(requeteImages('mes-mots'), [a, b]);
+      await cocher(0);
+      await cocher(1);
+
+      await verser();
+      requeteVersement().flush(null, RESEAU);
+      await stabiliser();
+
+      expect(bandeau()).toBe(MESSAGE_RESEAU);
+      expect(cochees()).toEqual([0, 1]);
+      expect(texte(vignettes()[0].querySelector('.vignette__meta'))).not.toContain('versée');
+      expect(texte(bouton('Verser'))).toBe('Verser');
+
+      bouton('Réessayer')!.click();
+      await stabiliser();
+      const reprise = requeteVersement();
+      expect(reprise.request.body).toEqual({ imageIds: [a.id, b.id] });
+      reprise.flush({ versees: [a.id, b.id], dejaVersees: [], refusees: [] });
+      await stabiliser();
+      expect(texte(racine.querySelector('.banque__bilan'))).toBe('2 images versées.');
+    });
+
+    it('panneau ouvert sur une Image du lot versée : la Carte est relue, badge « versée »', async () => {
+      await ouvrirPage();
+      const loup = image({ versabilite: 'versable' });
+      await servir(requeteImages('mes-mots'), [loup, image()]);
+      vignettes()[0].querySelector<HTMLButtonElement>('button.vignette')!.click();
+      await stabiliser();
+      serveur.expectOne(`/api/images/${loup.id}`).flush(carteDe(loup, { versabilite: 'versable' }));
+      await stabiliser();
+      servirMiniatures();
+      await stabiliser();
+      await cocher(0);
+
+      await verser();
+      requeteVersement().flush({ versees: [loup.id], dejaVersees: [], refusees: [] });
+      await stabiliser();
+      serveur
+        .expectOne(`/api/images/${loup.id}`)
+        .flush(carteDe(loup, { etat: 'versee', versabilite: null }));
+      await stabiliser();
+
+      const panneau = racine.querySelector('app-carte-identite aside')!;
+      expect(texte(panneau)).toContain('versée');
+      expect(panneau.querySelector('app-versement-image button')).toBeNull();
+      expect(texte(vignettes()[0].querySelector('.vignette__meta'))).toContain('versée');
+    });
+
+    it('nom partagé : vignette, case et récapitulatif disent « forme » (Sens), sans « () » pour un Sens vide', async () => {
+      await ouvrirPage();
+      const sansSens = image({ sensLibelle: '' });
+      await servir(requeteImages('mes-mots'), [sansSens]);
+      expect(
+        vignettes()[0].querySelector('button.vignette')!.getAttribute('aria-label'),
+      ).toBe("Carte d'identité de « loup »");
+      expect(caseDe(0).getAttribute('aria-label')).toBe('Sélectionner « loup »');
+
+      await cocher(0);
+      await verser();
+      requeteVersement().flush({
+        versees: [],
+        dejaVersees: [],
+        refusees: [
+          { imageId: sansSens.id, code: 'image.versement.source_manquante', licence: null },
+        ],
+      });
+      await stabiliser();
+      expect(refusees()).toEqual(['« loup » : source à préciser']);
+    });
+
+    it('le récapitulatif se ferme au changement de filtres puis de provenance', async () => {
+      await ouvrirPage();
+      const [a, b] = images(2);
+      await servir(requeteImages('mes-mots'), [a, b]);
+      await cocher(0);
+      await verser();
+      requeteVersement().flush({ versees: [a.id], dejaVersees: [], refusees: [] });
+      await stabiliser();
+      expect(bilan()).toBe('1 image versée.');
+
+      racine.querySelector<HTMLButtonElement>('.groupe__filtrer')!.click();
+      await stabiliser();
+      expect(barre()).toBeNull();
+      await servir(
+        serveur.expectOne((r) => r.url === '/api/images' && r.params.get('sensId') === SENS_LOUP),
+        [a, b],
+      );
+
+      await cocher(1);
+      await verser();
+      requeteVersement().flush({ versees: [b.id], dejaVersees: [], refusees: [] });
+      await stabiliser();
+      expect(bilan()).toBe('1 image versée.');
+
+      await choisir('Tout');
+      expect(barre()).toBeNull();
+      await servir(
+        serveur.expectOne((r) => r.url === '/api/images' && r.params.get('provenance') === 'tout'),
+        [a, b],
+      );
+      expect(barre()).toBeNull();
+    });
+
+    it('erreur 400 : Bandeau sans « Réessayer », sélection gardée', async () => {
+      await ouvrirPage();
+      await servir(requeteImages('mes-mots'), images(2));
+      await cocher(0);
+      await verser();
+      requeteVersement().flush(
+        { code: 'requete.invalide', status: 400, title: 'Bad Request' },
+        { status: 400, statusText: 'Bad Request' },
+      );
+      await stabiliser();
+
+      expect(bandeau()).toBeTruthy();
+      expect(bouton('Réessayer')).toBeUndefined();
+      expect(cochees()).toEqual([0]);
+      expect(bilan()).toBe('');
+    });
+
+    it('erreurs séparées : un versement garde l’erreur d’« Afficher plus », un rechargement garde celle du versement', async () => {
+      await ouvrirPage();
+      const premieres = images(100);
+      await servir(requeteImages('mes-mots'), premieres, 150);
+      bouton('Afficher plus')!.click();
+      await stabiliser();
+      requeteImages('mes-mots', 1).flush(null, RESEAU);
+      await stabiliser();
+      expect(racine.querySelectorAll('app-bandeau-erreur')).toHaveLength(1);
+
+      await cocher(0);
+      await verser();
+      expect(racine.querySelectorAll('app-bandeau-erreur')).toHaveLength(1);
+      requeteVersement().flush(null, RESEAU);
+      await stabiliser();
+      expect(racine.querySelectorAll('app-bandeau-erreur')).toHaveLength(2);
+
+      imagesAjoutees.set(1);
+      await stabiliser();
+      await servir(requeteImages('mes-mots'), premieres, 100);
+      const versement = racine.querySelector('.banque__erreur-versement');
+      expect(texte(versement?.querySelector('[role="alert"]'))).toBe(MESSAGE_RESEAU);
+
+      versement!.querySelector<HTMLButtonElement>('.bandeau-erreur__reessayer')!.click();
+      await stabiliser();
+      expect(requeteVersement().request.body).toEqual({ imageIds: [premieres[0].id] });
+    });
+
+    it('page demandée avant un versement, reçue après : les Images versées gardent « versée »', async () => {
+      await ouvrirPage();
+      const [a, b] = images(2);
+      await servir(requeteImages('mes-mots'), [a, b]);
+      await cocher(0);
+      await verser();
+      const versement = requeteVersement();
+
+      imagesAjoutees.set(2);
+      await stabiliser();
+      const relecture = requeteImages('mes-mots');
+      versement.flush({ versees: [a.id], dejaVersees: [], refusees: [] });
+      await stabiliser();
+      await servir(relecture, [a, b]);
+
+      expect(texte(vignettes()[0].querySelector('.vignette__meta'))).toContain('versée');
+      expect(texte(vignettes()[1].querySelector('.vignette__meta'))).not.toContain('versée');
+    });
+
+    it('rechargement en cours : « Tout sélectionner », « Désélectionner » et « Verser » indisponibles', async () => {
+      await ouvrirPage();
+      const [a, b] = images(2);
+      await servir(requeteImages('mes-mots'), [a, b]);
+      await cocher(0);
+
+      imagesAjoutees.set(3);
+      await stabiliser();
+      for (const libelle of ['Tout sélectionner', 'Désélectionner', 'Verser']) {
+        expect(bouton(libelle)?.getAttribute('aria-disabled')).toBe('true');
+        bouton(libelle)!.click();
+      }
+      await stabiliser();
+      serveur.expectNone('/api/images/versements');
+      expect(nombreBarre()).toBe('1 image sélectionnée');
+
+      await servir(requeteImages('mes-mots'), [a, b]);
+      expect(bouton('Verser')?.getAttribute('aria-disabled')).not.toBe('true');
+    });
+
+    it('filtres changés pendant l’envoi : le paquet suivant n’est pas envoyé, rien n’est écrit', async () => {
+      await ouvrirPage();
+      const toutes = images(650);
+      await servir(requeteImages('mes-mots'), toutes, 650);
+      await cocher(0);
+      bouton('Tout sélectionner')!.click();
+      await stabiliser();
+      await verser();
+      const premier = requeteVersement();
+
+      racine.querySelector<HTMLButtonElement>('.groupe__filtrer')!.click();
+      await stabiliser();
+      const filtree = serveur.expectOne(
+        (r) => r.url === '/api/images' && r.params.get('sensId') === SENS_LOUP,
+      );
+      premier.flush({ versees: toutes.slice(0, 500).map((i) => i.id), dejaVersees: [], refusees: [] });
+      await stabiliser();
+
+      serveur.expectNone('/api/images/versements');
+      expect(barre()).toBeNull();
+      expect(bandeau()).toBeUndefined();
+      await servir(filtree, toutes.slice(0, 2));
+      // La page demandée pendant l'envoi reprend les Images versées.
+      expect(texte(vignettes()[0].querySelector('.vignette__meta'))).toContain('versée');
+      expect(caseDe(0).hasAttribute('aria-disabled')).toBe(false);
+    });
+
+    it('page quittée pendant l’envoi : le paquet suivant n’est pas envoyé', async () => {
+      await ouvrirPage();
+      const toutes = images(650);
+      await servir(requeteImages('mes-mots'), toutes, 650);
+      await cocher(0);
+      bouton('Tout sélectionner')!.click();
+      await stabiliser();
+      await verser();
+      const premier = requeteVersement();
+
+      harnais.fixture.destroy();
+      premier.flush({ versees: toutes.slice(0, 500).map((i) => i.id), dejaVersees: [], refusees: [] });
+      await tour();
+
+      serveur.expectNone('/api/images/versements');
+    });
+
+    it('Échap depuis un champ de saisie ou avec un dialogue ouvert : la sélection reste', async () => {
+      await ouvrirPage();
+      await servir(requeteImages('mes-mots'), images(2));
+      await cocher(0);
+
+      const champ = document.createElement('input');
+      champ.type = 'text';
+      racine.querySelector('.page')!.appendChild(champ);
+      await echap(champ);
+      expect(cochees()).toEqual([0]);
+      champ.remove();
+
+      const dialogues = TestBed.inject(MatDialog);
+      const espion = vi
+        .spyOn(dialogues, 'openDialogs', 'get')
+        .mockReturnValue([{}] as unknown as MatDialogRef<unknown>[]);
+      await echap(caseDe(0));
+      expect(cochees()).toEqual([0]);
+      espion.mockRestore();
+
+      await echap(caseDe(0));
+      expect(cochees()).toEqual([]);
+    });
+
+    it('Échap ferme toujours le panneau d’abord, même sans sélection ou pendant un versement', async () => {
+      await ouvrirPage();
+      const [loup, autre] = images(2);
+      await servir(requeteImages('mes-mots'), [loup, autre]);
+      const ouvrir = async () => {
+        vignettes()[0].querySelector<HTMLButtonElement>('button.vignette')!.click();
+        await stabiliser();
+        serveur.expectOne(`/api/images/${loup.id}`).flush(carteDe(loup));
+        await stabiliser();
+      };
+
+      await ouvrir();
+      await echap(vignettes()[1].querySelector('button.vignette')!);
+      expect(racine.querySelector('app-carte-identite')).toBeNull();
+
+      await cocher(1);
+      await verser();
+      await ouvrir();
+      await echap(caseDe(1));
+      expect(racine.querySelector('app-carte-identite')).toBeNull();
+      expect(cochees()).toEqual([1]);
+      requeteVersement().flush({ versees: [autre.id], dejaVersees: [], refusees: [] });
+      await stabiliser();
+    });
+
+    it('Carte ouverte sur une Image déjà versée du lot : elle est relue aussi', async () => {
+      await ouvrirPage();
+      const loup = image();
+      await servir(requeteImages('mes-mots'), [loup, image()]);
+      vignettes()[0].querySelector<HTMLButtonElement>('button.vignette')!.click();
+      await stabiliser();
+      serveur.expectOne(`/api/images/${loup.id}`).flush(carteDe(loup));
+      await stabiliser();
+      await cocher(0);
+
+      await verser();
+      requeteVersement().flush({ versees: [], dejaVersees: [loup.id], refusees: [] });
+      await stabiliser();
+
+      serveur
+        .expectOne(`/api/images/${loup.id}`)
+        .flush(carteDe(loup, { etat: 'versee', versabilite: null }));
+      await stabiliser();
+      expect(bilan()).toBe('Aucune image versée. 1 était déjà dans la banque.');
     });
   });
 });

@@ -5,6 +5,7 @@ import {
   ChangeDetectionStrategy,
   Component,
   computed,
+  DestroyRef,
   effect,
   ElementRef,
   inject,
@@ -18,20 +19,33 @@ import { toSignal } from '@angular/core/rxjs-interop';
 import { MatButtonModule } from '@angular/material/button';
 import { MatDialog } from '@angular/material/dialog';
 import { MatChipListboxChange, MatChipsModule } from '@angular/material/chips';
+import { MatIconModule } from '@angular/material/icon';
 import { ActivatedRoute, ParamMap, Router } from '@angular/router';
 import { map } from 'rxjs';
 import { Api } from '../api/api';
 import { listerImagesBanque } from '../api/fn/images-resource/lister-images-banque';
+import { verserImages } from '../api/fn/images-resource/verser-images';
 import { CarteIdentiteImageDto } from '../api/models/carte-identite-image-dto';
 import { ImageBanqueDto } from '../api/models/image-banque-dto';
+import { RefusVersementImageDto } from '../api/models/refus-versement-image-dto';
+import { ResultatVersementLotDto } from '../api/models/resultat-versement-lot-dto';
 import { Annuaire } from '../commun/annuaire';
 import { BandeauErreur } from '../commun/bandeau-erreur/bandeau-erreur';
+import { BarreActionsLot } from '../commun/barre-actions-lot/barre-actions-lot';
 import { CarteIdentite } from '../commun/carte-identite/carte-identite';
 import { CompteCourant } from '../commun/compte-courant';
-import { messageErreur } from '../commun/erreurs/message-erreur';
+import { erreurPassagere, messageErreur } from '../commun/erreurs/message-erreur';
 import { EtatVide } from '../commun/etat-vide/etat-vide';
 import { categorieGrammaticale, LIBELLES_CATEGORIE } from '../commun/libelles-images';
+import { BasculeSelection } from '../commun/selection/case-selection';
+import { Selection } from '../commun/selection/selection';
 import { Squelette } from '../commun/squelette/squelette';
+import {
+  LIBELLE_VERSEMENT_EN_COURS,
+  MESSAGE_VERSEMENT,
+  MESSAGE_VERSEMENT_PLURIEL,
+  raisonRefusLot,
+} from '../commun/versement/raisons-versement';
 import { AjouterImage } from '../preparations/ajouter-image';
 import { BarreFiltres } from './barre-filtres';
 import {
@@ -42,6 +56,7 @@ import {
   filtresPoses,
   memesFiltres,
 } from './filtres-banque';
+import { nomImage } from './nom-image';
 import { ID_PANNEAU_CARTE_IDENTITE, VignetteBanque } from './vignette-banque';
 
 /** Provenance des Images de la Banque, même valeur dans l'URL et dans l'API. */
@@ -56,6 +71,9 @@ export const PROVENANCES: readonly { readonly valeur: Provenance; readonly libel
 
 /** Images lues par page : la taille de page maximale du back. */
 export const TAILLE_PAGE_BANQUE = 100;
+
+/** Identifiants envoyés par appel de `POST /images/versements` : le maximum du back. */
+export const TAILLE_PAQUET_VERSEMENT = 500;
 
 /** Propriétaire affiché pour l'enseignant connecté. */
 export const PROPRIETAIRE_MOI = 'vous';
@@ -87,6 +105,120 @@ interface EchecBanque {
   readonly reessayer: () => void;
 }
 
+/** Image refusée par un versement en lot, telle que le récapitulatif la nomme. */
+interface RefusAffiche {
+  readonly imageId: string;
+  /** « « loup » (animal) : raison ». */
+  readonly texte: string;
+}
+
+/** Résultat cumulé d'un versement en lot, sur tous ses paquets. */
+export interface ResultatVersement {
+  readonly versees: number;
+  readonly dejaVersees: number;
+  readonly refusees: readonly RefusAffiche[];
+}
+
+const RESULTAT_VIDE: ResultatVersement = { versees: 0, dejaVersees: 0, refusees: [] };
+
+/** Lot de versement : ce qui reste à envoyer, les noms pris à l'envoi et le résultat déjà acquis. */
+interface LotVersement {
+  readonly restants: readonly string[];
+  readonly noms: ReadonlyMap<string, string>;
+  readonly resultat: ResultatVersement;
+}
+
+/** Échec d'un versement en lot, affiché dans son propre Bandeau d'erreur. */
+interface EchecVersement {
+  readonly message: string;
+  readonly reessayable: boolean;
+}
+
+/** Récapitulatif d'un versement en lot, affiché dans la Barre d'actions en lot. */
+export interface RecapitulatifVersement {
+  /** Message de partage, si au moins une Image est versée. */
+  readonly partage: string | null;
+  /** « 2 images versées. 1 était déjà dans la banque. » */
+  readonly bilan: string;
+  readonly refusees: readonly RefusAffiche[];
+}
+
+/** Récapitulatif d'un versement en lot : message de partage, bilan, puis les refusées et leur raison. */
+export function recapitulatifVersement(resultat: ResultatVersement): RecapitulatifVersement {
+  const { versees, dejaVersees } = resultat;
+  let bilan =
+    versees === 0
+      ? 'Aucune image versée.'
+      : `${versees} image${versees > 1 ? 's' : ''} versée${versees > 1 ? 's' : ''}.`;
+  if (dejaVersees > 0) {
+    bilan +=
+      dejaVersees === 1
+        ? ' 1 était déjà dans la banque.'
+        : ` ${dejaVersees} étaient déjà dans la banque.`;
+  }
+  return {
+    partage: versees === 0 ? null : versees === 1 ? MESSAGE_VERSEMENT : MESSAGE_VERSEMENT_PLURIEL,
+    bilan,
+    refusees: resultat.refusees,
+  };
+}
+
+/**
+ * Ajoute la réponse d'un paquet au résultat acquis ; une Image n'est refusée qu'une fois (la dernière raison reçue),
+ * et ne l'est plus si elle est versée depuis.
+ */
+export function fusionnerResultat(
+  acquis: ResultatVersement,
+  reponse: ResultatVersementLotDto,
+  noms: ReadonlyMap<string, string>,
+): ResultatVersement {
+  const refusees = new Map(acquis.refusees.map((refus) => [refus.imageId, refus]));
+  for (const refus of reponse.refusees) {
+    refusees.set(refus.imageId, refusAffiche(refus, noms));
+  }
+  for (const id of [...reponse.versees, ...reponse.dejaVersees]) {
+    refusees.delete(id);
+  }
+  return {
+    versees: acquis.versees + reponse.versees.length,
+    dejaVersees: acquis.dejaVersees + reponse.dejaVersees.length,
+    refusees: [...refusees.values()],
+  };
+}
+
+/** « « loup » (animal) : raison » d'une Image refusée. */
+function refusAffiche(refus: RefusVersementImageDto, noms: ReadonlyMap<string, string>): RefusAffiche {
+  const nom = noms.get(refus.imageId) ?? 'Image';
+  return {
+    imageId: refus.imageId,
+    texte: `${nom} : ${raisonRefusLot(refus.code, refus.licence ?? null)}`,
+  };
+}
+
+/** L'Image telle qu'après son versement : `versee`, badge « versée », plus rien à verser. */
+function imageVersee(image: ImageBanqueDto): ImageBanqueDto {
+  return image.etat === 'versee' && image.versee && image.versabilite == null
+    ? image
+    : { ...image, etat: 'versee', versee: true, versabilite: null };
+}
+
+/** Vrai si Échap vient d'un champ de saisie ou d'un menu ouvert : il ne vide pas la sélection. */
+function echapDeSaisieOuMenu(cible: EventTarget | null): boolean {
+  if (!(cible instanceof Element)) {
+    return false;
+  }
+  if (cible.closest('[role="menu"], .mat-mdc-menu-panel')) {
+    return true;
+  }
+  if (cible instanceof HTMLTextAreaElement || cible instanceof HTMLSelectElement) {
+    return true;
+  }
+  return (
+    cible instanceof HTMLInputElement &&
+    !['checkbox', 'radio', 'button', 'submit', 'reset'].includes(cible.type)
+  );
+}
+
 /**
  * Rubrique Banque (story 3.1, partie 1, FR-18) : une seule Banque, ouverte sur Mes mots. La Puce de provenance (Mes
  * mots, Banque de l'école, Tout), en choix unique, est reflétée dans l'URL (`?provenance=`). La grille regroupe les
@@ -113,6 +245,22 @@ interface EchecBanque {
  * l'autre, ou « Sens (inconnu) » si la liste chargée ne le montre pas. Filtres posés sans résultat : « Aucune image. »
  * et « Effacer les filtres », qui ne garde que la provenance déjà dans l'URL et rend le focus au titre.
  *
+ * Sélection et Verser en lot (story 3.3, partie 3a, UX-DR-12) : chaque vignette porte une Case de sélection
+ * (`commun/selection`) ; la Barre d'actions en lot (`commun/barre-actions-lot`), en haut de la grille, montre le nombre
+ * sélectionné, « Tout sélectionner » (les Images affichées, pages déjà chargées), « Désélectionner » et « Verser »,
+ * indisponibles pendant un rechargement. Maj+clic sélectionne une plage dans l'ordre de la grille. Échap ferme d'abord
+ * le panneau ; sinon il vide la sélection (pas pendant un versement, ni depuis un champ de saisie ou un menu) et le
+ * focus va au titre si l'élément focalisé disparaît. La sélection survit à « Afficher plus » et au panneau, se vide à
+ * chaque changement de provenance ou de filtres et se réduit aux Images encore affichées après un rechargement.
+ * « Verser » envoie `POST /images/versements` par paquets de 500, sélection figée ; les vignettes versées (ou déjà
+ * versées) prennent « versée » sans relire la liste, sortent de la sélection (les refusées y restent) et la Carte
+ * ouverte sur l'une d'elles est relue ; une page demandée avant le versement et reçue après le reprend. Un changement
+ * de provenance ou de filtres, ou la page quittée, arrêtent l'envoi sans rien écrire. Le récapitulatif (message de
+ * partage, bilan seul en `role="status"`, refusées et leur raison) reste dans la barre jusqu'à sa fermeture ou au geste
+ * de sélection suivant. Échec : Bandeau propre au versement, avec le récapitulatif des paquets appliqués ;
+ * « Réessayer », pour une erreur passagère seulement, envoie les Images non envoyées encore sélectionnées et complète
+ * le même récapitulatif.
+ *
  * Aucun filtrage d'Images ici (AD-2) : le back renvoie ce que l'enseignant peut voir. Le propriétaire est résolu par
  * l'annuaire (AD-20).
  */
@@ -120,15 +268,18 @@ interface EchecBanque {
   selector: 'app-banque',
   imports: [
     BandeauErreur,
+    BarreActionsLot,
     BarreFiltres,
     CarteIdentite,
     EtatVide,
     MatButtonModule,
     MatChipsModule,
+    MatIconModule,
     Squelette,
     VignetteBanque,
   ],
   changeDetection: ChangeDetectionStrategy.OnPush,
+  host: { '(keydown.escape)': 'echap($event)' },
   styleUrls: [
     '../commun/page-rubrique.scss',
     '../commun/disposition-panneau.scss',
@@ -175,6 +326,71 @@ interface EchecBanque {
             (fermer)="erreur.set(null)"
           />
         }
+
+        <app-barre-actions-lot
+          class="banque__barre-lot"
+          [nombre]="selection.nombre()"
+          [ouverte]="recapitulatif() !== null || erreurVersement() !== null"
+          [figee]="selection.figee() || images() === null"
+          [annoncer]="!versementEnCours() && recapitulatif() === null"
+          (toutSelectionner)="toutSelectionner()"
+          (deselectionner)="deselectionner()"
+        >
+          @if (selection.nombre() > 0) {
+            <button
+              matButton="tonal"
+              class="banque__verser"
+              type="button"
+              disabledInteractive
+              [disabled]="versementEnCours() || images() === null"
+              [attr.aria-busy]="versementEnCours()"
+              (click)="verserSelection()"
+            >
+              {{ versementEnCours() ? libelleVersementEnCours : 'Verser' }}
+            </button>
+          }
+          <div barreActionsLotSuite class="banque__suite-lot">
+            @if (erreurVersement(); as echec) {
+              <app-bandeau-erreur
+                class="banque__erreur-versement"
+                [message]="echec.message"
+                [reessayable]="echec.reessayable"
+                (reessayer)="reessayerVersement()"
+                (fermer)="fermerErreurVersement()"
+              />
+            }
+            <div class="banque__recapitulatif-ligne">
+              <div class="banque__recapitulatif">
+                @if (recapitulatif()?.partage; as partage) {
+                  <p class="banque__partage">{{ partage }}</p>
+                }
+                <!-- Seul le bilan est annoncé ; la région existe avant d'être remplie. -->
+                <p class="banque__bilan" role="status">{{ recapitulatif()?.bilan }}</p>
+                @if (recapitulatif()?.refusees; as refusees) {
+                  @if (refusees.length > 0) {
+                    <ul class="banque__refusees" tabindex="0" aria-label="Images non versées">
+                      @for (refus of refusees; track refus.imageId) {
+                        <li>{{ refus.texte }}</li>
+                      }
+                    </ul>
+                  }
+                }
+              </div>
+              @if (recapitulatif() !== null) {
+                <button
+                  #fermerRecap
+                  matIconButton
+                  class="banque__fermer-recapitulatif"
+                  type="button"
+                  aria-label="Fermer le récapitulatif"
+                  (click)="fermerRecapitulatif()"
+                >
+                  <mat-icon svgIcon="fermer" aria-hidden="true" />
+                </button>
+              }
+            </div>
+          </div>
+        </app-barre-actions-lot>
 
         @if (images(); as chargees) {
           @if (chargees.length === 0) {
@@ -234,7 +450,11 @@ interface EchecBanque {
                         [image]="image"
                         [proprietaire]="proprietaire(image.proprietaireId)"
                         [ouverte]="carteOuverte() === image.id"
+                        [selectionnee]="selection.estSelectionne(image.id)"
+                        [selectionActive]="selection.active()"
+                        [selectionFigee]="selection.figee()"
                         (ouvrir)="ouvrirCarteIdentite(image.id)"
+                        (basculerSelection)="basculerSelection(image.id, $event)"
                       />
                     </li>
                   }
@@ -372,6 +592,27 @@ export class Banque {
       this.images() !== null,
   );
 
+  /** Identifiants des Images affichées, dans l'ordre de la grille (groupes par Sens). */
+  private readonly ordreAffiche = computed(() =>
+    this.groupes().flatMap((groupe) => groupe.images.map((image) => image.id)),
+  );
+  /** Images sélectionnées (story 3.3), dans l'ordre de la grille. */
+  protected readonly selection = new Selection(() => this.ordreAffiche());
+  protected readonly versementEnCours = signal(false);
+  /** Récapitulatif du dernier versement en lot, affiché dans la Barre d'actions en lot. */
+  protected readonly recapitulatif = signal<RecapitulatifVersement | null>(null);
+  protected readonly libelleVersementEnCours = LIBELLE_VERSEMENT_EN_COURS;
+  /** Échec du dernier versement en lot, indépendant des erreurs de lecture de la liste. */
+  protected readonly erreurVersement = signal<EchecVersement | null>(null);
+  /** Lot en échec réessayable : « Réessayer » le reprend. */
+  private lotEnEchec: LotVersement | null = null;
+  /** Contexte de la sélection (provenance, filtres) : un versement lancé dans un autre n'écrit plus rien. */
+  private contexteSelection = 0;
+  private detruite = false;
+  /** Images versées ou déjà versées par cette page, dans l'ordre : réappliquées à une page demandée avant. */
+  private readonly journalVersements: string[] = [];
+  private readonly boutonFermerRecapitulatif = viewChild('fermerRecap', { read: ElementRef });
+
   /** Image dont le Panneau Carte d'identité est ouvert ; un seul à la fois. */
   protected readonly carteOuverte = signal<string | null>(null);
   private readonly panneauCarteIdentite = viewChild(CarteIdentite);
@@ -398,6 +639,7 @@ export class Banque {
   constructor() {
     void this.annuaire.charger();
     void this.compteCourant.charger();
+    inject(DestroyRef).onDestroy(() => (this.detruite = true));
     // Nouvelle provenance ou nouveaux filtres : le panneau se ferme et la liste repart de la première page ; le nombre
     // d'Images est annoncé, sauf à l'arrivée sur la page sans filtre.
     let premiereLecture = true;
@@ -410,6 +652,12 @@ export class Banque {
         // Retour arrière du navigateur, focus dans le panneau : il ne tombe pas sur la page, il va au titre.
         const focusDansPanneau = this.focusDansPanneau();
         this.carteOuverte.set(null);
+        // La sélection, le récapitulatif et l'échec d'un versement valent pour la provenance et les filtres quittés.
+        this.contexteSelection++;
+        this.selection.reinitialiser();
+        this.recapitulatif.set(null);
+        this.erreurVersement.set(null);
+        this.lotEnEchec = null;
         if (focusDansPanneau) {
           this.focusTitre();
         }
@@ -641,6 +889,191 @@ export class Banque {
     }
   };
 
+  /** Case de sélection d'une vignette : bascule, ou plage (Maj+clic) ; le récapitulatif se ferme. */
+  protected basculerSelection(imageId: string, geste: BasculeSelection): void {
+    if (this.selection.figee()) {
+      return;
+    }
+    this.fermerRecapitulatifLibre();
+    if (geste.plage) {
+      this.selection.selectionnerPlage(imageId);
+    } else {
+      this.selection.basculer(imageId);
+    }
+  }
+
+  /** « Tout sélectionner » : toutes les Images affichées (pages déjà chargées). */
+  protected toutSelectionner(): void {
+    if (this.selection.figee() || this.images() === null) {
+      return;
+    }
+    this.fermerRecapitulatifLibre();
+    this.selection.toutSelectionner();
+  }
+
+  /** « Désélectionner » : sélection vide ; la barre disparaît, le focus va au titre. */
+  protected deselectionner(): void {
+    if (this.selection.figee() || this.images() === null) {
+      return;
+    }
+    this.fermerRecapitulatifLibre();
+    this.selection.toutDeselectionner();
+    this.rendreFocusSiPerdu();
+  }
+
+  protected fermerRecapitulatif(): void {
+    this.recapitulatif.set(null);
+    this.rendreFocusSiPerdu();
+  }
+
+  /** Ferme le récapitulatif, sauf s'il résume un lot en échec que « Réessayer » doit compléter. */
+  private fermerRecapitulatifLibre(): void {
+    if (this.lotEnEchec === null) {
+      this.recapitulatif.set(null);
+    }
+  }
+
+  /**
+   * Échap dans la page (le panneau, les menus et les dialogues le traitent d'abord) : un panneau ouvert se ferme,
+   * toujours ; sinon la sélection se vide, sauf pendant un versement ou si Échap vient d'un champ de saisie ou d'un
+   * menu. Sans sélection ni récapitulatif, rien ne change.
+   */
+  protected echap(evenement: Event): void {
+    if (evenement.defaultPrevented || this.dialogues.openDialogs.length > 0) {
+      return;
+    }
+    if (this.carteOuverte() !== null) {
+      this.fermerCarteIdentite();
+      return;
+    }
+    if (
+      (!this.selection.active() && this.recapitulatif() === null) ||
+      this.selection.figee() ||
+      echapDeSaisieOuMenu(evenement.target)
+    ) {
+      return;
+    }
+    this.selection.toutDeselectionner();
+    this.fermerRecapitulatifLibre();
+    this.rendreFocusSiPerdu();
+  }
+
+  /** Après le rendu, si l'élément focalisé a disparu, focus à `repli` ou au titre « Banque ». */
+  private rendreFocusSiPerdu(repli?: () => HTMLElement | undefined): void {
+    afterNextRender(
+      () => {
+        const actif = document.activeElement;
+        if (actif === null || actif === document.body || !actif.isConnected) {
+          (repli?.() ?? this.titre().nativeElement).focus();
+        }
+      },
+      { injector: this.injecteur },
+    );
+  }
+
+  /** « Verser » de la Barre d'actions en lot : un nouveau lot, les Images sélectionnées dans l'ordre de la grille. */
+  protected verserSelection(): void {
+    const images = this.images();
+    const ids = this.selection.identifiants();
+    if (this.versementEnCours() || images === null || ids.length === 0) {
+      return;
+    }
+    // Noms du récapitulatif, pris à l'envoi : la grille peut changer pendant le versement.
+    const noms = new Map(images.map((image) => [image.id, nomImage(image.forme, image.sensLibelle)]));
+    this.lotEnEchec = null;
+    this.erreurVersement.set(null);
+    this.recapitulatif.set(null);
+    void this.envoyerVersement({ restants: ids, noms, resultat: RESULTAT_VIDE });
+  }
+
+  /** « Réessayer » : les Images non envoyées du lot en échec encore sélectionnées, dans le même récapitulatif. */
+  protected reessayerVersement(): void {
+    const lot = this.lotEnEchec;
+    if (lot === null || this.versementEnCours() || this.images() === null) {
+      return;
+    }
+    const selectionnees = new Set(this.selection.identifiants());
+    this.lotEnEchec = null;
+    this.erreurVersement.set(null);
+    void this.envoyerVersement({
+      ...lot,
+      restants: lot.restants.filter((id) => selectionnees.has(id)),
+    });
+  }
+
+  /** Bandeau du versement fermé : plus de reprise ; le récapitulatif partiel reste. */
+  protected fermerErreurVersement(): void {
+    this.erreurVersement.set(null);
+    this.lotEnEchec = null;
+    this.rendreFocusSiPerdu();
+  }
+
+  /**
+   * Envoie les Images du lot par paquets de 500, sélection figée ; chaque paquet reçu est appliqué aussitôt. Le contexte
+   * quitté (provenance, filtres) ou la page détruite arrêtent l'envoi, et rien n'est plus écrit. En échec, le
+   * récapitulatif des paquets appliqués s'affiche avec le Bandeau du versement, qui propose « Réessayer » si l'erreur
+   * est passagère.
+   */
+  private async envoyerVersement(lot: LotVersement): Promise<void> {
+    if (this.versementEnCours()) {
+      return;
+    }
+    const contexte = this.contexteSelection;
+    const actuel = () => !this.detruite && contexte === this.contexteSelection;
+    this.versementEnCours.set(true);
+    this.selection.figer(true);
+    let resultat = lot.resultat;
+    let reste = lot.restants;
+    try {
+      while (reste.length > 0) {
+        const paquet = reste.slice(0, TAILLE_PAQUET_VERSEMENT);
+        const reponse = await this.api.invoke(verserImages, { body: { imageIds: [...paquet] } });
+        reste = reste.slice(paquet.length);
+        this.journalVersements.push(...reponse.versees, ...reponse.dejaVersees);
+        if (!actuel()) {
+          return;
+        }
+        this.appliquerVersement([...reponse.versees, ...reponse.dejaVersees]);
+        resultat = fusionnerResultat(resultat, reponse, lot.noms);
+      }
+    } catch (erreur) {
+      if (!actuel()) {
+        return;
+      }
+      const reessayable = erreurPassagere(erreur);
+      this.lotEnEchec = reessayable ? { ...lot, restants: reste, resultat } : null;
+      this.erreurVersement.set({ message: messageErreur(erreur), reessayable });
+      // Les paquets déjà appliqués sont résumés avec le Bandeau.
+      if (resultat.versees + resultat.dejaVersees + resultat.refusees.length > 0) {
+        this.recapitulatif.set(recapitulatifVersement(resultat));
+      }
+      return;
+    } finally {
+      this.versementEnCours.set(false);
+      this.selection.figer(false);
+    }
+    this.recapitulatif.set(recapitulatifVersement(resultat));
+    // « Verser » disparu (plus rien de sélectionné) : le focus va au bouton qui ferme le récapitulatif.
+    this.rendreFocusSiPerdu(() => this.boutonFermerRecapitulatif()?.nativeElement);
+  }
+
+  /**
+   * Images versées ou déjà versées par un paquet : leurs vignettes prennent « versée » sans relire la liste et elles
+   * sortent de la sélection ; la Carte ouverte sur l'une d'elles est relue.
+   */
+  private appliquerVersement(ids: readonly string[]): void {
+    const sorties = new Set(ids);
+    const images = this.images();
+    if (images !== null && images.some((image) => sorties.has(image.id))) {
+      this.images.set(images.map((image) => (sorties.has(image.id) ? imageVersee(image) : image)));
+    }
+    this.selection.retirer(sorties);
+    const ouverte = this.carteOuverte();
+    if (ouverte !== null && sorties.has(ouverte)) {
+      this.panneauCarteIdentite()?.actualiser();
+    }
+  }
+
   protected ajouter(evenement: Event): void {
     void this.ajouterImage.ouvrir(evenement.currentTarget as HTMLElement);
   }
@@ -672,6 +1105,7 @@ export class Banque {
   }
 
   private async lire(lecture: number, page: number, annoncer = false): Promise<void> {
+    const versementsAvant = this.journalVersements.length;
     try {
       const reponse = await this.api.invoke(listerImagesBanque, {
         ...this.filtres(),
@@ -684,13 +1118,18 @@ export class Banque {
       }
       // Une Image ajoutée entre deux pages décale la suite : celles déjà affichées ne le sont pas deux fois.
       const dejaLues = new Set((this.images() ?? []).map((image) => image.id));
+      // Une Image versée pendant la lecture : la page reçue la montre encore privée.
+      const verseesDepuis = new Set(this.journalVersements.slice(versementsAvant));
       const images = [
         ...(this.images() ?? []),
-        ...reponse.elements.filter((image) => !dejaLues.has(image.id)),
+        ...reponse.elements
+          .filter((image) => !dejaLues.has(image.id))
+          .map((image) => (verseesDepuis.has(image.id) ? imageVersee(image) : image)),
       ];
       this.images.set(images);
       if (page === 0) {
         this.fermerPanneauSansImage(images);
+        this.selection.garderSeulement(images.map((image) => image.id));
       }
       if (page > 0) {
         void this.annonceur.announce(

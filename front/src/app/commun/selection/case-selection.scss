@@ -1,0 +1,68 @@
+// Case de sélection (DESIGN.md › case-selection) : case de 18 px (20 px moins l'anneau de 2 px), fond `surface`, bordure
+// `outline` de 2 px ; cochée, fond `primary` et coche `on-primary` ; cible de 40 px. Valeurs dérivées des jetons
+// existants, définies ici et non dans _jetons.scss : le paquet initial ne grossit pas (la case n'est chargée qu'avec les
+// pages qui l'utilisent). La carte pose `--case-selection-opacite` et `--case-selection-pointeur` : masquée, la case
+// ne reçoit pas les clics (elle reste atteignable au clavier, et paraît dès qu'elle a le focus).
+:host {
+  --case-selection-taille: calc(var(--cm-taille-icone) - var(--cm-epaisseur-anneau-vignette-ouverte));
+  --case-selection-bordure: var(--cm-epaisseur-anneau-vignette-ouverte);
+
+  display: grid;
+  place-items: center;
+  width: var(--cm-taille-bouton-icone);
+  height: var(--cm-taille-bouton-icone);
+  cursor: pointer;
+  user-select: none;
+  opacity: var(--case-selection-opacite, 1);
+  pointer-events: var(--case-selection-pointeur, auto);
+}
+
+:host(.case-selection--cochee),
+:host(:focus-within) {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.case-selection__case {
+  display: grid;
+  place-items: center;
+  box-sizing: border-box;
+  width: var(--case-selection-taille);
+  height: var(--case-selection-taille);
+  margin: 0;
+  border: var(--case-selection-bordure) solid var(--mat-sys-outline);
+  border-radius: var(--case-selection-bordure);
+  background: var(--mat-sys-surface);
+  cursor: pointer;
+  appearance: none;
+
+  // Coche : un « L » tourné, tracé par deux bordures `on-primary`.
+  &::before {
+    content: '';
+    box-sizing: border-box;
+    width: 35%;
+    height: 65%;
+    margin-block-end: 15%;
+    border: solid transparent;
+    border-width: 0 var(--case-selection-bordure) var(--case-selection-bordure) 0;
+    transform: rotate(45deg);
+  }
+
+  &:checked {
+    border-color: var(--mat-sys-primary);
+    background: var(--mat-sys-primary);
+
+    &::before {
+      border-color: var(--mat-sys-on-primary);
+    }
+  }
+
+  &:focus-visible {
+    outline: var(--cm-anneau-focus-epaisseur) solid var(--mat-sys-primary);
+    outline-offset: var(--cm-anneau-focus-decalage);
+  }
+
+  &[aria-disabled='true'] {
+    cursor: default;
+  }
+}

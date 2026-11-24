@@ -1,0 +1,45 @@
+// Barre d'actions en lot (DESIGN.md › barre-actions-lot) : `surface-container-high`, arrondi `lg`, collante en haut de
+// la zone qui défile. Son plan, juste au-dessus des cartes de la grille (dont les Cases de sélection sont positionnées),
+// est défini ici et non dans _jetons.scss : le paquet initial ne grossit pas.
+:host {
+  --barre-actions-lot-plan: 1;
+
+  display: none;
+}
+
+:host(.barre-actions-lot--affichee) {
+  position: sticky;
+  inset-block-start: 0;
+  z-index: var(--barre-actions-lot-plan);
+  display: block;
+}
+
+.barre-actions-lot {
+  display: flex;
+  flex-direction: column;
+  gap: var(--cm-espace-2);
+  padding: var(--cm-espace-2) var(--cm-espace-3);
+  border-radius: var(--cm-arrondi-lg);
+  background: var(--mat-sys-surface-container-high);
+  color: var(--mat-sys-on-surface);
+  box-shadow: var(--cm-elevation-1);
+}
+
+.barre-actions-lot__ligne {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--cm-espace-2);
+}
+
+.barre-actions-lot__nombre {
+  margin-inline-end: var(--cm-espace-2);
+  font: var(--cm-typo-label);
+}
+
+.barre-actions-lot__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--cm-espace-2);
+  margin-inline-start: auto;
+}

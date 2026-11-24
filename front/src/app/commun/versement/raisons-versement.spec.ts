@@ -1,6 +1,7 @@
 import {
   estRefusVersement,
   phraseVersementIndisponible,
+  raisonRefusLot,
   raisonVersement,
 } from './raisons-versement';
 
@@ -26,6 +27,19 @@ describe('raisons-versement', () => {
     expect(phraseVersementIndisponible('image.versement.nouveau', null)).toBe(
       'Verser indisponible : motif inconnu.',
     );
+  });
+
+  it('lot : « image d’un collègue », « image indisponible », puis les raisons de versabilité', () => {
+    expect(raisonRefusLot('image.reservee_au_proprietaire', null)).toBe("image d'un collègue");
+    expect(raisonRefusLot('image.indisponible', null)).toBe('image indisponible');
+    expect(raisonRefusLot('image.versement.image_album', null)).toBe(
+      "une image d'album reste dans Mes mots",
+    );
+    expect(raisonRefusLot('image.versement.licence_non_versable', null)).toBe('licence à préciser');
+    expect(raisonRefusLot('image.versement.licence_non_versable', 'pixabay')).toBe(
+      'licence non partageable',
+    );
+    expect(raisonRefusLot('toString', null)).toBe('motif inconnu');
   });
 
   it('phrase : « Verser indisponible : <raison>. »', () => {

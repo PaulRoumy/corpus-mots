@@ -16,6 +16,8 @@ import { ImageBanqueDto } from '../api/models/image-banque-dto';
 import { BadgeTypeImage } from '../commun/badge-type-image/badge-type-image';
 import { ChargementImage, ImageSecurisee } from '../commun/image-securisee/image-securisee';
 import { RepereSection } from '../commun/repere-section/repere-section';
+import { BasculeSelection, CaseSelection } from '../commun/selection/case-selection';
+import { nomImage } from './nom-image';
 
 /** Identifiant du Panneau Carte d'identité de la Banque, que la vignette ouverte contrôle (`aria-controls`). */
 export const ID_PANNEAU_CARTE_IDENTITE = 'banque-carte-identite';
@@ -31,18 +33,33 @@ let numeroVignette = 0;
  * Toute la vignette est un bouton (story 3.1, partie 2), nommé « Carte d'identité de « forme » (Sens) », qui émet
  * `ouvrir` : la page ouvre le Panneau Carte d'identité de l'Image. Les Repères, Badges et le propriétaire restent lus,
  * en description du bouton. La vignette de l'Image ouverte porte `aria-expanded="true"`, `aria-controls` vers le
- * panneau, le fond `primary-container` et l'anneau `primary`.
+ * panneau et l'anneau `primary` de 2 px, sans fond.
+ *
+ * Case de sélection (story 3.3, partie 3a) : avant le bouton dans l'ordre de tabulation, en haut à gauche, nommée
+ * « Sélectionner « forme » (Sens) ». Elle paraît au survol et au focus de la vignette, et sur toutes les vignettes dès
+ * qu'une sélection existe (`selectionActive`). Son geste (`basculerSelection`, Maj+clic : plage) n'ouvre pas la Carte.
+ * La vignette sélectionnée prend le fond `primary-container` (DESIGN.md › case-selection), avec la case cochée ;
+ * « ouverte » et « sélectionnée » se combinent.
  */
 @Component({
   selector: 'app-vignette-banque',
-  imports: [BadgeTypeImage, ImageSecurisee, MatIconModule, RepereSection],
+  imports: [BadgeTypeImage, CaseSelection, ImageSecurisee, MatIconModule, RepereSection],
   changeDetection: ChangeDetectionStrategy.OnPush,
   styleUrl: './vignette-banque.scss',
+  host: { '[class.vignette-banque--selection-active]': 'selectionActive()' },
   template: `
+    <app-case-selection
+      class="vignette__case"
+      [nom]="nomSelection()"
+      [cochee]="selectionnee()"
+      [figee]="selectionFigee()"
+      (basculer)="basculerSelection.emit($event)"
+    />
     <button
       #bouton
       type="button"
       class="vignette"
+      [class.vignette--selectionnee]="selectionnee()"
       [class.vignette--ouverte]="ouverte()"
       [attr.aria-label]="nom()"
       [attr.aria-describedby]="idDescription"
@@ -92,6 +109,14 @@ export class VignetteBanque {
   readonly ouverte = input(false);
   /** Clic, Entrée ou Espace sur la vignette. */
   readonly ouvrir = output<void>();
+  /** Vrai si l'Image est dans la sélection. */
+  readonly selectionnee = input(false);
+  /** Vrai dès qu'une sélection existe dans la page : la Case de sélection reste visible. */
+  readonly selectionActive = input(false);
+  /** Vrai pendant une action en lot : la Case de sélection ne bascule plus. */
+  readonly selectionFigee = input(false);
+  /** Clic ou Espace sur la Case de sélection. */
+  readonly basculerSelection = output<BasculeSelection>();
 
   private readonly api = inject(Api);
   private readonly bouton = viewChild.required<ElementRef<HTMLButtonElement>>('bouton');
@@ -101,10 +126,14 @@ export class VignetteBanque {
   protected readonly idDescription = `vignette-banque-${++numeroVignette}`;
   protected readonly idPanneau = ID_PANNEAU_CARTE_IDENTITE;
   /** Nom accessible, Sens compris : « Carte d'identité de « loup » (animal) ». */
-  protected readonly nom = computed(() => {
-    const { forme, sensLibelle } = this.image();
-    return `Carte d'identité de « ${forme} »${sensLibelle ? ` (${sensLibelle})` : ''}`;
-  });
+  protected readonly nom = computed(
+    () => `Carte d'identité de ${nomImage(this.image().forme, this.image().sensLibelle)}`,
+  );
+
+  /** Nom de la Case de sélection : « Sélectionner « loup » (animal) ». */
+  protected readonly nomSelection = computed(
+    () => `Sélectionner ${nomImage(this.image().forme, this.image().sensLibelle)}`,
+  );
 
   /** Chargement de la miniature, d'identité stable tant que l'Image ne change pas. */
   protected readonly charger = computed<ChargementImage>(() => {

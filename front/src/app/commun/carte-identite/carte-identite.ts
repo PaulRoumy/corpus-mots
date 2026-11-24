@@ -1037,6 +1037,27 @@ export class CarteIdentite {
     this.panneau().nativeElement.focus();
   }
 
+  /**
+   * Relit la Carte affichée après un changement fait ailleurs (versement en lot, story 3.3), à la suite des
+   * enregistrements en cours ; les saisies non enregistrées restent et la Carte relue passe par `[appliquer]`.
+   * Carte encore en lecture : elle est lue à nouveau.
+   */
+  actualiser(): void {
+    const id = this.imageId();
+    if (this.carte() === null) {
+      void this.lire(id);
+      return;
+    }
+    const numero = this.derniereLecture;
+    this.fileEnregistrements = this.fileEnregistrements
+      .then(async () => {
+        if (numero === this.derniereLecture) {
+          await this.relire(id, numero);
+        }
+      })
+      .catch(() => undefined);
+  }
+
   protected async lire(id: string): Promise<void> {
     const numero = ++this.derniereLecture;
     this.carte.set(null);
