@@ -25,6 +25,12 @@ public record ImageBanqueDto(
         @Schema(required = true, description = "Vrai si l'Image est versée dans la Banque de l'école") boolean versee,
         @Schema(required = true, enumeration = { "image_album", "image_libre", "photo_personnelle", "inconnu" })
         String typeImage,
+        @Schema(nullable = true, enumeration = { "versable", "image.versement.retrait_admin",
+                "image.versement.image_album", "image.versement.type_inconnu", "image.versement.source_manquante",
+                "image.versement.licence_non_versable" },
+                description = "versable, ou le code du motif qui empêche de verser l'Image (AD-4) ; null si"
+                        + " l'enseignant connecté n'en est pas le propriétaire ou si elle est déjà versée")
+        String versabilite,
         @Schema(required = true, type = SchemaType.ARRAY, implementation = SectionImageDto.class,
                 description = "Sections cochées, dans l'ordre PS, MS, GS")
         List<String> sections,
@@ -40,6 +46,7 @@ public record ImageBanqueDto(
         ImageVue image = vue.image();
         return new ImageBanqueDto(image.id(), image.proprietaireId(), image.etat().valeur(), image.aRemplacer(),
                 image.reutilisable(), image.etat() == EtatImage.VERSEE, image.typeImage().valeur(),
+                image.versabilite() == null ? null : image.versabilite().valeur(),
                 vue.sections().stream().map(Section::valeur).toList(), vue.mot().id(), vue.mot().forme(),
                 vue.sens().id(), vue.sens().libelle(), vue.sens().categorie());
     }

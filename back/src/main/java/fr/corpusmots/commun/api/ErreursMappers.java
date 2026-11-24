@@ -5,9 +5,11 @@ import com.fasterxml.jackson.databind.exc.MismatchedInputException;
 import io.quarkus.security.AuthenticationFailedException;
 import io.quarkus.security.ForbiddenException;
 import io.quarkus.security.UnauthorizedException;
+import jakarta.persistence.OptimisticLockException;
 import jakarta.ws.rs.WebApplicationException;
 import jakarta.ws.rs.core.HttpHeaders;
 import jakarta.ws.rs.core.Response;
+import org.hibernate.StaleStateException;
 import org.jboss.logging.Logger;
 import org.jboss.resteasy.reactive.server.ServerExceptionMapper;
 
@@ -19,6 +21,7 @@ public class ErreursMappers {
 
     static final String CODE_INTROUVABLE = "ressource.introuvable";
     static final String CODE_INTERNE = "erreur.interne";
+    static final String CODE_MODIFIEE_ENTRE_TEMPS = "ressource.modifiee_entre_temps";
 
     private static final Logger LOG = Logger.getLogger(ErreursMappers.class);
 
@@ -68,6 +71,17 @@ public class ErreursMappers {
     @ServerExceptionMapper
     public Response jsonDeMauvaisType(MismatchedInputException erreur) {
         return jsonIllisible(erreur);
+    }
+
+    /**
+     * Écriture concurrente d'une même ligne ({@code @Version}, AD-17), par exemple une Carte d'identité modifiée
+     * pendant un versement : {@code 409}, et non une erreur interne. Hibernate lève l'une ou l'autre selon qu'il passe
+     * ou non par l'API JPA.
+     */
+    @ServerExceptionMapper({ OptimisticLockException.class, StaleStateException.class })
+    public Response modifieeEntreTemps(RuntimeException erreur) {
+        return ProblemeDto.de(409, CODE_MODIFIEE_ENTRE_TEMPS, "Cet élément vient d'être modifié par ailleurs")
+                .enReponse();
     }
 
     @ServerExceptionMapper

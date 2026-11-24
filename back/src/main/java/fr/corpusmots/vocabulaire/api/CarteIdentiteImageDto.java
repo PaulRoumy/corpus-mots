@@ -26,6 +26,12 @@ public record CarteIdentiteImageDto(
         String typeImage,
         @Schema(required = true, description = "Vrai pour une image libre sans source ou sans licence")
         boolean aCompleter,
+        @Schema(nullable = true, enumeration = { "versable", "image.versement.retrait_admin",
+                "image.versement.image_album", "image.versement.type_inconnu", "image.versement.source_manquante",
+                "image.versement.licence_non_versable" },
+                description = "versable, ou le code du motif qui empêche de verser l'Image (AD-4) ; null si"
+                        + " l'enseignant connecté n'en est pas le propriétaire ou si elle est déjà versée")
+        String versabilite,
         @Schema(required = true, description = "Identifiant du Mot du Lexique, partagé par l'école") UUID motId,
         @Schema(required = true, description = "Première forme saisie dans l'école, sans article") String forme,
         @Schema(required = true) CarteIdentiteSensDto sens,
@@ -51,6 +57,7 @@ public record CarteIdentiteImageDto(
         ImageVue image = vue.image();
         return new CarteIdentiteImageDto(image.id(), image.proprietaireId(), image.etat().valeur(),
                 image.aRemplacer(), image.reutilisable(), image.typeImage().valeur(), image.aCompleter(),
+                image.versabilite() == null ? null : image.versabilite().valeur(),
                 vue.mot().id(), vue.mot().forme(),
                 new CarteIdentiteSensDto(vue.sens().id(), vue.sens().libelle(), vue.sens().categorie(),
                         vue.sensACompleter()),

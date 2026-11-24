@@ -64,6 +64,26 @@ class ArchitectureTest {
                 .check(classesDuBack);
     }
 
+    /**
+     * AD-3 : seul {@code vocabulaire.service} change l'{@code etat} d'une Image, par {@code Image.changerEtat} ; le
+     * champ n'est écrit nulle part ailleurs que dans l'entité.
+     */
+    @Test
+    void seulVocabulaireServiceChangeLEtatDUneImage() {
+        String image = ReglesArchitecture.RACINE + ".vocabulaire.persistance.Image";
+        assertTrue(classesDuBack.contain(image), image + " introuvable : la règle AD-3 ne le vérifierait plus");
+        assertTrue(classesDuBack.get(image).tryGetMethod("changerEtat", String.class).isPresent(),
+                "Image.changerEtat introuvable : la règle AD-3 ne le vérifierait plus");
+        noClasses().that().resideOutsideOfPackage(ReglesArchitecture.RACINE + ".vocabulaire.service")
+                .should().callMethod(image, "changerEtat", String.class.getName())
+                .because("AD-3 : seul vocabulaire.service modifie l'état d'une Image")
+                .check(classesDuBack);
+        noClasses().that().doNotHaveFullyQualifiedName(image)
+                .should().setField(image, "etat")
+                .because("AD-3 : l'état d'une Image ne s'écrit que par Image.changerEtat")
+                .check(classesDuBack);
+    }
+
     @Test
     void aucuneMethodeTransactionnelleNFaitDAppelHttpSortant() {
         for (String type : ReglesArchitecture.APPELS_HTTP_SORTANTS) {

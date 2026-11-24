@@ -113,6 +113,11 @@
             "type" : "boolean",
             "description" : "Vrai pour une image libre sans source ou sans licence"
           },
+          "versabilite" : {
+            "type" : [ "string", "null" ],
+            "description" : "versable, ou le code du motif qui empêche de verser l'Image (AD-4) ; null si l'enseignant connecté n'en est pas le propriétaire ou si elle est déjà versée",
+            "enum" : [ "versable", "image.versement.retrait_admin", "image.versement.image_album", "image.versement.type_inconnu", "image.versement.source_manquante", "image.versement.licence_non_versable" ]
+          },
           "motId" : {
             "description" : "Identifiant du Mot du Lexique, partagé par l'école",
             "type" : "string",
@@ -619,6 +624,11 @@
             "type" : "string",
             "enum" : [ "image_album", "image_libre", "photo_personnelle", "inconnu" ]
           },
+          "versabilite" : {
+            "type" : [ "string", "null" ],
+            "description" : "versable, ou le code du motif qui empêche de verser l'Image (AD-4) ; null si l'enseignant connecté n'en est pas le propriétaire ou si elle est déjà versée",
+            "enum" : [ "versable", "image.versement.retrait_admin", "image.versement.image_album", "image.versement.type_inconnu", "image.versement.source_manquante", "image.versement.licence_non_versable" ]
+          },
           "sections" : {
             "description" : "Sections cochées, dans l'ordre PS, MS, GS",
             "type" : "array",
@@ -1106,6 +1116,30 @@
           "aCompleter" : {
             "type" : "boolean",
             "description" : "Vrai pour une image libre sans source ou sans licence"
+          },
+          "versabilite" : {
+            "type" : [ "string", "null" ],
+            "description" : "versable, ou le code du motif qui empêche de verser l'Image (AD-4) ; null si l'enseignant connecté n'en est pas le propriétaire ou si elle est déjà versée",
+            "enum" : [ "versable", "image.versement.retrait_admin", "image.versement.image_album", "image.versement.type_inconnu", "image.versement.source_manquante", "image.versement.licence_non_versable" ]
+          }
+        }
+      },
+      "RefusVersementImageDto" : {
+        "type" : "object",
+        "required" : [ "imageId", "code" ],
+        "properties" : {
+          "imageId" : {
+            "$ref" : "#/components/schemas/UUID"
+          },
+          "code" : {
+            "type" : "string",
+            "description" : "Image absente ou invisible, Image d'un collègue, ou motif qui empêche de la verser",
+            "enum" : [ "image.indisponible", "image.reservee_au_proprietaire", "image.versement.retrait_admin", "image.versement.image_album", "image.versement.type_inconnu", "image.versement.source_manquante", "image.versement.licence_non_versable" ]
+          },
+          "licence" : {
+            "type" : [ "string", "null" ],
+            "description" : "Licence de l'Image pour le code image.versement.licence_non_versable : null si elle est absente (licence à préciser), sa valeur sinon (licence non partageable) ; null pour tout autre code",
+            "enum" : [ "arasaac_cc_by_nc_sa", "sclera_cc_by_nc", "mulberry_cc_by_sa", "cc0_domaine_public", "pixabay", "autre_inconnue", "droits_auteur_enseignant", "usage_pedagogique_album" ]
           }
         }
       },
@@ -1178,6 +1212,37 @@
             "description" : "Identifiants des Mots du Lexique à reprendre, de 1 à 200",
             "maxItems" : 200,
             "minItems" : 1
+          }
+        }
+      },
+      "ResultatVersementLotDto" : {
+        "type" : "object",
+        "required" : [ "versees", "dejaVersees", "refusees" ],
+        "properties" : {
+          "versees" : {
+            "type" : "array",
+            "items" : {
+              "type" : "string",
+              "format" : "uuid",
+              "pattern" : "[a-fA-F0-9]{8}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{12}"
+            },
+            "description" : "Images versées par cet appel (privee → versee)"
+          },
+          "dejaVersees" : {
+            "type" : "array",
+            "items" : {
+              "type" : "string",
+              "format" : "uuid",
+              "pattern" : "[a-fA-F0-9]{8}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{12}"
+            },
+            "description" : "Images déjà versées avant cet appel, inchangées"
+          },
+          "refusees" : {
+            "type" : "array",
+            "items" : {
+              "$ref" : "#/components/schemas/RefusVersementImageDto"
+            },
+            "description" : "Images refusées, restées hors du lot, avec leur raison"
           }
         }
       },
@@ -1382,6 +1447,24 @@
         "type" : "string",
         "format" : "uuid",
         "pattern" : "[a-fA-F0-9]{8}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{12}"
+      },
+      "VersementLotImagesDto" : {
+        "type" : "object",
+        "required" : [ "imageIds" ],
+        "properties" : {
+          "imageIds" : {
+            "type" : "array",
+            "items" : {
+              "type" : "string",
+              "format" : "uuid",
+              "pattern" : "[a-fA-F0-9]{8}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{12}"
+            },
+            "description" : "Images de l'enseignant connecté à verser, de 1 à 500, sans doublon",
+            "maxItems" : 500,
+            "minItems" : 1,
+            "uniqueItems" : true
+          }
+        }
       }
     }
   },
@@ -2018,6 +2101,38 @@
         "tags" : [ "Images Resource" ]
       }
     },
+    "/api/images/versements" : {
+      "post" : {
+        "summary" : "Verser en lot des Images de l'enseignant connecté dans la Banque de l'école ; les Images non versables restent hors du lot, avec leur raison",
+        "operationId" : "verserImages",
+        "requestBody" : {
+          "required" : true,
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/VersementLotImagesDto"
+              }
+            }
+          }
+        },
+        "responses" : {
+          "200" : {
+            "description" : "Images versées et Images refusées avec leur raison",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ResultatVersementLotDto"
+                }
+              }
+            }
+          },
+          "400" : {
+            "description" : "Bad Request"
+          }
+        },
+        "tags" : [ "Images Resource" ]
+      }
+    },
     "/api/images/{id}" : {
       "get" : {
         "summary" : "Carte d'identité d'une Image que l'enseignant connecté peut consulter",
@@ -2262,6 +2377,33 @@
           },
           "400" : {
             "description" : "Bad Request"
+          }
+        },
+        "tags" : [ "Images Resource" ]
+      }
+    },
+    "/api/images/{id}/versement" : {
+      "post" : {
+        "summary" : "Verser une Image de l'enseignant connecté dans la Banque de l'école (son seul propriétaire) ; sans effet si elle est déjà versée",
+        "operationId" : "verserImage",
+        "parameters" : [ {
+          "name" : "id",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "$ref" : "#/components/schemas/UUID"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "description" : "Carte d'identité à jour de l'Image, versée",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/CarteIdentiteImageDto"
+                }
+              }
+            }
           }
         },
         "tags" : [ "Images Resource" ]

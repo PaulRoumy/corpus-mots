@@ -3,6 +3,7 @@ package fr.corpusmots.vocabulaire.persistance;
 import io.quarkus.hibernate.orm.panache.PanacheRepositoryBase;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.persistence.LockModeType;
+import org.hibernate.query.NativeQuery;
 import java.util.Collection;
 import java.util.List;
 import java.util.Map;
@@ -20,6 +21,23 @@ public class ImageRepository implements PanacheRepositoryBase<Image, UUID> {
     /** Image {@code id}, verrouillée ({@code SELECT … FOR UPDATE}) jusqu'à la fin de la transaction (AD-17). */
     public Optional<Image> verrouillee(UUID id) {
         return find("id", id).withLock(LockModeType.PESSIMISTIC_WRITE).firstResultOptional();
+    }
+
+    /**
+     * Images {@code ids} qui existent, verrouillées ({@code SELECT … FOR UPDATE}) jusqu'à la fin de la transaction en
+     * une seule requête, dans l'ordre des identifiants de PostgreSQL : deux lots qui se recouvrent prennent leurs
+     * verrous dans le même ordre (AD-17). Une Image absente est simplement omise.
+     */
+    public List<Image> verrouillees(Collection<UUID> ids) {
+        if (ids.isEmpty()) {
+            return List.of();
+        }
+        // Liste liée par setParameterList : le paramètre est développé en (?, ?, …), jamais collé dans le SQL.
+        @SuppressWarnings("unchecked")
+        NativeQuery<Image> requete = getEntityManager()
+                .createNativeQuery("select i.* from image i where i.id in (:ids) order by i.id for update", Image.class)
+                .unwrap(NativeQuery.class);
+        return requete.setParameterList("ids", ids, UUID.class).getResultList();
     }
 
     /**
@@ -88,7 +106,7 @@ public class ImageRepository implements PanacheRepositoryBase<Image, UUID> {
         var requete = getEntityManager().createNativeQuery(
                 "select i.id, i.proprietaire_id, i.etat, i.type_image, i.licence, i.source,"
                         + " (select string_agg(se.section, ',') from image_section se where se.image_id = i.id),"
-                        + " m.id, m.forme, s.id, s.libelle, s.categorie"
+                        + " m.id, m.forme, s.id, s.libelle, s.categorie, i.retrait_admin_motif is not null"
                         + " from image i join sens s on s.id = i.sens_id join mot m on m.id = s.mot_id"
                         + " where " + condition
                         + " order by m.forme_recherche collate \"C\", m.forme_cle collate \"C\", m.id,"
@@ -102,7 +120,8 @@ public class ImageRepository implements PanacheRepositoryBase<Image, UUID> {
         return lignes.stream()
                 .map(ligne -> new ImageBanqueLigne((UUID) ligne[0], (UUID) ligne[1], (String) ligne[2],
                         (String) ligne[3], (String) ligne[4], (String) ligne[5], (String) ligne[6], (UUID) ligne[7],
-                        (String) ligne[8], (UUID) ligne[9], (String) ligne[10], (String) ligne[11]))
+                        (String) ligne[8], (UUID) ligne[9], (String) ligne[10], (String) ligne[11],
+                        (Boolean) ligne[12]))
                 .toList();
     }
 

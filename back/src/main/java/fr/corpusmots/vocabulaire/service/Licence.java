@@ -28,6 +28,15 @@ public enum Licence {
         return this != DROITS_AUTEUR_ENSEIGNANT && this != USAGE_PEDAGOGIQUE_ALBUM;
     }
 
+    /**
+     * Vrai pour les quatre licences qui permettent de verser une image libre (AD-4) : ARASAAC, Sclera, Mulberry et CC0.
+     * Seule {@link Versabilite#de} s'en sert.
+     */
+    boolean partageable() {
+        return this == ARASAAC_CC_BY_NC_SA || this == SCLERA_CC_BY_NC || this == MULBERRY_CC_BY_SA
+                || this == CC0_DOMAINE_PUBLIC;
+    }
+
     /** Licence de valeur {@code valeur}, vide pour toute autre chaîne ou {@code null}. */
     public static Optional<Licence> deValeur(String valeur) {
         return Arrays.stream(values()).filter(licence -> licence.valeur().equals(valeur)).findFirst();

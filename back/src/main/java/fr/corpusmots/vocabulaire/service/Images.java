@@ -107,7 +107,8 @@ public class Images {
      * libre ou inconnue laisse la licence vide si aucune n'est choisie ; quitter l'image d'album efface l'Album
      * d'origine, le fichier restant en basse résolution. Passer en image d'album réduit aussitôt le fichier et sa
      * miniature à {@value ReductionImages#COTE_MAX_ALBUM} px au plus, dans la même transaction. L'état ne change pas
-     * (AD-3) ; {@code @Version} protège contre deux écritures concurrentes. Rien n'est modifié en cas de refus.
+     * (AD-3) ; {@code @Version} protège contre deux écritures concurrentes. Un retrait par l'administrateur est vidé
+     * si la description change (AD-3). Rien n'est modifié en cas de refus.
      *
      * @return la Carte d'identité à jour
      * @throws ErreurMetier {@code 404 ressource.introuvable} si l'Image n'existe pas ou n'est pas consultable par
@@ -131,8 +132,12 @@ public class Images {
         if (devientImageAlbum) {
             reduireEnImageAlbum(image.id());
         }
-        image.decrire(type.valeur(), licence == null ? null : licence.valeur(), source, auteur, albumId);
-        images.flush();
+        String valeurLicence = licence == null ? null : licence.valeur();
+        boolean modifiee = !type.valeur().equals(image.typeImage()) || !Objects.equals(valeurLicence, image.licence())
+                || !Objects.equals(source, image.source()) || !Objects.equals(auteur, image.auteur())
+                || !Objects.equals(albumId, image.albumId());
+        image.decrire(type.valeur(), valeurLicence, source, auteur, albumId);
+        carteEnregistree(image, modifiee);
         return carteIdentite(image, enseignantId);
     }
 
@@ -142,7 +147,8 @@ public class Images {
      * quels que soient le type et l'Album d'origine ; les Thèmes sont sans limite. Doublons ignorés. Thèmes et Module
      * sont relus par {@code referentiels} en verrou partagé avant l'écriture : ils ne peuvent pas être supprimés
      * pendant l'affectation (AD-15, AD-17). L'état ne change pas (AD-3) ; {@code @Version} est incrémentée si le
-     * classement change. Rien n'est modifié en cas de refus.
+     * classement change. Un retrait par l'administrateur est vidé si le classement change (AD-3). Rien n'est modifié
+     * en cas de refus.
      *
      * @return la Carte d'identité à jour
      * @throws ErreurMetier {@code 404 ressource.introuvable} si l'Image n'existe pas ou n'est pas consultable par
@@ -170,8 +176,10 @@ public class Images {
         if (moduleId != null && referentiels.moduleVerrouille(moduleId).isEmpty()) {
             throw new ErreurMetier(400, CODE_MODULE_INTROUVABLE, "Aucun module ne porte cet identifiant");
         }
+        boolean modifie = !sections.equals(image.sections()) || !Objects.equals(moduleId, image.moduleId())
+                || !themeIds.equals(image.themeIds());
         image.classer(sections, moduleId, themeIds);
-        images.flush();
+        carteEnregistree(image, modifie);
         return carteIdentite(image, enseignantId);
     }
 
@@ -203,8 +211,9 @@ public class Images {
      * parmi ceux de {@link #sensProposes}. Le Mot et le Sens ne sont jamais modifiés (AD-19) : la catégorie suit le Sens
      * choisi. L'Image est verrouillée ({@code SELECT … FOR UPDATE}, comme {@link Usages#lierImage}) avant de vérifier
      * qu'aucun enseignant, propriétaire compris, n'a de lien vers elle : aucun lien ne peut être créé entre-temps, et
-     * l'invariant Sens de l'Image = Sens retenu tient (AD-5, AD-17). Le même Sens ne change rien. L'état ne change pas
-     * (AD-3). Rien n'est modifié en cas de refus.
+     * l'invariant Sens de l'Image = Sens retenu tient (AD-5, AD-17). Le même Sens ne change rien, pas même le
+     * retrait par l'administrateur, qu'un nouveau Sens vide (AD-3). L'état ne change pas (AD-3). Rien n'est modifié en
+     * cas de refus.
      *
      * @return la Carte d'identité à jour
      * @throws ErreurMetier {@code 404 ressource.introuvable} si l'Image n'existe pas ou n'est pas consultable par
@@ -229,7 +238,7 @@ public class Images {
             throw new ErreurMetier(400, CODE_SENS_INVALIDE, "Ce sens n'est pas un sens proposé pour le mot de l'image");
         }
         image.changerSens(sensId);
-        images.flush();
+        carteEnregistree(image, true);
         return carteIdentite(image, enseignantId);
     }
 
@@ -237,8 +246,9 @@ public class Images {
      * Donne à l'Image {@code imageId}, par son seul propriétaire, le Sens qu'il vient de taper dans la Création de Sens
      * (Carte d'identité, story 2.8) : obtenu ou créé par {@link Lexique#obtenirOuCreerSensSaisi} pour le Mot de l'Image,
      * il devient le Sens de l'Image. Un libellé déjà connu pour ce Mot réutilise ce Sens, avec sa catégorie (AD-19).
-     * Mêmes verrou et refus que {@link #changerSens} : l'Image verrouillée ne doit avoir aucun lien. Rien n'est écrit en
-     * cas de refus, pas même le Sens.
+     * Mêmes verrou et refus que {@link #changerSens} : l'Image verrouillée ne doit avoir aucun lien. Un retrait par
+     * l'administrateur est vidé (AD-3) si le Sens obtenu n'est pas le Sens actuel. Rien n'est écrit en cas de refus, pas
+     * même le Sens.
      *
      * @return la Carte d'identité à jour
      * @throws ErreurMetier {@code 404 ressource.introuvable} si l'Image n'existe pas ou n'est pas consultable par
@@ -258,10 +268,11 @@ public class Images {
         SensVue actuel = lexique.sens(image.sensId())
                 .orElseThrow(() -> new IllegalStateException("Sens introuvable de l'Image " + image.id()));
         SensVue nouveau = lexique.obtenirOuCreerSensSaisi(actuel.motId(), libelle, categorie);
-        if (!nouveau.id().equals(actuel.id())) {
+        boolean modifiee = !nouveau.id().equals(actuel.id());
+        if (modifiee) {
             image.changerSens(nouveau.id());
-            images.flush();
         }
+        carteEnregistree(image, modifiee);
         return carteIdentite(image, enseignantId);
     }
 
@@ -309,6 +320,19 @@ public class Images {
         return image;
     }
 
+    /**
+     * Enregistre une modification de la Carte d'identité par le propriétaire, seul chemin des quatre modifications
+     * (description, classement, changement et création de Sens) : si elle a changé quelque chose ({@code modifiee}),
+     * le retrait par l'administrateur est vidé (AD-3, « jusqu'à ce que le propriétaire modifie la Carte ») ; une
+     * modification qui ne change rien le laisse en place.
+     */
+    private void carteEnregistree(Image image, boolean modifiee) {
+        if (modifiee) {
+            image.effacerRetraitAdmin();
+        }
+        images.flush();
+    }
+
     /** Réduit le fichier de l'Image et sa miniature à la taille d'une image d'album. */
     private void reduireEnImageAlbum(UUID imageId) {
         FichierLu actuel = fichiers.octets(imageId)
@@ -318,7 +342,8 @@ public class Images {
                 reduit.hauteur());
     }
 
-    private CarteIdentiteImageVue carteIdentite(Image image, UUID enseignantId) {
+    /** Carte d'identité de l'Image, lue par l'enseignant {@code enseignantId} (visibilité vérifiée par l'appelant). */
+    CarteIdentiteImageVue carteIdentite(Image image, UUID enseignantId) {
         SensVue sens = lexique.sens(image.sensId())
                 .orElseThrow(() -> new IllegalStateException("Sens introuvable de l'Image " + image.id()));
         MotVue mot = lexique.mots(Set.of(sens.motId())).get(sens.motId());
@@ -595,7 +620,7 @@ public class Images {
 
     private ImageBanqueVue imageBanque(ImageBanqueLigne ligne, UUID enseignantId) {
         ImageVue image = vue(ligne.id(), ligne.proprietaireId(), ligne.etat(), ligne.typeImage(), ligne.licence(),
-                ligne.source(), enseignantId, visibilite);
+                ligne.source(), ligne.retraitAdmin(), enseignantId, visibilite);
         List<Section> sections = ligne.sections() == null ? List.of()
                 : Arrays.stream(ligne.sections().split(","))
                         .map(valeur -> Section.deValeur(valeur)
@@ -606,20 +631,42 @@ public class Images {
                 new SensVue(ligne.sensId(), ligne.motId(), ligne.sensLibelle(), ligne.categorie()));
     }
 
-    /** Image vue par l'enseignant {@code enseignantId} : {@code reutilisable} vient de {@link VisibiliteImages}. */
+    /**
+     * Image vue par l'enseignant {@code enseignantId} : {@code reutilisable} vient de {@link VisibiliteImages},
+     * {@code versabilite} de {@link Versabilite#de}, pour le propriétaire d'une Image {@code privee} seulement.
+     */
     static ImageVue vue(Image image, UUID enseignantId, VisibiliteImages visibilite) {
         return vue(image.id(), image.proprietaireId(), image.etat(), image.typeImage(), image.licence(),
-                image.source(), enseignantId, visibilite);
+                image.source(), image.retraitAdminMotif() != null, enseignantId, visibilite);
     }
 
     private static ImageVue vue(UUID id, UUID proprietaireId, String valeurEtat, String valeurType, String licence,
-            String source, UUID enseignantId, VisibiliteImages visibilite) {
+            String source, boolean retraitAdmin, UUID enseignantId, VisibiliteImages visibilite) {
         TypeImage type = TypeImage.deValeur(valeurType)
                 .orElseThrow(() -> new IllegalStateException("Type inconnu de l'Image " + id));
         EtatImage etat = EtatImage.deValeur(valeurEtat)
                 .orElseThrow(() -> new IllegalStateException("État inconnu de l'Image " + id));
         boolean aCompleter = type == TypeImage.IMAGE_LIBRE && (source == null || licence == null);
+        boolean proprietaire = proprietaireId != null && proprietaireId.equals(enseignantId);
+        Versabilite versabilite = proprietaire && etat == EtatImage.PRIVEE
+                ? versabilite(type, licence, source, retraitAdmin, id)
+                : null;
         return new ImageVue(id, proprietaireId, etat, null, visibilite.proposable(proprietaireId, etat, enseignantId),
-                type, aCompleter);
+                type, aCompleter, versabilite);
+    }
+
+    /** Versabilité d'une Image (AD-4) par {@link Versabilite#de}, à partir des valeurs en base. */
+    static Versabilite versabilite(Image image) {
+        TypeImage type = TypeImage.deValeur(image.typeImage())
+                .orElseThrow(() -> new IllegalStateException("Type inconnu de l'Image " + image.id()));
+        return versabilite(type, image.licence(), image.source(), image.retraitAdminMotif() != null, image.id());
+    }
+
+    private static Versabilite versabilite(TypeImage type, String licence, String source, boolean retraitAdmin,
+            UUID id) {
+        Licence connue = licence == null ? null
+                : Licence.deValeur(licence)
+                        .orElseThrow(() -> new IllegalStateException("Licence inconnue de l'Image " + id));
+        return Versabilite.de(type, connue, source, retraitAdmin);
     }
 }

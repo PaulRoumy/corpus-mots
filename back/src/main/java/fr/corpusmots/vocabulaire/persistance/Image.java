@@ -59,6 +59,18 @@ public class Image {
     @Column(name = "module_id")
     private UUID moduleId;
 
+    /**
+     * Motif du retrait de la Banque par l'administrateur (AD-3) : {@code licence_non_conforme}, {@code image_album},
+     * {@code image_inadaptee} ou {@code autre} ; {@code null} sans retrait. Tant qu'il est renseigné, le versement est
+     * refusé.
+     */
+    @Column(name = "retrait_admin_motif")
+    private String retraitAdminMotif;
+
+    /** Texte du retrait de la Banque par l'administrateur, {@code null} s'il n'y en a pas. */
+    @Column(name = "retrait_admin_texte")
+    private String retraitAdminTexte;
+
     @ElementCollection
     @CollectionTable(name = "image_section", joinColumns = @JoinColumn(name = "image_id"))
     @Column(name = "section", nullable = false)
@@ -135,6 +147,26 @@ public class Image {
         this.sensId = sensId;
     }
 
+    /**
+     * Change l'état de l'Image : réservé à {@code vocabulaire.service}, seul à faire les transitions d'AD-3 (règle
+     * ArchUnit), sous verrou ({@code SELECT … FOR UPDATE}, AD-17).
+     */
+    public void changerEtat(String etat) {
+        this.etat = etat;
+    }
+
+    /**
+     * Vide le motif et le texte du retrait de la Banque par l'administrateur, à chaque modification de la Carte
+     * d'identité par le propriétaire (AD-3) : le versement redevient possible si l'Image est versable. Ne change rien
+     * sans retrait.
+     */
+    public void effacerRetraitAdmin() {
+        if (retraitAdminMotif != null || retraitAdminTexte != null) {
+            this.retraitAdminMotif = null;
+            this.retraitAdminTexte = null;
+        }
+    }
+
     public UUID id() {
         return id;
     }
@@ -177,6 +209,11 @@ public class Image {
 
     public String etat() {
         return etat;
+    }
+
+    /** Motif du retrait de la Banque par l'administrateur, {@code null} sans retrait. */
+    public String retraitAdminMotif() {
+        return retraitAdminMotif;
     }
 
     /** Module, {@code null} s'il n'y en a pas. */

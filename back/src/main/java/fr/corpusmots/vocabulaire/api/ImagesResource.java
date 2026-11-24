@@ -4,6 +4,7 @@ import fr.corpusmots.commun.api.ErreurMetier;
 import fr.corpusmots.commun.service.EnseignantCourant;
 import fr.corpusmots.commun.service.Pagination;
 import fr.corpusmots.commun.service.Section;
+import fr.corpusmots.vocabulaire.service.Acteur;
 import fr.corpusmots.vocabulaire.service.AjouterImageCommande;
 import fr.corpusmots.vocabulaire.service.CategorieGrammaticale;
 import fr.corpusmots.vocabulaire.service.ClasserImageCommande;
@@ -19,6 +20,7 @@ import fr.corpusmots.vocabulaire.service.ProvenanceImages;
 import fr.corpusmots.vocabulaire.service.ReductionImages;
 import fr.corpusmots.vocabulaire.service.TypeImage;
 import fr.corpusmots.vocabulaire.service.UsageFichierImage;
+import fr.corpusmots.vocabulaire.service.Versements;
 import jakarta.inject.Inject;
 import jakarta.ws.rs.Consumes;
 import jakarta.ws.rs.GET;
@@ -65,7 +67,12 @@ import org.jboss.resteasy.reactive.ResponseStatus;
  * {@code GET /images/{id}/sens} liste au propriétaire les Sens qu'il peut lui donner et {@code PUT /images/{id}/sens}
  * en change le Sens, refusé en {@code 409 image.sens_non_modifiable} dès que l'Image a un lien ;
  * {@code POST /images/{id}/sens} lui donne un Sens tapé par le propriétaire, créé s'il n'existe pas, avec les mêmes
- * refus.
+ * refus. {@code POST /images/{id}/versement} verse une Image de son propriétaire dans la Banque de l'école (FR-19) :
+ * {@code 404 image.indisponible} pour une Image absente ou invisible, {@code 403 image.reservee_au_proprietaire} pour
+ * l'Image d'un collègue, {@code 400} avec le code du motif pour une Image non versable (AD-4) ; une Image déjà versée ne
+ * change pas. {@code POST /images/versements} verse un lot de 1 à 500 Images, chacune selon la même règle, et rend les
+ * versées, les déjà versées et les refusées avec leur raison ; une liste vide, trop longue, avec un doublon, un nul ou
+ * un identifiant mal formé répond {@code 400 requete.invalide}.
  *
  * <p>Fichiers des Images (AD-23) : servis uniquement par {@link FichiersImages#lire}, qui applique la visibilité (AD-2).
  * Une Image que l'enseignant connecté ne peut pas consulter répond {@code 404 ressource.introuvable}, comme une Image
@@ -94,6 +101,9 @@ public class ImagesResource {
 
     @Inject
     ReductionImages reduction;
+
+    @Inject
+    Versements versements;
 
     @POST
     @Consumes(MediaType.MULTIPART_FORM_DATA)
@@ -205,6 +215,21 @@ public class ImagesResource {
                             implementation = UUID.class)))
     public List<UUID> listerProprietaires() {
         return images.proprietairesBanque();
+    }
+
+    @POST
+    @Path("/versements")
+    @Consumes(MediaType.APPLICATION_JSON)
+    @Produces(MediaType.APPLICATION_JSON)
+    @Operation(operationId = "verserImages",
+            summary = "Verser en lot des Images de l'enseignant connecté dans la Banque de l'école ; les Images non"
+                    + " versables restent hors du lot, avec leur raison")
+    @APIResponse(responseCode = "200", description = "Images versées et Images refusées avec leur raison",
+            content = @Content(mediaType = MediaType.APPLICATION_JSON,
+                    schema = @Schema(implementation = ResultatVersementLotDto.class)))
+    public ResultatVersementLotDto verserLot(@RequestBody(required = true) VersementLotImagesDto lot) {
+        // Liste absente, vide, trop longue, avec un nul ou un doublon : refusée par Versements.verserLot seul.
+        return ResultatVersementLotDto.de(versements.verserLot(lot == null ? null : lot.imageIds(), acteur()));
     }
 
     @GET
@@ -319,6 +344,19 @@ public class ImagesResource {
         return CarteIdentiteImageDto.de(images.creerSens(id, nouveau.libelle(), categorie));
     }
 
+    @POST
+    @Path("/{id}/versement")
+    @Produces(MediaType.APPLICATION_JSON)
+    @Operation(operationId = "verserImage",
+            summary = "Verser une Image de l'enseignant connecté dans la Banque de l'école (son seul propriétaire) ;"
+                    + " sans effet si elle est déjà versée")
+    @APIResponse(responseCode = "200", description = "Carte d'identité à jour de l'Image, versée",
+            content = @Content(mediaType = MediaType.APPLICATION_JSON,
+                    schema = @Schema(implementation = CarteIdentiteImageDto.class)))
+    public CarteIdentiteImageDto verser(@PathParam("id") UUID id) {
+        return CarteIdentiteImageDto.de(versements.verser(id, acteur()));
+    }
+
     @GET
     @Path("/{id}/fichier")
     @Operation(operationId = "fichierImage",
@@ -339,6 +377,15 @@ public class ImagesResource {
         Response.ResponseBuilder reponse = inchange != null ? inchange
                 : Response.ok(fichier.octets(), fichier.typeMime());
         return reponse.tag(etiquette).header(HttpHeaders.CACHE_CONTROL, CACHE_FICHIER).build();
+    }
+
+    /** L'enseignant connecté, propriétaire qui verse (AD-3) : toujours celui du jeton, jamais un paramètre. */
+    private Acteur.Proprietaire acteur() {
+        UUID enseignantId = enseignantCourant.id();
+        if (enseignantId == null) {
+            throw new ErreurMetier(401, "authentification.requise", "Enseignant connecté inconnu");
+        }
+        return new Acteur.Proprietaire(enseignantId);
     }
 
     /**

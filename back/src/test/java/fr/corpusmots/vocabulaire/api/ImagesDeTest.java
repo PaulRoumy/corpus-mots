@@ -230,6 +230,35 @@ public class ImagesDeTest {
         });
     }
 
+    /** Enregistre un retrait de la Banque par l'administrateur : ce motif et ce texte, tous deux non nuls. */
+    public void retraitAdmin(UUID imageId, String motif, String texte) {
+        QuarkusTransaction.requiringNew().run(() -> entityManager.createNativeQuery(
+                "update image set retrait_admin_motif = :motif, retrait_admin_texte = :texte where id = :id")
+                .setParameter("motif", motif)
+                .setParameter("texte", texte)
+                .setParameter("id", imageId)
+                .executeUpdate());
+    }
+
+    /** Motif et texte du retrait admin enregistrés, séparés par {@code |} ({@code null} pour une absence). */
+    public String retraitAdmin(UUID imageId) {
+        return QuarkusTransaction.requiringNew().call(() -> {
+            Object[] ligne = (Object[]) entityManager.createNativeQuery(
+                    "select retrait_admin_motif, retrait_admin_texte from image where id = :id")
+                    .setParameter("id", imageId)
+                    .getSingleResult();
+            return ligne[0] + "|" + ligne[1];
+        });
+    }
+
+    /** État enregistré de l'Image. */
+    public String etat(UUID imageId) {
+        return QuarkusTransaction.requiringNew().call(() -> (String) entityManager.createNativeQuery(
+                "select etat from image where id = :id")
+                .setParameter("id", imageId)
+                .getSingleResult());
+    }
+
     /** Version enregistrée de l'Image. */
     public long version(UUID imageId) {
         return QuarkusTransaction.requiringNew().call(() -> ((Number) entityManager.createNativeQuery(

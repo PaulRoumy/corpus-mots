@@ -72,6 +72,8 @@ export const MESSAGES_PAR_CODE: Readonly<Record<string, string>> = {
   'arasaac.indisponible': "ARASAAC ne répond pas pour l'instant.",
   'arasaac.pictogramme_introuvable': "Ce pictogramme n'est plus disponible chez ARASAAC.",
   'ressource.introuvable': "Cet élément n'existe plus. Rechargez la page.",
+  'ressource.modifiee_entre_temps':
+    "Cet élément vient d'être modifié par ailleurs. Rechargez la page, puis réessayez.",
   'requete.invalide': 'La demande est incomplète. Vérifiez la saisie, puis réessayez.',
   'requete.trop_volumineuse':
     'Envoi trop volumineux : 20 Mo au plus par fichier, 100 Mo par envoi.',

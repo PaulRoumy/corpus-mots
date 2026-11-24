@@ -141,7 +141,9 @@ class ChoixImagePreparationResourceTest {
                 .body("sens.id", equalTo(sensFarine.toString()))
                 .body("illustre", equalTo(true))
                 .body("image.id", equalTo(y.toString()))
-                .body("image.proprietaireId", equalTo(ZOE));
+                .body("image.proprietaireId", equalTo(ZOE))
+                // Image d'une collègue : aucune versabilité (story 3.3).
+                .body("image.versabilite", nullValue());
 
         assertEquals(y + "|" + PAUL + "|" + pouleRousse + "|ms|reutilisee", lienEnBase(motPreparation));
         assertEquals(1L, nombre("select count(*) from lien_image"));
@@ -157,7 +159,9 @@ class ChoixImagePreparationResourceTest {
         choisir(preparation, farine, y)
                 .statusCode(200)
                 .body("illustre", equalTo(true))
-                .body("image.id", equalTo(y.toString()));
+                .body("image.id", equalTo(y.toString()))
+                // Image libre sourcée sous CC0 de Paul, privée : versable (story 3.3).
+                .body("image.versabilite", equalTo("versable"));
 
         assertEquals(y + "|" + PAUL + "|" + pouleRousse + "|ms|reutilisee", lienEnBase(farine));
         given().when().get("/api/preparations/" + preparation)
@@ -182,6 +186,17 @@ class ChoixImagePreparationResourceTest {
         assertEquals(metier, sensRetenu(motPreparation));
         assertEquals(y + "|" + PAUL + "|" + pouleRousse + "|ms|reutilisee", lienEnBase(motPreparation));
         assertEquals(1L, nombre("select count(*) from sens_retenu"));
+    }
+
+    @Test
+    void uneImageVerseeDuProprietaireNePortePasDeVersabilite() {
+        UUID farine = UUID.fromString(ajouter("farine"));
+        UUID versee = image(PAUL, sensRetenu(farine), "versee", "ms");
+
+        choisir(preparation, farine, versee)
+                .statusCode(200)
+                .body("image.id", equalTo(versee.toString()))
+                .body("image.versabilite", nullValue());
     }
 
     @Test
@@ -270,6 +285,8 @@ class ChoixImagePreparationResourceTest {
                 .body("illustre", equalTo(true))
                 .body("image.id", notNullValue())
                 .body("image.proprietaireId", equalTo(PAUL))
+                // Téléversée en type inconnu : le motif de refus du versement (story 3.3).
+                .body("image.versabilite", equalTo("image.versement.type_inconnu"))
                 .extract().path("image.id");
 
         assertNotEquals(x.toString(), nouvelle);

@@ -31,6 +31,11 @@ describe('messageErreur', () => {
     [409, 'compte.auto_desactivation', 'Vous ne pouvez pas désactiver votre propre compte.'],
     [400, 'compte.nom_affiche_invalide', 'Saisissez un nom de 1 à 100 caractères.'],
     [409, 'compte.statut_incompatible', 'Ce compte a changé entre-temps. La liste est rechargée.'],
+    [
+      409,
+      'ressource.modifiee_entre_temps',
+      "Cet élément vient d'être modifié par ailleurs. Rechargez la page, puis réessayez.",
+    ],
     // preparations.service.PreparationsService
     [400, 'preparation.section_invalide', 'Choisissez la section : PS, MS ou GS.'],
     [400, 'preparation.album_introuvable', "Cet album n'existe plus. Choisissez-en un autre."],

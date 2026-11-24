@@ -17,11 +17,18 @@ public record PreparationImageDto(
         @Schema(required = true, enumeration = { "image_album", "image_libre", "photo_personnelle", "inconnu" })
         String typeImage,
         @Schema(required = true, description = "Vrai pour une image libre sans source ou sans licence")
-        boolean aCompleter) {
+        boolean aCompleter,
+        @Schema(nullable = true, enumeration = { "versable", "image.versement.retrait_admin",
+                "image.versement.image_album", "image.versement.type_inconnu", "image.versement.source_manquante",
+                "image.versement.licence_non_versable" },
+                description = "versable, ou le code du motif qui empêche de verser l'Image (AD-4) ; null si"
+                        + " l'enseignant connecté n'en est pas le propriétaire ou si elle est déjà versée")
+        String versabilite) {
 
     static PreparationImageDto de(ImageVue vue) {
         return vue == null ? null
                 : new PreparationImageDto(vue.id(), vue.proprietaireId(), vue.etat().valeur(), vue.aRemplacer(),
-                        vue.reutilisable(), vue.typeImage().valeur(), vue.aCompleter());
+                        vue.reutilisable(), vue.typeImage().valeur(), vue.aCompleter(),
+                        vue.versabilite() == null ? null : vue.versabilite().valeur());
     }
 }
