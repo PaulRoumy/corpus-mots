@@ -1,4 +1,4 @@
-// Banque (key-banque.html › `.pagehd`, `.filters`, `.grp`, `.gh`, `.vgrid`), sans les filtres de la story 3.2.
+// Banque (key-banque.html › `.pagehd`, `.filters`, `.grp`, `.gh`, `.vgrid`) ; la barre de filtres a ses styles.
 .banque__entete {
   display: flex;
   flex-wrap: wrap;
@@ -14,6 +14,13 @@
 .groupe {
   display: flex;
   flex-direction: column;
+  gap: var(--cm-espace-2);
+}
+
+.groupe__tete {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
   gap: var(--cm-espace-2);
 }
 

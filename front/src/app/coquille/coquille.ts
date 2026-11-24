@@ -18,6 +18,7 @@ import { map } from 'rxjs';
 import { Authentification } from '../commun/authentification/authentification';
 import { CompteCourant } from '../commun/compte-courant';
 import { MESSAGE_COMPTE_NON_CHARGE, MESSAGES_PAR_CODE } from '../commun/erreurs/message-erreur';
+import { LONGUEUR_MAX_MOT } from '../commun/longueur-mot';
 import { AjouterImage } from '../preparations/ajouter-image';
 import { NouvellePreparation } from '../preparations/nouvelle-preparation';
 
@@ -71,11 +72,7 @@ import { NouvellePreparation } from '../preparations/nouvelle-preparation';
             </div>
 
             <div class="coquille__outils">
-              <form
-                class="coquille__recherche"
-                role="search"
-                (submit)="chercher($event, champ.value)"
-              >
+              <form class="coquille__recherche" role="search" (submit)="chercher($event, champ)">
                 <mat-icon svgIcon="recherche" aria-hidden="true" />
                 <label class="cm-visuellement-masque" for="coquille-recherche"
                   >Chercher un mot</label
@@ -85,6 +82,7 @@ import { NouvellePreparation } from '../preparations/nouvelle-preparation';
                   id="coquille-recherche"
                   type="search"
                   name="mot"
+                  [maxLength]="longueurMaxMot"
                   autocomplete="off"
                   placeholder="Chercher un mot"
                 />
@@ -223,6 +221,7 @@ export class Coquille {
   );
   protected readonly navigationOuverte = signal(false);
 
+  protected readonly longueurMaxMot = LONGUEUR_MAX_MOT;
   protected readonly nomAffiche = computed(() => this.compteCourant.compte()?.nomAffiche ?? '');
   protected readonly initiale = computed(() =>
     this.nomAffiche().trim().charAt(0).toLocaleUpperCase('fr'),
@@ -232,12 +231,23 @@ export class Coquille {
     void this.compteCourant.charger();
   }
 
-  /** Entrée dans le Champ de recherche : la Banque filtrée sur ce Mot ; champ vide, rien. */
-  protected chercher(evenement: Event, saisie: string): void {
+  /**
+   * Entrée dans le Champ de recherche : la Banque en Tout, filtrée sur ce Mot seul (les autres filtres sont
+   * abandonnés), puis le champ se vide ; champ vide, rien.
+   */
+  protected chercher(evenement: Event, champ: HTMLInputElement): void {
     evenement.preventDefault();
-    const mot = saisie.trim();
+    const mot = champ.value.trim();
     if (mot) {
-      void this.router.navigate(['/banque'], { queryParams: { mot } });
+      void this.router.navigate(['/banque'], { queryParams: { provenance: 'tout', mot } }).then(
+        (faite) => {
+          if (faite !== false) {
+            champ.value = '';
+          }
+        },
+        // Navigation rejetée : la saisie reste dans le champ.
+        () => undefined,
+      );
     }
   }
 

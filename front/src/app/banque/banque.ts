@@ -18,7 +18,7 @@ import { toSignal } from '@angular/core/rxjs-interop';
 import { MatButtonModule } from '@angular/material/button';
 import { MatDialog } from '@angular/material/dialog';
 import { MatChipListboxChange, MatChipsModule } from '@angular/material/chips';
-import { ActivatedRoute, Router } from '@angular/router';
+import { ActivatedRoute, ParamMap, Router } from '@angular/router';
 import { map } from 'rxjs';
 import { Api } from '../api/api';
 import { listerImagesBanque } from '../api/fn/images-resource/lister-images-banque';
@@ -33,6 +33,15 @@ import { EtatVide } from '../commun/etat-vide/etat-vide';
 import { categorieGrammaticale, LIBELLES_CATEGORIE } from '../commun/libelles-images';
 import { Squelette } from '../commun/squelette/squelette';
 import { AjouterImage } from '../preparations/ajouter-image';
+import { BarreFiltres } from './barre-filtres';
+import {
+  ChangementFiltres,
+  CLES_FILTRES,
+  FiltresBanque,
+  filtresDeLUrl,
+  filtresPoses,
+  memesFiltres,
+} from './filtres-banque';
 import { ID_PANNEAU_CARTE_IDENTITE, VignetteBanque } from './vignette-banque';
 
 /** Provenance des Images de la Banque, même valeur dans l'URL et dans l'API. */
@@ -95,6 +104,15 @@ interface EchecBanque {
  * même après la fermeture du panneau ; changée de Sens, l'Image rejoint le groupe de ce Sens s'il est chargé, sinon
  * forme un groupe à sa place. Un changement de provenance ferme le panneau ; « Afficher plus » le laisse ouvert.
  *
+ * Filtres (story 3.2, partie 2, FR-15) : la barre de Puces de filtre (`BarreFiltres`) sous la Puce de provenance pose
+ * des paramètres nommés comme ceux de `GET /api/images` (`mot`, `sensId`, `section`, `albumId`, `moduleId`, `themeId`,
+ * `categorie`, `typeImage`, `proprietaireId`). L'URL est leur seule source ; une valeur invalide y est ignorée et
+ * n'est pas envoyée. Un changement de filtres recharge depuis la première page, ferme le panneau et annonce le nombre
+ * d'Images, comme un changement de provenance (et l'arrivée sur une URL filtrée). Chaque en-tête de groupe porte
+ * « Filtrer sur ce sens », sauf celui du Sens déjà filtré ; la puce Sens dit « forme (Sens) », gardé d'une lecture à
+ * l'autre, ou « Sens (inconnu) » si la liste chargée ne le montre pas. Filtres posés sans résultat : « Aucune image. »
+ * et « Effacer les filtres », qui ne garde que la provenance déjà dans l'URL et rend le focus au titre.
+ *
  * Aucun filtrage d'Images ici (AD-2) : le back renvoie ce que l'enseignant peut voir. Le propriétaire est résolu par
  * l'annuaire (AD-20).
  */
@@ -102,6 +120,7 @@ interface EchecBanque {
   selector: 'app-banque',
   imports: [
     BandeauErreur,
+    BarreFiltres,
     CarteIdentite,
     EtatVide,
     MatButtonModule,
@@ -140,6 +159,15 @@ interface EchecBanque {
           }
         </mat-chip-listbox>
 
+        <app-barre-filtres
+          class="banque__filtres"
+          [filtres]="filtres()"
+          [libelleSens]="libelleSensFiltre()"
+          [sensInconnu]="sensInconnu()"
+          (changer)="changerFiltres($event)"
+          (effacer)="effacerFiltres()"
+        />
+
         @if (erreur(); as echec) {
           <app-bandeau-erreur
             [message]="echec.message"
@@ -150,7 +178,18 @@ interface EchecBanque {
 
         @if (images(); as chargees) {
           @if (chargees.length === 0) {
-            @if (provenance() === 'mes-mots') {
+            @if (filtresPoses()) {
+              <app-etat-vide icone="banque" phrase="Aucune image.">
+                <button
+                  matButton="tonal"
+                  class="banque__effacer"
+                  type="button"
+                  (click)="effacerFiltres()"
+                >
+                  Effacer les filtres
+                </button>
+              </app-etat-vide>
+            } @else if (provenance() === 'mes-mots') {
               <app-etat-vide icone="banque" phrase="Aucune image dans Mes mots.">
                 <button
                   matButton="filled"
@@ -167,14 +206,27 @@ interface EchecBanque {
           } @else {
             @for (groupe of groupes(); track groupe.sensId) {
               <section class="groupe">
-                <h2 class="groupe__entete">
-                  <span class="groupe__forme">{{ groupe.forme }}</span
-                  >&ngsp; <span class="groupe__sens">({{ groupe.sensLibelle }})</span>&ngsp;
-                  <span class="groupe__compte"
-                    >{{ groupe.categorie ? groupe.categorie + ' · ' : ''
-                    }}{{ libelleImages(groupe.images.length) }}</span
-                  >
-                </h2>
+                <div class="groupe__tete">
+                  <h2 class="groupe__entete" [id]="idEntete(groupe.sensId)">
+                    <span class="groupe__forme">{{ groupe.forme }}</span
+                    >&ngsp; <span class="groupe__sens">({{ groupe.sensLibelle }})</span>&ngsp;
+                    <span class="groupe__compte"
+                      >{{ groupe.categorie ? groupe.categorie + ' · ' : ''
+                      }}{{ libelleImages(groupe.images.length) }}</span
+                    >
+                  </h2>
+                  @if (filtres().sensId !== groupe.sensId) {
+                    <button
+                      matButton
+                      class="groupe__filtrer"
+                      type="button"
+                      [attr.aria-describedby]="idEntete(groupe.sensId)"
+                      (click)="filtrerSurSens(groupe.sensId)"
+                    >
+                      Filtrer sur ce sens
+                    </button>
+                  }
+                </div>
                 <ul class="groupe__vignettes">
                   @for (image of groupe.images; track image.id) {
                     <li>
@@ -214,7 +266,7 @@ interface EchecBanque {
             matButton="tonal"
             class="banque__reessayer"
             type="button"
-            (click)="chargerPremierePage()"
+            (click)="chargerPremierePage(annonceEnAttente)"
           >
             Réessayer
           </button>
@@ -247,13 +299,18 @@ export class Banque {
   protected readonly libelleImages = libelleImages;
   protected readonly idPanneau = ID_PANNEAU_CARTE_IDENTITE;
 
+  private readonly parametres = toSignal<ParamMap, ParamMap>(this.route.queryParamMap, {
+    initialValue: this.route.snapshot.queryParamMap,
+  });
   /** Provenance de l'URL ; absente ou inconnue, Mes mots. */
-  protected readonly provenance = toSignal(
-    this.route.queryParamMap.pipe(
-      map((parametres) => provenanceDeLUrl(parametres.get('provenance'))),
-    ),
-    { initialValue: provenanceDeLUrl(this.route.snapshot.queryParamMap.get('provenance')) },
+  protected readonly provenance = computed(() =>
+    provenanceDeLUrl(this.parametres().get('provenance')),
   );
+  /** Filtres de l'URL, valeurs invalides écartées ; les mêmes filtres ne relisent rien. */
+  protected readonly filtres = computed(() => filtresDeLUrl(this.parametres()), {
+    equal: memesFiltres,
+  });
+  protected readonly filtresPoses = computed(() => filtresPoses(this.filtres()));
 
   /** Images chargées, dans l'ordre du back ; `null` tant que la première page n'est pas reçue. */
   protected readonly images = signal<ImageBanqueDto[] | null>(null);
@@ -295,6 +352,26 @@ export class Banque {
     return [...parSens.values()];
   });
 
+  /** Dernier libellé « forme (Sens) » connu d'un Sens filtré : il reste d'une lecture à l'autre. */
+  private readonly sensConnu = signal<{ sensId: string; libelle: string } | null>(null);
+  /** Libellé du Sens filtré : celui d'un groupe chargé, sinon le dernier connu, sinon `null`. */
+  protected readonly libelleSensFiltre = computed(() => {
+    const sensId = this.filtres().sensId;
+    const groupe = this.groupes().find((autre) => autre.sensId === sensId);
+    if (groupe !== undefined) {
+      return `${groupe.forme} (${groupe.sensLibelle})`;
+    }
+    const connu = this.sensConnu();
+    return connu !== null && connu.sensId === sensId ? connu.libelle : null;
+  });
+  /** Sens filtré sans libellé, alors que la liste est chargée : « Sens (inconnu) ». */
+  protected readonly sensInconnu = computed(
+    () =>
+      this.filtres().sensId !== undefined &&
+      this.libelleSensFiltre() === null &&
+      this.images() !== null,
+  );
+
   /** Image dont le Panneau Carte d'identité est ouvert ; un seul à la fois. */
   protected readonly carteOuverte = signal<string | null>(null);
   private readonly panneauCarteIdentite = viewChild(CarteIdentite);
@@ -315,13 +392,20 @@ export class Banque {
   private derniereLecture = 0;
   /** Pages déjà reçues pour la provenance courante. */
   private pagesRecues = 0;
+  /** Annonce du nombre d'Images due par la dernière première page demandée ; « Réessayer » la garde. */
+  protected annonceEnAttente = false;
 
   constructor() {
     void this.annuaire.charger();
     void this.compteCourant.charger();
-    // Nouvelle provenance : le panneau se ferme et la liste repart de la première page.
+    // Nouvelle provenance ou nouveaux filtres : le panneau se ferme et la liste repart de la première page ; le nombre
+    // d'Images est annoncé, sauf à l'arrivée sur la page sans filtre.
+    let premiereLecture = true;
     effect(() => {
       this.provenance();
+      const filtres = this.filtres();
+      const annoncer = !premiereLecture || filtresPoses(filtres);
+      premiereLecture = false;
       untracked(() => {
         // Retour arrière du navigateur, focus dans le panneau : il ne tombe pas sur la page, il va au titre.
         const focusDansPanneau = this.focusDansPanneau();
@@ -329,8 +413,16 @@ export class Banque {
         if (focusDansPanneau) {
           this.focusTitre();
         }
-        void this.chargerPremierePage();
+        void this.chargerPremierePage(annoncer);
       });
+    });
+    // Libellé du Sens filtré, gardé pour les lectures qui ne le montrent pas.
+    effect(() => {
+      const sensId = this.filtres().sensId;
+      const groupe = this.groupes().find((autre) => autre.sensId === sensId);
+      if (sensId !== undefined && groupe !== undefined) {
+        this.sensConnu.set({ sensId, libelle: `${groupe.forme} (${groupe.sensLibelle})` });
+      }
     });
     // Passage sous 600 px, panneau ouvert : la page devient inerte, le focus passe au panneau.
     effect(() => {
@@ -422,6 +514,39 @@ export class Banque {
         queryParamsHandling: 'merge',
       });
     }
+  }
+
+  /** Filtres posés ou retirés par la barre : l'URL change, la liste suit. */
+  protected changerFiltres(changement: ChangementFiltres): void {
+    void this.router.navigate([], {
+      relativeTo: this.route,
+      queryParams: changement,
+      queryParamsHandling: 'merge',
+    });
+  }
+
+  /** « Filtrer sur ce sens » sur l'en-tête d'un groupe. */
+  protected filtrerSurSens(sensId: string): void {
+    const groupe = this.groupes().find((autre) => autre.sensId === sensId);
+    if (groupe !== undefined) {
+      this.sensConnu.set({ sensId, libelle: `${groupe.forme} (${groupe.sensLibelle})` });
+    }
+    this.changerFiltres({ sensId });
+  }
+
+  /** « Effacer les filtres » : ne reste que la provenance déjà dans l'URL ; le focus va au titre « Banque ». */
+  protected effacerFiltres(): void {
+    void this.router.navigate([], {
+      relativeTo: this.route,
+      queryParams: Object.fromEntries(CLES_FILTRES.map((cle) => [cle, null])),
+      queryParamsHandling: 'merge',
+    });
+    this.focusTitre();
+  }
+
+  /** Identifiant de l'en-tête d'un groupe, qui décrit son bouton « Filtrer sur ce sens ». */
+  protected idEntete(sensId: string): string {
+    return `banque-groupe-${sensId}`;
   }
 
   /** Vignette activée : le panneau s'ouvre sur son Image, ou la remplace ; la même Image ne relit rien. */
@@ -518,15 +643,19 @@ export class Banque {
     void this.ajouterImage.ouvrir(evenement.currentTarget as HTMLElement);
   }
 
-  /** Première page de la provenance courante ; les Images affichées sont retirées. */
-  async chargerPremierePage(): Promise<void> {
+  /**
+   * Première page de la provenance et des filtres courants ; les Images affichées sont retirées. `annoncer` annonce le
+   * nombre d'Images reçu (changement de provenance ou de filtres).
+   */
+  async chargerPremierePage(annoncer = false): Promise<void> {
     const lecture = ++this.derniereLecture;
     this.images.set(null);
     this.total.set(null);
     this.erreur.set(null);
     this.pagesRecues = 0;
+    this.annonceEnAttente = annoncer;
     this.chargement.set('premiere');
-    await this.lire(lecture, 0);
+    await this.lire(lecture, 0, annoncer);
   }
 
   /** « Afficher plus » : la page suivante s'ajoute à la suite. */
@@ -540,9 +669,10 @@ export class Banque {
     await this.lire(lecture, this.pagesRecues);
   }
 
-  private async lire(lecture: number, page: number): Promise<void> {
+  private async lire(lecture: number, page: number, annoncer = false): Promise<void> {
     try {
       const reponse = await this.api.invoke(listerImagesBanque, {
+        ...this.filtres(),
         provenance: this.provenance(),
         page,
         taille: TAILLE_PAGE_BANQUE,
@@ -569,6 +699,16 @@ export class Banque {
       // Une page incomplète est la dernière, même si des Images ont disparu entre-temps.
       this.total.set(reponse.elements.length < TAILLE_PAGE_BANQUE ? images.length : reponse.total);
       this.pagesRecues = page + 1;
+      if (page === 0) {
+        this.annonceEnAttente = false;
+      }
+      if (annoncer) {
+        const total = this.totalAffiche() ?? 0;
+        void this.annonceur.announce(
+          total === 0 ? 'Aucune image.' : `${libelleImages(total)}.`,
+          'polite',
+        );
+      }
     } catch (erreur) {
       if (lecture !== this.derniereLecture) {
         return;
@@ -576,7 +716,9 @@ export class Banque {
       this.erreur.set({
         message: messageErreur(erreur),
         reessayer:
-          page === 0 ? () => void this.chargerPremierePage() : () => void this.afficherPlus(),
+          page === 0
+            ? () => void this.chargerPremierePage(annoncer)
+            : () => void this.afficherPlus(),
       });
     } finally {
       if (lecture === this.derniereLecture) {

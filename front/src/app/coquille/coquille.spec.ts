@@ -147,21 +147,38 @@ describe('Coquille', () => {
       expect(page(fixture).querySelector('h1')?.textContent).toContain('Comptes');
     });
 
-    it('Recherche : Entrée ouvre la Banque filtrée sur le Mot, entrée Banque mise en évidence', async () => {
+    it('Recherche : Entrée ouvre la Banque en Tout filtrée sur le Mot, champ vidé, entrée Banque mise en évidence', async () => {
       const fixture = await ouvrir('/', enCompte(ENSEIGNANTE));
       const champ = page(fixture).querySelector<HTMLInputElement>('input[type="search"]')!;
-      champ.value = '  galette ';
+      expect(champ.getAttribute('maxlength')).toBe('100');
+      champ.value = '  la Citrouille ';
       champ.form!.requestSubmit();
       await tour();
       await fixture.whenStable();
 
-      expect(TestBed.inject(Router).url).toBe('/banque?mot=galette');
+      expect(TestBed.inject(Router).url).toBe('/banque?provenance=tout&mot=la%20Citrouille');
+      expect(champ.value).toBe('');
       const banque = bouton(page(fixture), 'Banque')!;
       expect(banque.classList).toContain('coquille__rubrique--active');
       expect(banque.getAttribute('aria-current')).toBe('page');
       expect(bouton(page(fixture), 'Préparations')!.classList).not.toContain(
         'coquille__rubrique--active',
       );
+    });
+
+    it('Recherche depuis la Banque filtrée : la recherche remplace les filtres et la provenance', async () => {
+      const fixture = await ouvrir(
+        '/banque?provenance=mes-mots&section=gs&mot=loup',
+        enCompte(ENSEIGNANTE),
+      );
+      const champ = page(fixture).querySelector<HTMLInputElement>('input[type="search"]')!;
+      champ.value = 'galette';
+      champ.form!.requestSubmit();
+      await tour();
+      await fixture.whenStable();
+
+      expect(TestBed.inject(Router).url).toBe('/banque?provenance=tout&mot=galette');
+      expect(champ.value).toBe('');
     });
 
     it('Recherche vide : rien', async () => {

@@ -60,7 +60,7 @@ development_status:
 
   epic-3: in-progress
   3-1-parcourir-la-banque-ouverte-sur-mes-mots: done
-  3-2-filtrer-la-banque-et-rechercher-un-mot: in-progress
+  3-2-filtrer-la-banque-et-rechercher-un-mot: done
   3-3-verser-ses-images-dans-la-banque: backlog
   3-4-réutiliser-l-image-d-un-collègue: backlog
   3-5-notifications-et-ne-plus-verser: backlog

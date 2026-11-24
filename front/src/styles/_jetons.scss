@@ -223,6 +223,12 @@ $typographie-material: (
   // Vignette de la Banque dont la Carte d'identité est ouverte (story 3.1, partie 2) : anneau `primary` de 2 px
   // (DESIGN.md › case-selection, selected-card-ring).
   --cm-epaisseur-anneau-vignette-ouverte: 2px;
+  // Puce de filtre de la Banque (DESIGN.md › Puce de filtre, key-banque.html › `.chip`, story 3.2) : 32 px de haut,
+  // bordure de 1 px, bouton « Retirer le filtre » de 24 px ; champ de recherche d'Album du menu de 240 px.
+  --cm-hauteur-puce: 32px;
+  --cm-epaisseur-bordure-puce: 1px;
+  --cm-taille-retrait-puce: 24px;
+  --cm-largeur-menu-recherche: 240px;
   // Panneau Carte d'identité (key-banque.html › `.cid`, `dl.ro`, story 2.6) : grande vignette de 176 px, colonne des
   // intitulés de 132 px ; collé en haut du contenu à côté de la Grille, il tient dans la zone visible du contenu (écran
   // moins la barre supérieure de la coquille, 80 px : marges de 16 px et Bouton « + » de 48 px, et moins les marges

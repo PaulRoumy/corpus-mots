@@ -248,3 +248,9 @@
 - source_spec: `docs/realisation/spec-3-1-2-carte-identite-dans-la-banque.md`
   summary: Panneaux latéraux — la logique plein écran sous 600 px, page inerte et focus rendu est recopiée entre Préparation et Banque (à partager au troisième usage) ; le seuil `Breakpoints.XSmall` n'est vérifié par aucun test, les deux specs remplaçant `BreakpointObserver` sans regarder la requête.
   evidence: Revue de la story 3.1 partie 2, lignes 9 et 11 du journal de tri.
+- source_spec: `docs/realisation/spec-3-2-2-barre-de-filtres-et-recherche.md`
+  summary: Barre de filtres de la Banque — les menus `mat-menu` contiennent des messages et un champ de recherche hors `menuitem` (rôle ARIA `menu` ; un combobox ou un petit dialogue conviendrait mieux à la recherche d'Album) ; `barre-filtres.ts` est gros (773 lignes, trois lectures au même garde-fou de péremption) : découper au moment où la Génération de Fiche réutilisera les filtres ; listes des propriétaires et des Thèmes lues une fois par page.
+  evidence: Revue de la story 3.2 partie 2, lignes 13 à 15 du journal de tri.
+- source_spec: `docs/realisation/spec-3-2-2-barre-de-filtres-et-recherche.md`
+  summary: Paquet initial à 599,66 kB pour un budget de 600 kB ; le morceau partagé `@angular/core` a pris 0,38 kB avec la barre de filtres sans cause trouvée. Faire de la place avant la prochaine story qui touche la coquille ou les styles globaux.
+  evidence: Build de clôture de la story 3.2 partie 2.

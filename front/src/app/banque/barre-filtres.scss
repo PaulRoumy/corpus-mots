@@ -1,0 +1,152 @@
+// Barre de Puces de filtre de la Banque (DESIGN.md › Puce de filtre, key-banque.html › `.filters`, `.chip`) : puces de
+// 32 px, `surface` bordée `outline-variant` ; choisies, `secondary-container` avec coche et bouton de retrait.
+.filtres {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--cm-espace-2);
+}
+
+.puce {
+  display: inline-flex;
+  align-items: center;
+  height: var(--cm-hauteur-puce);
+  border: var(--cm-epaisseur-bordure-puce) solid var(--mat-sys-outline-variant);
+  border-radius: var(--cm-arrondi-sm);
+  background: var(--mat-sys-surface);
+  color: var(--mat-sys-on-surface);
+  font: var(--cm-typo-body-sm);
+  white-space: nowrap;
+}
+
+.puce--choisie {
+  border-color: transparent;
+  background: var(--mat-sys-secondary-container);
+  color: var(--mat-sys-on-secondary-container);
+  font: var(--cm-typo-label-sm);
+}
+
+.puce__bouton,
+.puce__libelle {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--cm-espace-1);
+  height: 100%;
+  padding: 0 var(--cm-espace-3);
+  border: 0;
+  border-radius: inherit;
+  background: none;
+  color: inherit;
+  font: inherit;
+}
+
+.puce__bouton {
+  cursor: pointer;
+
+  &[aria-disabled='true'] {
+    cursor: default;
+    color: var(--mat-sys-on-surface-variant);
+  }
+}
+
+.puce__coche {
+  width: var(--cm-taille-icone-badge);
+  height: var(--cm-taille-icone-badge);
+}
+
+.puce__deroulant {
+  margin-inline-start: var(--cm-espace-1);
+  border-inline: var(--cm-espace-1) solid transparent;
+  border-top: var(--cm-espace-1) solid currentColor;
+}
+
+.puce--choisie .puce__bouton,
+.puce--choisie .puce__libelle {
+  padding-inline-end: var(--cm-espace-1);
+}
+
+.puce__retirer {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--cm-taille-retrait-puce);
+  height: var(--cm-taille-retrait-puce);
+  margin-inline-end: var(--cm-espace-1);
+  padding: 0;
+  border: 0;
+  border-radius: var(--cm-arrondi-plein);
+  background: none;
+  color: inherit;
+  cursor: pointer;
+
+  mat-icon {
+    width: var(--cm-taille-icone-badge);
+    height: var(--cm-taille-icone-badge);
+  }
+}
+
+// Couche d'état (survol, focus) des boutons de la puce, en couleur du texte aux opacités Material ; l'anneau de focus
+// `primary` (UX-DR-36, global dans styles.scss) est rappelé ici, avec la couche de focus.
+.puce__bouton,
+.puce__retirer {
+  position: relative;
+
+  &::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    background: currentColor;
+    opacity: 0;
+    pointer-events: none;
+  }
+
+  &:hover:not([aria-disabled='true'])::before {
+    opacity: var(--mat-sys-hover-state-layer-opacity);
+  }
+
+  &:focus-visible {
+    outline: var(--cm-anneau-focus-epaisseur) solid var(--mat-sys-primary);
+    outline-offset: var(--cm-anneau-focus-decalage);
+  }
+
+  &:focus-visible::before {
+    opacity: var(--mat-sys-focus-state-layer-opacity);
+  }
+}
+
+// Contenu des menus, rendu dans la surcouche mais compilé avec ce composant (même encapsulation).
+.filtres__recherche {
+  padding: var(--cm-espace-2) var(--cm-espace-3);
+}
+
+.filtres__champ {
+  box-sizing: border-box;
+  width: var(--cm-largeur-menu-recherche);
+  height: var(--cm-hauteur-bouton);
+  padding: 0 var(--cm-espace-3);
+  border: var(--cm-epaisseur-bordure-puce) solid var(--mat-sys-outline);
+  border-radius: var(--cm-arrondi-sm);
+  background: var(--mat-sys-surface);
+  color: var(--mat-sys-on-surface);
+  font: var(--cm-typo-body);
+}
+
+.filtres__champ:hover {
+  border-color: var(--mat-sys-on-surface);
+}
+
+.filtres__champ:focus-visible {
+  border-color: var(--mat-sys-primary);
+  outline: var(--cm-anneau-focus-epaisseur) solid var(--mat-sys-primary);
+  outline-offset: var(--cm-anneau-focus-decalage);
+}
+
+.filtres__message {
+  max-width: var(--cm-largeur-menu-recherche);
+  margin: 0;
+  padding: var(--cm-espace-2) var(--cm-espace-4);
+  font: var(--cm-typo-body-sm);
+  color: var(--mat-sys-on-surface-variant);
+  white-space: normal;
+}

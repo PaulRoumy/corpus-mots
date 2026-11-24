@@ -9,7 +9,7 @@ import {
 import { signal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { MATERIAL_ANIMATIONS } from '@angular/material/core';
-import { provideRouter, Router } from '@angular/router';
+import { convertToParamMap, provideRouter, Router } from '@angular/router';
 import { RouterTestingHarness } from '@angular/router/testing';
 import { BehaviorSubject, map } from 'rxjs';
 import { CarteIdentiteImageDto } from '../api/models/carte-identite-image-dto';
@@ -21,6 +21,9 @@ import { CompteCourant } from '../commun/compte-courant';
 import { provideIcones } from '../commun/icones';
 import { AjouterImage } from '../preparations/ajouter-image';
 import { Banque, libelleImages, provenanceDeLUrl } from './banque';
+import { MESSAGE_RESEAU } from '../commun/erreurs/message-erreur';
+import { MESSAGE_PRECISER_ALBUM } from './barre-filtres';
+import { filtresDeLUrl } from './filtres-banque';
 
 const MOI = '0190f0a0-0000-7000-8000-00000000e001';
 const SOPHIE = '0190f0a0-0000-7000-8000-00000000e002';
@@ -110,6 +113,64 @@ describe('provenanceDeLUrl et libelleImages', () => {
     expect(libelleImages(0)).toBe('0 image');
     expect(libelleImages(1)).toBe('1 image');
     expect(libelleImages(84)).toBe('84 images');
+  });
+});
+
+describe('filtresDeLUrl', () => {
+  const ID = '0190f0a0-0000-7000-8000-0000000a0001';
+
+  it('lit chaque filtre valide, nommé comme le paramètre de l’API', () => {
+    expect(
+      filtresDeLUrl(
+        convertToParamMap({
+          provenance: 'tout',
+          mot: '  la Citrouille ',
+          sensId: ID,
+          section: 'gs',
+          albumId: ID,
+          moduleId: ID,
+          themeId: ID,
+          categorie: 'verbe',
+          typeImage: 'photo_personnelle',
+          proprietaireId: ID,
+        }),
+      ),
+    ).toEqual({
+      mot: 'la Citrouille',
+      sensId: ID,
+      section: 'gs',
+      albumId: ID,
+      moduleId: ID,
+      themeId: ID,
+      categorie: 'verbe',
+      typeImage: 'photo_personnelle',
+      proprietaireId: ID,
+    });
+  });
+
+  it('ignore les valeurs invalides, répétées, un Mot vide ou trop long et un Module sans Album', () => {
+    expect(
+      filtresDeLUrl(
+        convertToParamMap({
+          mot: '   ',
+          sensId: '1-2-3-4-5',
+          section: 'cp',
+          albumId: 'abc',
+          moduleId: ID,
+          themeId: [ID, ID],
+          categorie: 'Verbe',
+          typeImage: 'dessin',
+          proprietaireId: '',
+        }),
+      ),
+    ).toEqual({});
+    expect(filtresDeLUrl(convertToParamMap({ mot: 'a'.repeat(101) }))).toEqual({});
+    expect(filtresDeLUrl(convertToParamMap({ themeId: ID.toUpperCase() }))).toEqual({
+      themeId: ID,
+    });
+    expect(filtresDeLUrl(convertToParamMap({ mot: 'a'.repeat(100) }))).toEqual({
+      mot: 'a'.repeat(100),
+    });
   });
 });
 
@@ -1034,6 +1095,631 @@ describe('Banque', () => {
       expect(vignettes()).toHaveLength(150);
       expect(panneau()).not.toBeNull();
       expect(ouvertes()[0]).toBe('true');
+    });
+  });
+
+  describe('filtres', () => {
+    const ALBUM_LOUP = '0190f0a0-0000-7000-8000-0000000a0001';
+    const ALBUM_ROUGE = '0190f0a0-0000-7000-8000-0000000a0002';
+    const MODULE_1 = '0190f0a0-0000-7000-8000-0000000b0001';
+    const THEME_ANIMAUX = '0190f0a0-0000-7000-8000-0000000c0001';
+    const ALBUM = { auteur: 'X', createurId: MOI, nombreModules: 0 };
+    const ECHEC = { status: 503, statusText: 'Service Unavailable' };
+    const INTROUVABLE = { status: 404, statusText: 'Not Found' };
+    const RESEAU = { status: 0, statusText: 'Unknown Error' };
+
+    const attendre = (ms: number) => new Promise((fin) => setTimeout(fin, ms));
+
+    /** Requête de la Banque : provenance, première page et exactement ces filtres. */
+    const requeteFiltree = (provenance: string, filtres: Record<string, string> = {}, page = 0) =>
+      serveur.expectOne((requete) => {
+        if (requete.url !== '/api/images') {
+          return false;
+        }
+        const attendus: Record<string, string> = {
+          ...filtres,
+          provenance,
+          page: String(page),
+          taille: '100',
+        };
+        const cles = requete.params.keys();
+        return (
+          cles.length === Object.keys(attendus).length &&
+          cles.every((cle) => requete.params.get(cle) === attendus[cle])
+        );
+      });
+
+    const puceFiltre = (cle: string) =>
+      racine.querySelector<HTMLElement>(`app-barre-filtres [data-filtre="${cle}"]`)!;
+    const libellesPuces = () =>
+      [...racine.querySelectorAll('app-barre-filtres [data-filtre]')].map((p) => texte(p));
+    const retirer = (nom: string) =>
+      racine.querySelector<HTMLButtonElement>(
+        `app-barre-filtres button[aria-label="Retirer le filtre ${nom}"]`,
+      );
+    const entreesMenu = () => [
+      ...document.querySelectorAll<HTMLElement>('.cdk-overlay-pane [mat-menu-item]'),
+    ];
+    const libellesMenu = () => entreesMenu().map((entree) => texte(entree));
+    const messagesMenu = () =>
+      [...document.querySelectorAll('.cdk-overlay-pane .filtres__message')].map((m) => texte(m));
+    const url = () => TestBed.inject(Router).url;
+
+    async function ouvrirMenu(cle: string) {
+      puceFiltre(cle).click();
+      await stabiliser();
+    }
+
+    async function choisirEntree(libelle: string) {
+      entreesMenu()
+        .find((entree) => texte(entree) === libelle)!
+        .click();
+      await stabiliser();
+    }
+
+    it('combiner : Section GS puis catégorie verbe, un paramètre par filtre, grille relue avec les deux', async () => {
+      await ouvrirPage();
+      await servir(requeteFiltree('mes-mots'), images(2));
+      expect(libellesPuces()).toEqual([
+        'Section',
+        'Thème',
+        'Album',
+        'Module',
+        'Catégorie',
+        "Type d'image",
+        'Propriétaire',
+      ]);
+      expect(bouton('Effacer les filtres')).toBeUndefined();
+
+      await ouvrirMenu('section');
+      expect(puceFiltre('section').getAttribute('aria-haspopup')).toBe('menu');
+      expect(libellesMenu()).toEqual(['PS', 'MS', 'GS']);
+      expect(entreesMenu().every((e) => e.getAttribute('role') === 'menuitemradio')).toBe(true);
+      await choisirEntree('GS');
+
+      expect(url()).toBe('/banque?section=gs');
+      expect(document.activeElement).toBe(puceFiltre('section'));
+      expect(vignettes()).toHaveLength(0);
+      await servir(requeteFiltree('mes-mots', { section: 'gs' }), images(3));
+      expect(announce).toHaveBeenLastCalledWith('3 images.', 'polite');
+
+      await ouvrirMenu('categorie');
+      expect(libellesMenu()).toEqual(['nom', 'verbe', 'adjectif', 'adverbe', 'autre']);
+      await choisirEntree('verbe');
+
+      expect(url()).toBe('/banque?section=gs&categorie=verbe');
+      await servir(requeteFiltree('mes-mots', { section: 'gs', categorie: 'verbe' }), [image()]);
+      expect(announce).toHaveBeenLastCalledWith('1 image.', 'polite');
+      expect(texte(puceFiltre('section'))).toBe('Section : GS');
+      expect(texte(puceFiltre('categorie'))).toBe('Catégorie : verbe');
+      expect(puceFiltre('section').closest('.puce')!.classList).toContain('puce--choisie');
+      expect(puceFiltre('section').querySelector('mat-icon[svgicon="coche"]')).not.toBeNull();
+      expect(bouton('Effacer les filtres')).toBeDefined();
+
+      // Le type d'image reprend les libellés de la Carte d'identité ; Échap ferme et rend le focus à la puce.
+      await ouvrirMenu('typeImage');
+      expect(libellesMenu()).toEqual([
+        'image libre',
+        'photo personnelle',
+        "image d'album",
+        'inconnu',
+      ]);
+      const echap = new KeyboardEvent('keydown', { key: 'Escape', bubbles: true });
+      Object.defineProperty(echap, 'keyCode', { get: () => 27 });
+      document.querySelector('.mat-mdc-menu-panel')!.dispatchEvent(echap);
+      await stabiliser();
+      expect(entreesMenu()).toHaveLength(0);
+      expect(document.activeElement).toBe(puceFiltre('typeImage'));
+    });
+
+    it('retirer un filtre : paramètre retiré de l’URL, grille relue, focus sur la puce', async () => {
+      await ouvrirPage('/banque?section=gs&categorie=verbe');
+      await servir(requeteFiltree('mes-mots', { section: 'gs', categorie: 'verbe' }), [image()]);
+
+      retirer('Section')!.click();
+      await stabiliser();
+
+      expect(url()).toBe('/banque?categorie=verbe');
+      expect(document.activeElement).toBe(puceFiltre('section'));
+      expect(retirer('Section')).toBeNull();
+      expect(texte(puceFiltre('section'))).toBe('Section');
+      await servir(requeteFiltree('mes-mots', { categorie: 'verbe' }), images(2));
+      expect(vignettes()).toHaveLength(2);
+    });
+
+    it('Module sans Album : puce désactivée, avec l’indication', async () => {
+      await ouvrirPage();
+      await servir(requeteFiltree('mes-mots'), [image()]);
+
+      const module = puceFiltre('moduleId');
+      expect(module.getAttribute('aria-disabled')).toBe('true');
+      expect(module.hasAttribute('aria-haspopup')).toBe(false);
+      expect(texte(document.getElementById(module.getAttribute('aria-describedby')!))).toBe(
+        "Choisissez d'abord un album",
+      );
+      module.click();
+      await stabiliser();
+      expect(entreesMenu()).toHaveLength(0);
+    });
+
+    it('Album changé : le Module est retiré, le titre choisi nomme la puce', async () => {
+      await ouvrirPage(`/banque?albumId=${ALBUM_LOUP}&moduleId=${MODULE_1}`);
+      serveur
+        .expectOne(`/api/albums/${ALBUM_LOUP}`)
+        .flush({ ...ALBUM, id: ALBUM_LOUP, titre: 'Le loup' });
+      serveur
+        .expectOne(`/api/albums/${ALBUM_LOUP}/modules`)
+        .flush([{ id: MODULE_1, albumId: ALBUM_LOUP, nom: 'chapitre 1', ordre: 0 }]);
+      await servir(requeteFiltree('mes-mots', { albumId: ALBUM_LOUP, moduleId: MODULE_1 }), [
+        image(),
+      ]);
+      expect(texte(puceFiltre('albumId'))).toBe('Album : Le loup');
+      expect(texte(puceFiltre('moduleId'))).toBe('Module : chapitre 1');
+
+      await ouvrirMenu('moduleId');
+      expect(libellesMenu()).toEqual(['chapitre 1']);
+      expect(entreesMenu()[0].getAttribute('aria-checked')).toBe('true');
+      await choisirEntree('chapitre 1');
+      expect(url()).toBe(`/banque?albumId=${ALBUM_LOUP}&moduleId=${MODULE_1}`);
+
+      await ouvrirMenu('albumId');
+      const champ = document.querySelector<HTMLInputElement>('.cdk-overlay-pane input')!;
+      expect(document.activeElement).toBe(champ);
+      expect(messagesMenu()).toEqual(['Tapez au moins 2 caractères du titre.']);
+      champ.value = 'rou';
+      champ.dispatchEvent(new Event('input'));
+      await attendre(300);
+      await stabiliser();
+      serveur
+        .expectOne(
+          (requete) => requete.url === '/api/albums' && requete.params.get('recherche') === 'rou',
+        )
+        .flush({
+          elements: [{ ...ALBUM, id: ALBUM_ROUGE, titre: 'Le petit chaperon rouge' }],
+          total: 1,
+        });
+      await stabiliser();
+      // Flèche bas passe de la recherche aux résultats.
+      champ.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true }));
+      expect(document.activeElement).toBe(entreesMenu()[0]);
+      await choisirEntree('Le petit chaperon rouge');
+
+      expect(url()).toBe(`/banque?albumId=${ALBUM_ROUGE}`);
+      serveur.expectNone(`/api/albums/${ALBUM_ROUGE}`);
+      serveur.expectOne(`/api/albums/${ALBUM_ROUGE}/modules`).flush([]);
+      await servir(requeteFiltree('mes-mots', { albumId: ALBUM_ROUGE }), [image()]);
+      expect(texte(puceFiltre('albumId'))).toBe('Album : Le petit chaperon rouge');
+      expect(texte(puceFiltre('moduleId'))).toBe('Module');
+      expect(document.activeElement).toBe(puceFiltre('albumId'));
+    });
+
+    it('retirer l’Album retire aussi le Module', async () => {
+      await ouvrirPage(`/banque?albumId=${ALBUM_LOUP}&moduleId=${MODULE_1}`);
+      serveur.expectOne(`/api/albums/${ALBUM_LOUP}`).flush(null, INTROUVABLE);
+      serveur.expectOne(`/api/albums/${ALBUM_LOUP}/modules`).flush(null, ECHEC);
+      await servir(requeteFiltree('mes-mots', { albumId: ALBUM_LOUP, moduleId: MODULE_1 }), [
+        image(),
+      ]);
+      expect(texte(puceFiltre('moduleId'))).toBe('Module (inconnu)');
+
+      retirer('Album')!.click();
+      await stabiliser();
+
+      expect(url()).toBe('/banque');
+      await servir(requeteFiltree('mes-mots'), [image()]);
+    });
+
+    it('propriétaires : « Moi » d’abord, puis les collègues nommés par l’annuaire', async () => {
+      await ouvrirPage('/banque?provenance=tout');
+      await servir(requeteFiltree('tout'), [image()]);
+
+      await ouvrirMenu('proprietaireId');
+      expect(messagesMenu()).toEqual(['Chargement…']);
+      serveur.expectOne('/api/images/proprietaires').flush([SOPHIE, MOI, PARTIE]);
+      await stabiliser();
+
+      expect(libellesMenu()).toEqual(['Moi', 'Sophie', 'ancien compte']);
+      await choisirEntree('Sophie');
+
+      expect(url()).toBe(`/banque?provenance=tout&proprietaireId=${SOPHIE}`);
+      expect(texte(puceFiltre('proprietaireId'))).toBe('Propriétaire : Sophie');
+      await servir(requeteFiltree('tout', { proprietaireId: SOPHIE }), [
+        image({ proprietaireId: SOPHIE, versee: true }),
+      ]);
+    });
+
+    it('propriétaires en échec : message dans le menu et « Réessayer »', async () => {
+      await ouvrirPage();
+      await servir(requeteFiltree('mes-mots'), [image()]);
+
+      await ouvrirMenu('proprietaireId');
+      serveur.expectOne('/api/images/proprietaires').flush(null, RESEAU);
+      await stabiliser();
+      expect(messagesMenu()).toEqual([MESSAGE_RESEAU]);
+      expect(libellesMenu()).toEqual(['Réessayer']);
+
+      await choisirEntree('Réessayer');
+      serveur.expectOne('/api/images/proprietaires').flush([MOI]);
+      await stabiliser();
+
+      expect(libellesMenu()).toEqual(['Moi']);
+    });
+
+    it('« Filtrer sur ce sens » : ?sensId=…, puce au libellé du Sens', async () => {
+      await ouvrirPage();
+      await servir(requeteFiltree('mes-mots'), [
+        image(),
+        image({ forme: 'renard', sensId: SENS_RENARD, sensLibelle: 'goupil' }),
+      ]);
+      const filtrer = racine.querySelectorAll<HTMLButtonElement>('.groupe__filtrer');
+      expect(filtrer).toHaveLength(2);
+      expect(texte(filtrer[1])).toBe('Filtrer sur ce sens');
+      expect(texte(document.getElementById(filtrer[1].getAttribute('aria-describedby')!))).toBe(
+        'renard (goupil) nom · 1 image',
+      );
+
+      filtrer[1].click();
+      await stabiliser();
+
+      expect(url()).toBe(`/banque?sensId=${SENS_RENARD}`);
+      expect(texte(puceFiltre('sensId'))).toBe('Sens : renard (goupil)');
+      await servir(requeteFiltree('mes-mots', { sensId: SENS_RENARD }), [
+        image({ forme: 'renard', sensId: SENS_RENARD, sensLibelle: 'goupil' }),
+      ]);
+      expect(texte(puceFiltre('sensId'))).toBe('Sens : renard (goupil)');
+      expect(racine.querySelector('.groupe__filtrer')).toBeNull();
+
+      retirer('Sens')!.click();
+      await stabiliser();
+      expect(url()).toBe('/banque');
+      expect(document.activeElement).toBe(puceFiltre('section'));
+      await servir(requeteFiltree('mes-mots'), [image()]);
+    });
+
+    it('sans résultat : « Aucune image. » et « Effacer les filtres », sans « Ajouter une image »', async () => {
+      await ouvrirPage('/banque?section=gs');
+      await servir(requeteFiltree('mes-mots', { section: 'gs' }), []);
+
+      expect(texte(racine.querySelector('app-etat-vide .etat-vide__phrase'))).toBe('Aucune image.');
+      expect(racine.querySelector('app-etat-vide button.banque__effacer')).not.toBeNull();
+      expect(bouton('Ajouter une image')).toBeUndefined();
+    });
+
+    it('changement de filtre sans résultat : « Aucune image. » annoncé', async () => {
+      await ouvrirPage();
+      await servir(requeteFiltree('mes-mots'), [image()]);
+      await ouvrirMenu('section');
+      await choisirEntree('PS');
+
+      await servir(requeteFiltree('mes-mots', { section: 'ps' }), []);
+
+      expect(announce).toHaveBeenLastCalledWith('Aucune image.', 'polite');
+    });
+
+    it('« Effacer les filtres » : ne reste que la provenance, focus sur le titre', async () => {
+      await ouvrirPage(`/banque?provenance=tout&section=gs&themeId=${THEME_ANIMAUX}`);
+      serveur.expectOne('/api/themes').flush([{ id: THEME_ANIMAUX, nom: 'animaux' }]);
+      await servir(requeteFiltree('tout', { section: 'gs', themeId: THEME_ANIMAUX }), []);
+
+      racine.querySelector<HTMLButtonElement>('app-etat-vide button.banque__effacer')!.click();
+      await stabiliser();
+
+      expect(url()).toBe('/banque?provenance=tout');
+      expect(document.activeElement).toBe(racine.querySelector('h1'));
+      await servir(requeteFiltree('tout'), [image()]);
+      expect(bouton('Effacer les filtres')).toBeUndefined();
+    });
+
+    it('« Effacer les filtres » de la barre, sans provenance dans l’URL', async () => {
+      await ouvrirPage('/banque?typeImage=inconnu');
+      await servir(requeteFiltree('mes-mots', { typeImage: 'inconnu' }), [image()]);
+      expect(texte(puceFiltre('typeImage'))).toBe("Type d'image : inconnu");
+
+      racine.querySelector<HTMLButtonElement>('app-barre-filtres .filtres__effacer')!.click();
+      await stabiliser();
+
+      expect(url()).toBe('/banque');
+      expect(document.activeElement).toBe(racine.querySelector('h1'));
+      await servir(requeteFiltree('mes-mots'), [image()]);
+    });
+
+    it('recherche : ?provenance=tout&mot=la%20Citrouille, puce « Mot : la Citrouille »', async () => {
+      await ouvrirPage('/banque?provenance=tout&mot=la%20Citrouille');
+      expect(puceChoisie()).toEqual(['Tout']);
+      await servir(requeteFiltree('tout', { mot: 'la Citrouille' }), [image()]);
+
+      expect(texte(puceFiltre('mot'))).toBe('Mot : la Citrouille');
+      retirer('Mot')!.click();
+      await stabiliser();
+
+      expect(url()).toBe('/banque?provenance=tout');
+      await servir(requeteFiltree('tout'), [image()]);
+    });
+
+    it('lien partagé : Album et Thème nommés après rechargement', async () => {
+      await ouvrirPage(`/banque?albumId=${ALBUM_LOUP}&themeId=${THEME_ANIMAUX}`);
+      expect(texte(puceFiltre('albumId'))).toBe('Album choisi');
+      serveur.expectOne('/api/themes').flush([{ id: THEME_ANIMAUX, nom: 'animaux' }]);
+      serveur
+        .expectOne(`/api/albums/${ALBUM_LOUP}`)
+        .flush({ ...ALBUM, id: ALBUM_LOUP, titre: 'Le loup' });
+      serveur.expectOne(`/api/albums/${ALBUM_LOUP}/modules`).flush([]);
+      await servir(requeteFiltree('mes-mots', { albumId: ALBUM_LOUP, themeId: THEME_ANIMAUX }), [
+        image(),
+      ]);
+
+      expect(texte(puceFiltre('albumId'))).toBe('Album : Le loup');
+      expect(texte(puceFiltre('themeId'))).toBe('Thème : animaux');
+      expect(puceFiltre('moduleId').hasAttribute('aria-disabled')).toBe(false);
+    });
+
+    it('lien partagé, lecture en échec : « Album (inconnu) », « Thème (inconnu) », retirables', async () => {
+      await ouvrirPage(`/banque?albumId=${ALBUM_LOUP}&themeId=${THEME_ANIMAUX}`);
+      serveur.expectOne('/api/themes').flush(null, ECHEC);
+      serveur.expectOne(`/api/albums/${ALBUM_LOUP}`).flush(null, INTROUVABLE);
+      serveur.expectOne(`/api/albums/${ALBUM_LOUP}/modules`).flush([]);
+      await servir(requeteFiltree('mes-mots', { albumId: ALBUM_LOUP, themeId: THEME_ANIMAUX }), [
+        image(),
+      ]);
+
+      expect(texte(puceFiltre('albumId'))).toBe('Album (inconnu)');
+      expect(texte(puceFiltre('themeId'))).toBe('Thème (inconnu)');
+
+      retirer('Album')!.click();
+      await stabiliser();
+      expect(url()).toBe(`/banque?themeId=${THEME_ANIMAUX}`);
+      await servir(requeteFiltree('mes-mots', { themeId: THEME_ANIMAUX }), [image()]);
+    });
+
+    it('URL invalide : filtres ignorés, non envoyés', async () => {
+      await ouvrirPage(
+        `/banque?section=cp&albumId=abc&typeImage=dessin&mot=%20&moduleId=${MODULE_1}`,
+      );
+      await servir(requeteFiltree('mes-mots'), [image()]);
+
+      expect(racine.querySelectorAll('app-barre-filtres .puce--choisie')).toHaveLength(0);
+      expect(bouton('Effacer les filtres')).toBeUndefined();
+    });
+
+    it('réponse périmée : seule la réponse des derniers filtres s’affiche', async () => {
+      await ouvrirPage();
+      await servir(requeteFiltree('mes-mots'), [image()]);
+      await ouvrirMenu('section');
+      await choisirEntree('MS');
+      const ms = requeteFiltree('mes-mots', { section: 'ms' });
+
+      await ouvrirMenu('section');
+      await choisirEntree('GS');
+      await servir(requeteFiltree('mes-mots', { section: 'gs' }), [
+        image({ forme: 'renard', sensId: SENS_RENARD }),
+      ]);
+      await servir(ms, images(3));
+
+      expect(vignettes()).toHaveLength(1);
+      expect(entetes()).toEqual(['renard (animal) nom · 1 image']);
+      expect(texte(racine.querySelector('.banque__total'))).toBe('1 image');
+    });
+
+    it('changement de filtre : le panneau Carte d’identité se ferme', async () => {
+      await ouvrirPage();
+      const loup = image();
+      await servir(requeteFiltree('mes-mots'), [loup]);
+      vignettes()[0].querySelector<HTMLButtonElement>('button.vignette')!.click();
+      await stabiliser();
+      serveur.expectOne(`/api/images/${loup.id}`).flush(carteDe(loup));
+      await stabiliser();
+      servirMiniatures();
+      await stabiliser();
+      expect(racine.querySelector('app-carte-identite')).not.toBeNull();
+
+      await ouvrirMenu('section');
+      await choisirEntree('GS');
+
+      expect(racine.querySelector('app-carte-identite')).toBeNull();
+      await servir(requeteFiltree('mes-mots', { section: 'gs' }), [loup]);
+    });
+
+    it('erreur de la route (400 requete.invalide) : Bandeau d’erreur et « Réessayer »', async () => {
+      await ouvrirPage('/banque?section=gs');
+      requeteFiltree('mes-mots', { section: 'gs' }).flush(
+        { code: 'requete.invalide', status: 400, title: 'Bad Request' },
+        { status: 400, statusText: 'Bad Request' },
+      );
+      await stabiliser();
+
+      expect(bandeau()).toBeTruthy();
+      bouton('Réessayer')!.click();
+      await stabiliser();
+      await servir(requeteFiltree('mes-mots', { section: 'gs' }), [image()]);
+      expect(bandeau()).toBeUndefined();
+    });
+    it('« Afficher plus » filtré : la page suivante garde exactement les filtres', async () => {
+      await ouvrirPage('/banque?section=gs');
+      await servir(requeteFiltree('mes-mots', { section: 'gs' }), images(100), 150);
+
+      bouton('Afficher plus')!.click();
+      await stabiliser();
+      await servir(requeteFiltree('mes-mots', { section: 'gs' }, 1), images(50), 150);
+
+      expect(vignettes()).toHaveLength(150);
+    });
+
+    it('arrivée filtrée annoncée ; la provenance changée garde les filtres et annonce le nombre', async () => {
+      await ouvrirPage('/banque?section=gs');
+      await servir(requeteFiltree('mes-mots', { section: 'gs' }), [image()]);
+      expect(announce).toHaveBeenLastCalledWith('1 image.', 'polite');
+
+      await choisir('Tout');
+
+      expect(url()).toBe('/banque?section=gs&provenance=tout');
+      await servir(requeteFiltree('tout', { section: 'gs' }), images(2));
+      expect(announce).toHaveBeenLastCalledWith('2 images.', 'polite');
+    });
+
+    it('« Réessayer » après un échec simple et le rechargement après un ajout n’annoncent rien', async () => {
+      await ouvrirPage();
+      requeteFiltree('mes-mots').flush(null, RESEAU);
+      await stabiliser();
+
+      bouton('Réessayer')!.click();
+      await stabiliser();
+      await servir(requeteFiltree('mes-mots'), [image()]);
+      imagesAjoutees.set(1);
+      await stabiliser();
+      await servir(requeteFiltree('mes-mots'), images(2));
+
+      expect(announce).not.toHaveBeenCalled();
+    });
+
+    it('« Réessayer » après l’échec d’un changement de filtre annonce le nombre', async () => {
+      await ouvrirPage();
+      await servir(requeteFiltree('mes-mots'), [image()]);
+      await ouvrirMenu('section');
+      await choisirEntree('GS');
+      requeteFiltree('mes-mots', { section: 'gs' }).flush(null, RESEAU);
+      await stabiliser();
+      expect(announce).not.toHaveBeenCalled();
+
+      bouton('Réessayer')!.click();
+      await stabiliser();
+      await servir(requeteFiltree('mes-mots', { section: 'gs' }), [image()]);
+
+      expect(announce).toHaveBeenLastCalledWith('1 image.', 'polite');
+    });
+
+    it('menu Thème sans Thème dans l’URL : la liste est lue à l’ouverture, le choix pose ?themeId=', async () => {
+      await ouvrirPage();
+      await servir(requeteFiltree('mes-mots'), [image()]);
+
+      await ouvrirMenu('themeId');
+      expect(messagesMenu()).toEqual(['Chargement…']);
+      serveur.expectOne('/api/themes').flush([{ id: THEME_ANIMAUX, nom: 'animaux' }]);
+      await stabiliser();
+      expect(libellesMenu()).toEqual(['animaux']);
+      await choisirEntree('animaux');
+
+      expect(url()).toBe(`/banque?themeId=${THEME_ANIMAUX}`);
+      expect(texte(puceFiltre('themeId'))).toBe('Thème : animaux');
+      await servir(requeteFiltree('mes-mots', { themeId: THEME_ANIMAUX }), [image()]);
+    });
+
+    it('menu Module en échec : message traduit et « Réessayer »', async () => {
+      await ouvrirPage(`/banque?albumId=${ALBUM_LOUP}`);
+      serveur
+        .expectOne(`/api/albums/${ALBUM_LOUP}`)
+        .flush({ ...ALBUM, id: ALBUM_LOUP, titre: 'Le loup' });
+      serveur.expectOne(`/api/albums/${ALBUM_LOUP}/modules`).flush(null, RESEAU);
+      await servir(requeteFiltree('mes-mots', { albumId: ALBUM_LOUP }), [image()]);
+
+      await ouvrirMenu('moduleId');
+      expect(messagesMenu()).toEqual([MESSAGE_RESEAU]);
+      await choisirEntree('Réessayer');
+      serveur
+        .expectOne(`/api/albums/${ALBUM_LOUP}/modules`)
+        .flush([{ id: MODULE_1, albumId: ALBUM_LOUP, nom: 'chapitre 1', ordre: 0 }]);
+      await stabiliser();
+
+      expect(libellesMenu()).toEqual(['chapitre 1']);
+    });
+
+    it('recherche d’Album : échec et « Réessayer », « Aucun album trouvé », « Précisez… », flèches', async () => {
+      await ouvrirPage();
+      await servir(requeteFiltree('mes-mots'), [image()]);
+      await ouvrirMenu('albumId');
+      const champ = document.querySelector<HTMLInputElement>('.cdk-overlay-pane input')!;
+      const recherche = (texteCherche: string) =>
+        serveur.expectOne(
+          (requete) =>
+            requete.url === '/api/albums' && requete.params.get('recherche') === texteCherche,
+        );
+      async function taper(texteTape: string) {
+        champ.value = texteTape;
+        champ.dispatchEvent(new Event('input'));
+        await attendre(300);
+        await stabiliser();
+      }
+
+      await taper('zz');
+      recherche('zz').flush(null, RESEAU);
+      await stabiliser();
+      expect(messagesMenu()).toEqual([MESSAGE_RESEAU]);
+      await choisirEntree('Réessayer');
+      recherche('zz').flush({ elements: [], total: 0 });
+      await stabiliser();
+      expect(messagesMenu()).toEqual(['Aucun album trouvé']);
+
+      await taper('le');
+      recherche('le').flush({
+        elements: [
+          { ...ALBUM, id: ALBUM_LOUP, titre: 'Le loup' },
+          { ...ALBUM, id: ALBUM_ROUGE, titre: 'Le petit chaperon rouge' },
+        ],
+        total: 25,
+      });
+      await stabiliser();
+      expect(libellesMenu()).toEqual(['Le loup', 'Le petit chaperon rouge']);
+      expect(messagesMenu()).toEqual([MESSAGE_PRECISER_ALBUM]);
+
+      champ.focus();
+      champ.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true }));
+      await stabiliser();
+      expect(document.activeElement).toBe(entreesMenu()[0]);
+      // Le gestionnaire de clavier du menu suit : Flèche bas passe au second résultat.
+      const fleche = (cible: Element, key: string, keyCode: number) => {
+        const evenement = new KeyboardEvent('keydown', { key, bubbles: true });
+        Object.defineProperty(evenement, 'keyCode', { get: () => keyCode });
+        cible.dispatchEvent(evenement);
+      };
+      fleche(entreesMenu()[0], 'ArrowDown', 40);
+      await stabiliser();
+      expect(document.activeElement).toBe(entreesMenu()[1]);
+      fleche(entreesMenu()[1], 'ArrowUp', 38);
+      await stabiliser();
+      expect(document.activeElement).toBe(entreesMenu()[0]);
+      fleche(entreesMenu()[0], 'ArrowUp', 38);
+      expect(document.activeElement).toBe(champ);
+    });
+
+    it('URL aux filtres valides inchangés (&albumId=abc) : aucune nouvelle lecture', async () => {
+      await ouvrirPage('/banque?section=gs');
+      await servir(requeteFiltree('mes-mots', { section: 'gs' }), [image()]);
+
+      await harnais.navigateByUrl('/banque?section=gs&albumId=abc');
+      await stabiliser();
+
+      serveur.expectNone((requete) => requete.url === '/api/images');
+      expect(vignettes()).toHaveLength(1);
+    });
+
+    it('Sens d’un lien partagé absent de la liste : « Sens (inconnu) », retirable', async () => {
+      await ouvrirPage(`/banque?sensId=${SENS_RENARD}`);
+      expect(texte(puceFiltre('sensId'))).toBe('Sens choisi');
+      await servir(requeteFiltree('mes-mots', { sensId: SENS_RENARD }), []);
+
+      expect(texte(puceFiltre('sensId'))).toBe('Sens (inconnu)');
+      retirer('Sens')!.click();
+      await stabiliser();
+      expect(url()).toBe('/banque');
+      await servir(requeteFiltree('mes-mots'), [image()]);
+    });
+
+    it('le libellé du Sens filtré reste d’une lecture à l’autre, même sans résultat', async () => {
+      await ouvrirPage();
+      await servir(requeteFiltree('mes-mots'), [
+        image({ forme: 'renard', sensId: SENS_RENARD, sensLibelle: 'goupil' }),
+      ]);
+      racine.querySelector<HTMLButtonElement>('.groupe__filtrer')!.click();
+      await stabiliser();
+      await servir(requeteFiltree('mes-mots', { sensId: SENS_RENARD }), [
+        image({ forme: 'renard', sensId: SENS_RENARD, sensLibelle: 'goupil' }),
+      ]);
+
+      await ouvrirMenu('section');
+      await choisirEntree('PS');
+      expect(texte(puceFiltre('sensId'))).toBe('Sens : renard (goupil)');
+      await servir(requeteFiltree('mes-mots', { sensId: SENS_RENARD, section: 'ps' }), []);
+
+      expect(texte(puceFiltre('sensId'))).toBe('Sens : renard (goupil)');
     });
   });
 });
