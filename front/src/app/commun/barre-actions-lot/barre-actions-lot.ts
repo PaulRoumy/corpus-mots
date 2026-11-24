@@ -19,6 +19,14 @@ export function libelleSelection(nombre: number): string {
   return nombre === 1 ? '1 image sélectionnée' : `${nombre} images sélectionnées`;
 }
 
+/** « Aucun mot sélectionné », « 1 mot sélectionné », « 3 mots sélectionnés » (Préparation). */
+export function libelleSelectionMots(nombre: number): string {
+  if (nombre === 0) {
+    return 'Aucun mot sélectionné';
+  }
+  return nombre === 1 ? '1 mot sélectionné' : `${nombre} mots sélectionnés`;
+}
+
 /**
  * Barre d'actions en lot (DESIGN.md › barre-actions-lot, story 3.3, UX-DR-12), identique dans la Banque, la Préparation
  * et l'Import. En haut de la grille, collante au défilement, `surface-container-high` : le nombre sélectionné, « Tout
@@ -79,13 +87,15 @@ export class BarreActionsLot {
   readonly figee = input(false);
   /** Faux pour taire l'annonce du nombre (pendant une action, ou quand la page annonce son récapitulatif). */
   readonly annoncer = input(true);
+  /** Libellé du nombre sélectionné, selon ce que la page sélectionne : Images par défaut, Mots dans la Préparation. */
+  readonly libelleNombre = input<(nombre: number) => string>(libelleSelection);
   readonly toutSelectionner = output<void>();
   readonly deselectionner = output<void>();
 
   private readonly annonceur = inject(LiveAnnouncer);
 
   protected readonly affichee = computed(() => this.nombre() > 0 || this.ouverte());
-  protected readonly libelle = computed(() => libelleSelection(this.nombre()));
+  protected readonly libelle = computed(() => this.libelleNombre()(this.nombre()));
 
   protected tout(): void {
     if (!this.figee()) {
@@ -111,7 +121,7 @@ export class BarreActionsLot {
       precedent = nombre;
       untracked(() => {
         if (this.annoncer()) {
-          void this.annonceur.announce(`${libelleSelection(nombre)}.`, 'polite');
+          void this.annonceur.announce(`${this.libelleNombre()(nombre)}.`, 'polite');
         }
       });
     });

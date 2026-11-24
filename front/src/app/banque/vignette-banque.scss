@@ -1,27 +1,13 @@
 // Vignette d'Image de la Banque (key-banque.html › `.vg`, `.meta`, `.own`, `.st.ver`) : un bouton qui ouvre le Panneau
 // Carte d'identité (story 3.1, partie 2).
-:host {
-  // Case de sélection (story 3.3) : masquée et inerte au pointeur au repos ; visible au survol, au focus de la vignette
-  // (case ou bouton), sur toutes les vignettes dès qu'une sélection existe, et toujours sur un écran sans survol.
-  --case-selection-opacite: 0;
-  --case-selection-pointeur: none;
+@use '../commun/selection/case-selection-hote' as case-selection;
 
+// Case de sélection (story 3.3) : visibilité partagée avec la Carte de Mot.
+@include case-selection.visibilite('vignette-banque--selection-active');
+
+:host {
   position: relative;
   display: block;
-}
-
-:host(:hover),
-:host(:focus-within),
-:host(.vignette-banque--selection-active) {
-  --case-selection-opacite: 1;
-  --case-selection-pointeur: auto;
-}
-
-@media (hover: none) {
-  :host {
-    --case-selection-opacite: 1;
-    --case-selection-pointeur: auto;
-  }
 }
 
 .vignette__case {

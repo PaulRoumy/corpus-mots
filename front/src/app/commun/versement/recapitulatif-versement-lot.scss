@@ -1,0 +1,44 @@
+// Récapitulatif d'un versement en lot, sous la ligne de la Barre d'actions en lot (story 3.3) : la liste des refusées
+// défile dans la barre au-delà de 160 px (hauteur dérivée des jetons, définie ici : le paquet initial ne grossit pas).
+:host {
+  --versement-lot-hauteur-refusees: calc(var(--cm-espace-6) * 5);
+
+  display: flex;
+  flex-direction: column;
+  gap: var(--cm-espace-2);
+}
+
+.versement-lot__ligne {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--cm-espace-2);
+}
+
+.versement-lot__recapitulatif {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: var(--cm-espace-1);
+  min-width: 0;
+  font: var(--cm-typo-body);
+
+  p {
+    margin: 0;
+  }
+}
+
+.versement-lot__partage {
+  font: var(--cm-typo-body-sm);
+}
+
+.versement-lot__refusees {
+  max-height: var(--versement-lot-hauteur-refusees);
+  margin: 0;
+  padding-inline-start: var(--cm-espace-5);
+  overflow-y: auto;
+
+  &:focus-visible {
+    outline: var(--cm-anneau-focus-epaisseur) solid var(--mat-sys-primary);
+    outline-offset: var(--cm-anneau-focus-decalage);
+  }
+}

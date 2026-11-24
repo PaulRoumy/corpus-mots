@@ -56,8 +56,13 @@ import { ModuleDto } from '../api/models/module-dto';
 import { MotPreparationDto } from '../api/models/mot-preparation-dto';
 import { PreparationDto } from '../api/models/preparation-dto';
 import { ThemeDto } from '../api/models/theme-dto';
+import { nomImage } from '../commun/nom-image';
 import { BandeauAnnuler } from '../commun/bandeau-annuler/bandeau-annuler';
 import { BandeauErreur } from '../commun/bandeau-erreur/bandeau-erreur';
+import {
+  BarreActionsLot,
+  libelleSelectionMots,
+} from '../commun/barre-actions-lot/barre-actions-lot';
 import { CarteIdentite } from '../commun/carte-identite/carte-identite';
 import { ChampThemes, themesParNom } from '../commun/champ-themes/champ-themes';
 import { CompteCourant } from '../commun/compte-courant';
@@ -71,7 +76,16 @@ import {
   messageErreur,
 } from '../commun/erreurs/message-erreur';
 import { RepereSection } from '../commun/repere-section/repere-section';
+import { BasculeSelection } from '../commun/selection/case-selection';
+import { echapDeSaisieOuMenu } from '../commun/selection/echap';
+import { Selection } from '../commun/selection/selection';
 import { Squelette } from '../commun/squelette/squelette';
+import {
+  LIBELLE_VERSEMENT_EN_COURS,
+  RAISON_PAS_D_IMAGE,
+} from '../commun/versement/raisons-versement';
+import { RecapitulatifVersementLot } from '../commun/versement/recapitulatif-versement-lot';
+import { RefusAffiche, VersementLot } from '../commun/versement/versement-lot';
 import { CarteMot } from './carte-mot';
 import { ChampNomModule } from './champ-nom-module';
 import { map } from 'rxjs';
@@ -221,24 +235,50 @@ interface EchecRetrait {
   readonly message: string;
 }
 
-/** « « renard » n'a pas été retiré. », « « a », « b » n'ont pas été retirés. », suivi du message de l'échec. */
-export function messageEchecRetrait(echec: EchecRetrait): string {
-  const mots = echec.mots.map((mot) => `« ${mot.forme} »`).join(', ');
-  const verbe = echec.mots.length === 1 ? "n'a pas été retiré" : "n'ont pas été retirés";
-  return `${mots} ${verbe}. ${echec.message}`;
+/** Mots nommés au plus dans un Bandeau d'erreur ; au-delà, leur nombre. */
+const MOTS_NOMMES_MAXIMUM = 3;
+
+/**
+ * « « renard » n'a pas été retiré. », « « a », « b » n'ont pas été retirés. », « 12 mots n'ont pas été retirés. » :
+ * `participe` au singulier (« retiré »), accordé au pluriel.
+ */
+function phraseEchecMots(mots: readonly MotPreparationDto[], participe: string): string {
+  if (mots.length === 1) {
+    return `« ${mots[0].forme} » n'a pas été ${participe}.`;
+  }
+  const sujet =
+    mots.length > MOTS_NOMMES_MAXIMUM
+      ? `${mots.length} mots`
+      : mots.map((mot) => `« ${mot.forme} »`).join(', ');
+  return `${sujet} n'ont pas été ${participe}s.`;
 }
 
-/** Rétablissement d'un Mot retiré qui a échoué ; `reessayable` n'est vrai que pour une erreur réseau ou 5xx. */
+/** Phrase des Mots dont le retrait a échoué (`phraseEchecMots`), suivie du message de l'échec. */
+export function messageEchecRetrait(echec: EchecRetrait): string {
+  return `${phraseEchecMots(echec.mots, 'retiré')} ${echec.message}`;
+}
+
+/**
+ * Rétablissement de Mots retirés qui a échoué (un seul Mot, ou ceux d'un retrait en lot) ; `reessayable` n'est vrai que
+ * pour une erreur réseau ou 5xx.
+ */
 interface EchecRetablissement {
   readonly preparationId: string;
-  readonly mot: MotPreparationDto;
+  readonly mots: readonly MotPreparationDto[];
   readonly message: string;
   readonly reessayable: boolean;
 }
 
-/** « « renard » n'a pas été rétabli. », suivi du message de l'échec. */
+/** Phrase des Mots dont le rétablissement a échoué (`phraseEchecMots`), suivie du message de l'échec. */
 export function messageEchecRetablissement(echec: EchecRetablissement): string {
-  return `« ${echec.mot.forme} » n'a pas été rétabli. ${echec.message}`;
+  return `${phraseEchecMots(echec.mots, 'rétabli')} ${echec.message}`;
+}
+
+/** « 3 mots retirés de la préparation. », ou le message du retrait d'un seul Mot. */
+export function messageRetraitLot(retires: readonly MotPreparationDto[]): string {
+  return retires.length === 1
+    ? `« ${retires[0].forme} » retiré de la préparation.`
+    : `${retires.length} mots retirés de la préparation.`;
 }
 
 /** Champ de l'En-tête relu après une suppression : le Module ou le Thème par défaut. */
@@ -334,6 +374,16 @@ type Source = 'module' | 'theme';
  * illustrés pour l'Album ; les Mots qu'il reprend arrivent en fin de Grille et le compteur suit. Quand il disparaît
  * après un geste, le focus revient au Champ de saisie rapide.
  *
+ * Sélection et actions en lot (story 3.3, partie 3b, UX-DR-12) : chaque Carte de Mot porte une Case de sélection
+ * (`commun/selection`) ; la Barre d'actions en lot (`commun/barre-actions-lot`), en haut de la Grille, montre « N mots
+ * sélectionnés », « Tout sélectionner », « Désélectionner », « Verser » et « Retirer de la préparation ». Maj+clic
+ * sélectionne une plage dans l'ordre de la Grille. Échap ferme d'abord le panneau latéral ouvert ; sinon il vide la
+ * sélection, sauf pendant un versement ou depuis un champ (saisie rapide comprise), le Panneau de détection ou un menu.
+ * La sélection se vide à l'ouverture d'une autre Préparation ; un Mot qui quitte la Grille (retrait, relecture) en sort.
+ * « Verser » envoie les Images des Mots sélectionnés comme la Banque (`commun/versement`, même récapitulatif, même
+ * reprise) ; un Mot sans Image reste hors du lot avec la raison « pas d'image ». « Retirer de la préparation » retire
+ * les Mots sélectionnés comme le geste unitaire, un par un, avec un seul Bandeau « Annuler » pour le lot.
+ *
  * Le Temps passé est un champ texte en mode de saisie décimal plutôt qu'un `type="number"` : celui-ci, selon la langue
  * du navigateur, refuse la virgule sans le dire (sa valeur devient vide, comme un champ effacé).
  */
@@ -341,6 +391,7 @@ type Source = 'module' | 'theme';
   selector: 'app-preparation',
   imports: [
     BandeauErreur,
+    BarreActionsLot,
     CarteIdentite,
     CarteMot,
     ChampNomModule,
@@ -353,6 +404,7 @@ type Source = 'module' | 'theme';
     MatMenuModule,
     MatSelectModule,
     ReactiveFormsModule,
+    RecapitulatifVersementLot,
     RepereSection,
     PanneauDetection,
     SaisieRapide,
@@ -361,6 +413,7 @@ type Source = 'module' | 'theme';
   // État de la Grille et région `aria-live` propres à la page : une autre page repart de zéro.
   providers: [GrilleMots, Annonces],
   changeDetection: ChangeDetectionStrategy.OnPush,
+  host: { '(keydown.escape)': 'echap($event)' },
   styleUrls: [
     '../commun/page-rubrique.scss',
     '../commun/disposition-panneau.scss',
@@ -427,6 +480,7 @@ type Source = 'module' | 'theme';
             <app-bandeau-erreur
               class="erreur-retrait"
               [message]="messageEchecRetrait(echec)"
+              [reessayable]="!retraitLotEnCours()"
               (reessayer)="reessayerRetraits()"
               (fermer)="echecRetrait.set(null)"
             />
@@ -619,6 +673,49 @@ type Source = 'module' | 'theme';
               (annonce)="annonces.annoncer($event)"
               (focusChamp)="rendreFocusChamp()"
             />
+            <app-barre-actions-lot
+              class="mots__barre-lot"
+              [nombre]="selection.nombre()"
+              [libelleNombre]="libelleSelectionMots"
+              [ouverte]="versement.recapitulatif() !== null || versement.erreur() !== null"
+              [figee]="selection.figee() || actionsLotIndisponibles()"
+              [annoncer]="!versement.enCours() && versement.recapitulatif() === null"
+              (toutSelectionner)="toutSelectionner()"
+              (deselectionner)="deselectionner()"
+            >
+              @if (selection.nombre() > 0) {
+                <button
+                  matButton="tonal"
+                  class="mots__verser"
+                  type="button"
+                  disabledInteractive
+                  [disabled]="versement.enCours() || actionsLotIndisponibles()"
+                  [attr.aria-busy]="versement.enCours()"
+                  (click)="verserSelection()"
+                >
+                  {{ versement.enCours() ? libelleVersementEnCours : 'Verser' }}
+                </button>
+                <button
+                  matButton
+                  class="mots__retirer-lot"
+                  type="button"
+                  disabledInteractive
+                  [disabled]="versement.enCours() || actionsLotIndisponibles()"
+                  (click)="retirerSelection()"
+                >
+                  Retirer de la préparation
+                </button>
+              }
+              <app-recapitulatif-versement-lot
+                barreActionsLotSuite
+                libelleRefusees="Mots non versés"
+                [recapitulatif]="versement.recapitulatif()"
+                [erreur]="versement.erreur()"
+                (reessayer)="reessayerVersement()"
+                (fermerErreur)="fermerErreurVersement()"
+                (fermerRecapitulatif)="fermerRecapitulatif()"
+              />
+            </app-barre-actions-lot>
             @if (motsCharges.length > 0) {
               <section class="mots" aria-labelledby="mots-titre">
                 <h2 id="mots-titre" class="mots__titre">Mots de la préparation</h2>
@@ -635,6 +732,11 @@ type Source = 'module' | 'theme';
                         (illustre)="appliquerPictogramme($event)"
                         (aRecharger)="signalerMotChange(mot, $event)"
                         (choisirImage)="ouvrirChoixImage(mot)"
+                        [selectionnee]="selection.estSelectionne(mot.id)"
+                        [selectionActive]="selection.active()"
+                        [selectionFigee]="selection.figee()"
+                        [retraitIndisponible]="retraitLotEnCours()"
+                        (basculerSelection)="basculerSelection(mot.id, $event)"
                       />
                     </li>
                   }
@@ -826,6 +928,38 @@ export class Preparation {
   /** Panneau ouvert en plein écran : la page dessous est inerte (ni Tab ni lecteur d'écran). */
   protected readonly pageInerte = computed(() => this.panneauOuvert() && this.pleinEcran());
   private readonly cartesMots = viewChildren(CarteMot);
+
+  /** Identifiants des Mots de la Grille, dans son ordre. */
+  private readonly ordreMots = computed(() => (this.mots() ?? []).map((mot) => mot.id));
+  /** Mots sélectionnés (story 3.3, partie 3b), dans l'ordre de la Grille. */
+  protected readonly selection = new Selection(() => this.ordreMots());
+  /** Mots sélectionnés, à jour de la Grille, dans son ordre. */
+  private readonly motsSelectionnes = computed(() => {
+    const selectionnes = new Set(this.selection.identifiants());
+    return (this.mots() ?? []).filter((mot) => selectionnes.has(mot.id));
+  });
+  /** Versement en lot des Images des Mots sélectionnés (`commun/versement`, partagé avec la Banque). */
+  protected readonly versement = new VersementLot({
+    selection: this.selection,
+    imagesSelectionnees: () =>
+      new Set(this.motsSelectionnes().flatMap((mot) => (mot.image ? [mot.image.id] : []))),
+    appliquer: (imageIds) => this.appliquerVersement(imageIds),
+  });
+  protected readonly libelleSelectionMots = libelleSelectionMots;
+  protected readonly libelleVersementEnCours = LIBELLE_VERSEMENT_EN_COURS;
+  private readonly recapitulatifLot = viewChild(RecapitulatifVersementLot);
+  /** Vrai pendant un retrait en lot : sélection figée, actions en lot et « Retirer » des Cartes en attente. */
+  protected readonly retraitLotEnCours = signal(false);
+  /** Relectures des Mots en cours. */
+  private readonly lecturesMots = signal(0);
+  /**
+   * Actions de la Barre d'actions en lot indisponibles : retrait en lot en cours, Grille relue ou en échec de lecture
+   * (comme la Banque pendant un rechargement).
+   */
+  protected readonly actionsLotIndisponibles = computed(
+    () => this.retraitLotEnCours() || this.lecturesMots() > 0 || this.erreurMots() !== null,
+  );
+
   protected readonly echecRetrait = signal<EchecRetrait | null>(null);
   protected readonly echecRetablissement = signal<EchecRetablissement | null>(null);
   /** Ajouts en attente d'envoi (saisies et réutilisations), dans l'ordre des gestes ; envoyés un à un. */
@@ -850,6 +984,11 @@ export class Preparation {
       if (emplacement !== undefined) {
         untracked(() => void this.afficherChoixImage(emplacement, mot, preparationId));
       }
+    });
+    // Un Mot qui quitte la Grille (retrait, relecture, autre Préparation) sort de la sélection.
+    effect(() => {
+      const ids = this.ordreMots();
+      untracked(() => this.selection.garderSeulement(ids));
     });
   }
 
@@ -945,6 +1084,10 @@ export class Preparation {
     this.annonces.effacer();
     this.carteOuverte.set(null);
     this.choixOuvert.set(null);
+    // La sélection, le récapitulatif et l'échec d'un versement valent pour la Préparation quittée.
+    this.selection.reinitialiser();
+    this.versement.changerDeContexte();
+    this.retraitLotEnCours.set(false);
     // Une Création de Sens en attente n'est pas envoyée : elle reste ouverte avec l'erreur.
     for (const ajout of this.fileAjouts) {
       ajout.issue?.rejeter(new Error(ERREUR_AJOUT_ABANDONNE));
@@ -1003,6 +1146,15 @@ export class Preparation {
    * focus est alors déjà envoyé au Champ de saisie rapide).
    */
   async chargerMots(id: string, relances = 0): Promise<boolean> {
+    this.lecturesMots.update((lectures) => lectures + 1);
+    try {
+      return await this.lireMots(id, relances);
+    } finally {
+      this.lecturesMots.update((lectures) => lectures - 1);
+    }
+  }
+
+  private async lireMots(id: string, relances: number): Promise<boolean> {
     const numero = this.dernierChargement;
     this.erreurMots.set(null);
     for (let reste = relances; reste >= 0; reste--) {
@@ -1195,7 +1347,7 @@ export class Preparation {
     const mots = this.mots();
     const preparation = this.preparation();
     const index = mots?.findIndex((autre) => autre.id === mot.id) ?? -1;
-    if (mots === null || preparation === null || index < 0) {
+    if (mots === null || preparation === null || index < 0 || this.retraitLotEnCours()) {
       return;
     }
     const restants = mots.filter((autre) => autre.id !== mot.id);
@@ -1210,19 +1362,31 @@ export class Preparation {
     void this.envoyerRetrait(preparation.id, mot);
   }
 
-  /** « Réessayer » : les Mots dont le retrait a échoué sont retirés de nouveau. */
+  /**
+   * « Réessayer » : les Mots dont le retrait a échoué sont retirés de nouveau, un seul comme par « Retirer », plusieurs
+   * comme un retrait en lot (un seul Bandeau « Annuler »). Indisponible pendant un retrait en lot.
+   */
   protected reessayerRetraits(): void {
     const echec = this.echecRetrait();
+    if (echec === null || this.retraitLotEnCours()) {
+      return;
+    }
     this.echecRetrait.set(null);
-    for (const mot of echec?.mots ?? []) {
-      this.retirerMot(mot);
+    if (echec.mots.length === 1) {
+      this.retirerMot(echec.mots[0]);
+    } else {
+      this.retirerLot(new Set(echec.mots.map((mot) => mot.id)));
     }
   }
 
   /** « Réessayer » : le rétablissement repart. */
   protected reessayerRetablissement(echec: EchecRetablissement): void {
     this.echecRetablissement.set(null);
-    void this.retablirMot(echec.preparationId, echec.mot, this.dernierChargement);
+    if (echec.mots.length === 1) {
+      void this.retablirMot(echec.preparationId, echec.mots[0], this.dernierChargement);
+    } else {
+      void this.retablirLot(echec.preparationId, echec.mots, this.dernierChargement);
+    }
   }
 
   /**
@@ -1268,16 +1432,7 @@ export class Preparation {
     numero: number,
   ): Promise<void> {
     try {
-      const retabli = await this.api.invoke(retablirMotPreparation, {
-        id: preparationId,
-        body: {
-          motId: retire.motId,
-          sensId: retire.sens.id,
-          ordre: retire.ordre,
-          themeId: retire.themeId ?? null,
-          imageId: retire.image?.id ?? null,
-        },
-      });
+      const retabli = await this.envoyerRetablissement(preparationId, retire);
       if (numero === this.dernierChargement) {
         this.grille.ajouter(retabli);
         void this.encart()?.recharger();
@@ -1295,19 +1450,361 @@ export class Preparation {
       }
       this.echecRetablissement.set({
         preparationId,
-        mot: retire,
+        mots: [retire],
         message: messageErreur(erreur),
         // Un refus du back (Mot revenu entre-temps, Sens disparu…) se répéterait : seuls le réseau et les 5xx se
         // réessaient.
         reessayable: erreurPassagere(erreur),
       });
-      // Le Bandeau « Annuler » ou « Réessayer », qui avait le focus, a disparu : le focus revient au Champ de saisie.
-      if (
-        !(document.activeElement instanceof HTMLElement) ||
-        document.activeElement === document.body
-      ) {
-        this.focaliserApresRendu(undefined);
+      this.rendreFocusAuChampSiPerdu();
+    }
+  }
+
+  /** Le Bandeau « Annuler » ou « Réessayer », qui avait le focus, a disparu : le focus revient au Champ de saisie. */
+  private rendreFocusAuChampSiPerdu(): void {
+    if (
+      !(document.activeElement instanceof HTMLElement) ||
+      document.activeElement === document.body
+    ) {
+      this.focaliserApresRendu(undefined);
+    }
+  }
+
+  /** Rétablit `retire` avec son Sens, sa place, son Thème et son Image. */
+  private envoyerRetablissement(
+    preparationId: string,
+    retire: MotPreparationDto,
+  ): Promise<MotPreparationDto> {
+    return this.api.invoke(retablirMotPreparation, {
+      id: preparationId,
+      body: {
+        motId: retire.motId,
+        sensId: retire.sens.id,
+        ordre: retire.ordre,
+        themeId: retire.themeId ?? null,
+        imageId: retire.image?.id ?? null,
+      },
+    });
+  }
+
+  /**
+   * « Retirer de la préparation » de la Barre d'actions en lot (story 3.3, partie 3b) : les Mots sélectionnés
+   * disparaissent aussitôt de la Grille, les panneaux ouverts sur l'un d'eux se ferment, le focus va à la Carte qui suit
+   * le dernier Mot retiré (sinon au Champ de saisie rapide), puis les retraits partent un par un dans l'ordre de la
+   * Grille.
+   */
+  protected retirerSelection(): void {
+    if (this.selection.figee() || this.versement.enCours() || this.actionsLotIndisponibles()) {
+      return;
+    }
+    this.retirerLot(new Set(this.selection.identifiants()));
+  }
+
+  /** Retire en lot les Mots `ids` encore dans la Grille (sélection, ou « Réessayer » de plusieurs retraits). */
+  private retirerLot(ids: ReadonlySet<string>): void {
+    const mots = this.mots();
+    const preparation = this.preparation();
+    if (mots === null || preparation === null || this.retraitLotEnCours()) {
+      return;
+    }
+    const lot = mots.filter((mot) => ids.has(mot.id));
+    if (lot.length === 0) {
+      return;
+    }
+    const dernier = mots.findIndex((mot) => mot.id === lot[lot.length - 1].id);
+    const suivant = mots.slice(dernier + 1).find((mot) => !ids.has(mot.id));
+    for (const mot of lot) {
+      this.grille.retirer(mot.id);
+    }
+    this.selection.retirer(ids);
+    const ouverte = this.carteOuverte();
+    if (ouverte !== null && ids.has(ouverte.motId)) {
+      this.carteOuverte.set(null);
+    }
+    const choix = this.choixOuvert();
+    if (choix !== null && ids.has(choix)) {
+      this.choixOuvert.set(null);
+    }
+    this.focaliserApresRendu(suivant);
+    void this.envoyerRetraitsLot(preparation.id, lot);
+  }
+
+  /**
+   * Retraits d'un lot, un par un : un Mot dont le retrait échoue revient aussitôt à sa place et le Bandeau d'erreur le
+   * nomme. À la fin, l'Encart est relu une fois et un seul Bandeau « Annuler » porte les retraits réussis
+   * (« N mots retirés de la préparation. », ou le message d'un retrait unitaire pour un seul Mot). Les retraits partent
+   * même si une autre Préparation s'ouvre entre-temps, mais rien n'est plus écrit dans la page.
+   */
+  private async envoyerRetraitsLot(
+    preparationId: string,
+    lot: readonly MotPreparationDto[],
+  ): Promise<void> {
+    const numero = this.dernierChargement;
+    const retires: MotPreparationDto[] = [];
+    // Un seul Bandeau « Annuler » à la fois : rien d'autre ne retire pendant le lot.
+    this.retraitLotEnCours.set(true);
+    this.selection.figer(true);
+    try {
+      for (const mot of lot) {
+        try {
+          retires.push(
+            await this.api.invoke(retirerMotPreparation, {
+              id: preparationId,
+              motPreparationId: mot.id,
+            }),
+          );
+        } catch (erreur) {
+          if (numero !== this.dernierChargement) {
+            continue;
+          }
+          this.grille.ajouter(mot);
+          this.echecRetrait.update((echec) => ({
+            mots: [...(echec?.mots ?? []), mot],
+            message: messageErreur(erreur),
+          }));
+        }
       }
+    } finally {
+      // Autre Préparation ouverte entre-temps : `charger` a déjà tout remis à zéro.
+      if (numero === this.dernierChargement) {
+        this.retraitLotEnCours.set(false);
+        this.selection.figer(false);
+      }
+    }
+    if (numero !== this.dernierChargement || retires.length === 0) {
+      return;
+    }
+    // Les Mots retirés redeviennent candidats de l'Encart « mots déjà illustrés ».
+    void this.encart()?.recharger();
+    this.bandeauAnnuler.afficher(
+      messageRetraitLot(retires),
+      () =>
+        retires.length === 1
+          ? void this.retablirMot(preparationId, retires[0], numero)
+          : void this.retablirLot(preparationId, retires, numero),
+      this.destruction,
+    );
+  }
+
+  /**
+   * « Annuler » d'un retrait en lot : les Mots retirés sont rétablis un par un, chacun à sa place (si elle est libre),
+   * puis l'Encart est relu une fois, « N mots rétablis. » est annoncé et le bouton « Retirer » du premier prend le focus.
+   * Les rétablissements en échec sont nommés dans un seul Bandeau d'erreur. Comme pour un seul Mot, rien n'est écrit si
+   * une autre Préparation s'est ouverte entre-temps.
+   */
+  private async retablirLot(
+    preparationId: string,
+    retires: readonly MotPreparationDto[],
+    numero: number,
+  ): Promise<void> {
+    const retablis: MotPreparationDto[] = [];
+    const echecs: MotPreparationDto[] = [];
+    const erreurs: unknown[] = [];
+    for (const retire of retires) {
+      try {
+        const retabli = await this.envoyerRetablissement(preparationId, retire);
+        if (numero === this.dernierChargement) {
+          this.grille.ajouter(retabli);
+          retablis.push(retabli);
+        }
+      } catch (erreur) {
+        echecs.push(retire);
+        erreurs.push(erreur);
+      }
+    }
+    if (numero !== this.dernierChargement) {
+      return;
+    }
+    if (retablis.length > 0) {
+      void this.encart()?.recharger();
+      this.annonces.annoncer(
+        retablis.length === 1
+          ? `« ${retablis[0].forme} » rétabli.`
+          : `${retablis.length} mots rétablis.`,
+      );
+    }
+    if (echecs.length > 0) {
+      // « Réessayer » seulement si chaque échec est passager ; le message vient d'un échec qui le justifie.
+      const reessayable = erreurs.every((erreur) => erreurPassagere(erreur));
+      const raison = reessayable
+        ? erreurs[erreurs.length - 1]
+        : erreurs.find((erreur) => !erreurPassagere(erreur));
+      this.echecRetablissement.set({
+        preparationId,
+        mots: echecs,
+        message: messageErreur(raison),
+        reessayable,
+      });
+    }
+    if (retablis.length > 0) {
+      this.focaliserApresRendu(retablis[0]);
+    } else {
+      this.rendreFocusAuChampSiPerdu();
+    }
+  }
+
+  /** Case de sélection d'une Carte : bascule, ou plage (Maj+clic) ; le récapitulatif se ferme. */
+  protected basculerSelection(motId: string, geste: BasculeSelection): void {
+    if (this.selection.figee()) {
+      return;
+    }
+    this.versement.fermerRecapitulatifLibre();
+    if (geste.plage) {
+      this.selection.selectionnerPlage(motId);
+    } else {
+      this.selection.basculer(motId);
+    }
+  }
+
+  /** « Tout sélectionner » : tous les Mots de la Grille. */
+  protected toutSelectionner(): void {
+    if (this.selection.figee() || this.actionsLotIndisponibles()) {
+      return;
+    }
+    this.versement.fermerRecapitulatifLibre();
+    this.selection.toutSelectionner();
+  }
+
+  /** « Désélectionner » : sélection vide ; la barre disparaît, le focus va au Champ de saisie rapide s'il est perdu. */
+  protected deselectionner(): void {
+    if (this.selection.figee() || this.actionsLotIndisponibles()) {
+      return;
+    }
+    this.versement.fermerRecapitulatifLibre();
+    this.selection.toutDeselectionner();
+    this.rendreFocusSiPerdu();
+  }
+
+  protected fermerRecapitulatif(): void {
+    this.versement.fermerRecapitulatif();
+    this.rendreFocusSiPerdu();
+  }
+
+  /** Bandeau du versement fermé : plus de reprise ; le récapitulatif partiel reste. */
+  protected fermerErreurVersement(): void {
+    this.versement.fermerErreur();
+    this.rendreFocusSiPerdu();
+  }
+
+  /**
+   * Échap dans la page (les panneaux latéraux, le Champ de saisie rapide, les menus et les dialogues le traitent
+   * d'abord). Venu d'un champ (saisie rapide comprise) ou d'un menu, il ne fait rien ici. Sinon, le panneau ouvert se
+   * ferme d'abord : Carte d'identité, Panneau de choix, puis Panneau de détection (masqué, le champ garde sa saisie) ;
+   * sans panneau ouvert, la sélection se vide, sauf pendant une action en lot.
+   */
+  protected echap(evenement: Event): void {
+    if (
+      evenement.defaultPrevented ||
+      this.dialogues.openDialogs.length > 0 ||
+      echapDeSaisieOuMenu(evenement.target, ['mat-form-field', '.mat-mdc-select'])
+    ) {
+      return;
+    }
+    if (this.carteOuverte() !== null) {
+      this.fermerCarteIdentite();
+      return;
+    }
+    if (this.choixOuvert() !== null) {
+      this.fermerChoixImage();
+      return;
+    }
+    const detection = this.panneauDetection();
+    if (detection?.ouvert()) {
+      detection.masquer();
+      this.rendreFocusSiPerdu();
+      return;
+    }
+    if (
+      (!this.selection.active() && this.versement.recapitulatif() === null) ||
+      this.selection.figee()
+    ) {
+      return;
+    }
+    this.selection.toutDeselectionner();
+    this.versement.fermerRecapitulatifLibre();
+    this.rendreFocusSiPerdu();
+  }
+
+  /** Après le rendu, si l'élément focalisé a disparu, focus à `repli` ou au Champ de saisie rapide. */
+  private rendreFocusSiPerdu(repli?: () => HTMLElement | undefined): void {
+    afterNextRender(
+      () => {
+        const actif = document.activeElement;
+        if (actif === null || actif === document.body || !actif.isConnected) {
+          const element = repli?.();
+          if (element === undefined) {
+            this.saisieRapide()?.focus();
+          } else {
+            element.focus();
+          }
+        }
+      },
+      { injector: this.injecteur },
+    );
+  }
+
+  /**
+   * « Verser » de la Barre d'actions en lot : les Images des Mots sélectionnés, dans l'ordre de la Grille, chacune une
+   * seule fois ; les Mots sans Image restent hors du lot avec la raison « pas d'image ». Le récapitulatif nomme les
+   * Images par la forme et le Sens du premier Mot qui les montre.
+   */
+  protected verserSelection(): void {
+    const mots = this.motsSelectionnes();
+    if (this.versement.enCours() || this.actionsLotIndisponibles() || mots.length === 0) {
+      return;
+    }
+    const noms = new Map<string, string>();
+    const refusesAvant: RefusAffiche[] = [];
+    for (const mot of mots) {
+      const nom = nomImage(mot.forme, mot.sens.libelle);
+      if (!mot.image) {
+        refusesAvant.push({ cle: `mot:${mot.id}`, texte: `${nom} : ${RAISON_PAS_D_IMAGE}` });
+      } else if (!noms.has(mot.image.id)) {
+        noms.set(mot.image.id, nom);
+      }
+    }
+    void this.versement
+      .verser([...noms.keys()], noms, refusesAvant)
+      .then((complet) => this.apresVersement(complet));
+  }
+
+  /** « Réessayer » : les Images non envoyées du lot en échec encore sélectionnées, dans le même récapitulatif. */
+  protected reessayerVersement(): void {
+    if (this.actionsLotIndisponibles()) {
+      return;
+    }
+    void this.versement.reessayer().then((complet) => this.apresVersement(complet));
+  }
+
+  /** Récapitulatif complet : « Verser » disparu (plus rien de sélectionné), le focus va au bouton qui le ferme. */
+  private apresVersement(complet: boolean): void {
+    if (complet) {
+      this.rendreFocusSiPerdu(() => this.recapitulatifLot()?.elementFermer());
+    }
+  }
+
+  /**
+   * Images versées ou déjà versées par un paquet : les Cartes qui les montrent prennent `etat = versee` (badge
+   * « versée ») et `versabilite = null`, leurs Mots sortent de la sélection, et la Carte d'identité ouverte sur l'une
+   * d'elles est relue.
+   */
+  private appliquerVersement(imageIds: readonly string[]): void {
+    const versees = new Set(imageIds);
+    const sortis: string[] = [];
+    for (const mot of this.mots() ?? []) {
+      const image = mot.image;
+      if (!image || !versees.has(image.id)) {
+        continue;
+      }
+      sortis.push(mot.id);
+      if (image.etat !== 'versee' || image.versabilite != null) {
+        this.grille.remplacer({ ...mot, image: { ...image, etat: 'versee', versabilite: null } });
+      }
+    }
+    this.selection.retirer(sortis);
+    const ouverte = this.carteOuverte();
+    if (ouverte !== null && versees.has(ouverte.imageId)) {
+      this.panneauCarteIdentite()?.actualiser();
     }
   }
 

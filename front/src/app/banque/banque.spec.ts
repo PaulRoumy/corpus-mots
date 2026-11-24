@@ -21,13 +21,8 @@ import { Annuaire, EtatAnnuaire } from '../commun/annuaire';
 import { CompteCourant } from '../commun/compte-courant';
 import { provideIcones } from '../commun/icones';
 import { AjouterImage } from '../preparations/ajouter-image';
-import {
-  Banque,
-  fusionnerResultat,
-  libelleImages,
-  provenanceDeLUrl,
-  recapitulatifVersement,
-} from './banque';
+import { Banque, libelleImages, provenanceDeLUrl } from './banque';
+import { fusionnerResultat, recapitulatifVersement } from '../commun/versement/versement-lot';
 import { MESSAGE_RESEAU } from '../commun/erreurs/message-erreur';
 import { MESSAGE_PRECISER_ALBUM } from './barre-filtres';
 import { filtresDeLUrl } from './filtres-banque';
@@ -237,7 +232,7 @@ describe('recapitulatifVersement et fusionnerResultat', () => {
       versees: 1,
       dejaVersees: 0,
       refusees: [
-        { imageId: 'a', texte: "« loup » (animal) : type inconnu, précisez le type de l'image" },
+        { cle: 'a', texte: "« loup » (animal) : type inconnu, précisez le type de l'image" },
       ],
     });
   });
@@ -1824,9 +1819,9 @@ describe('Banque', () => {
         .filter((index) => index >= 0);
     const barre = () => racine.querySelector('.barre-actions-lot');
     const nombreBarre = () => texte(racine.querySelector('.barre-actions-lot__nombre'));
-    const bilan = () => texte(racine.querySelector('.banque__bilan'));
+    const bilan = () => texte(racine.querySelector('.versement-lot__bilan'));
     const refusees = () =>
-      [...racine.querySelectorAll('.banque__refusees li')].map((li) => texte(li));
+      [...racine.querySelectorAll('.versement-lot__refusees li')].map((li) => texte(li));
     const requeteVersement = () =>
       serveur.expectOne(
         (requete) => requete.url === '/api/images/versements' && requete.method === 'POST',
@@ -2078,12 +2073,12 @@ describe('Banque', () => {
       await stabiliser();
 
       // Seul le bilan est dans la région vive ; la liste est hors de celle-ci.
-      expect(racine.querySelector('.banque__bilan')?.getAttribute('role')).toBe('status');
-      expect(racine.querySelector('[role="status"] .banque__refusees')).toBeNull();
-      expect(texte(racine.querySelector('.banque__partage'))).toBe(
+      expect(racine.querySelector('.versement-lot__bilan')?.getAttribute('role')).toBe('status');
+      expect(racine.querySelector('[role="status"] .versement-lot__refusees')).toBeNull();
+      expect(texte(racine.querySelector('.versement-lot__partage'))).toBe(
         "L'image reste la vôtre. Les collègues peuvent l'utiliser, personne ne peut la modifier.",
       );
-      expect(texte(racine.querySelector('.banque__bilan'))).toBe('1 image versée.');
+      expect(texte(racine.querySelector('.versement-lot__bilan'))).toBe('1 image versée.');
       expect(refusees()).toEqual([
         "« loup » (animal) : une image d'album reste dans Mes mots",
         "« renard » (goupil) : image d'un collègue",
@@ -2117,8 +2112,8 @@ describe('Banque', () => {
       });
       await stabiliser();
 
-      expect(racine.querySelector('.banque__partage')).toBeNull();
-      expect(texte(racine.querySelector('.banque__bilan'))).toBe('Aucune image versée.');
+      expect(racine.querySelector('.versement-lot__partage')).toBeNull();
+      expect(texte(racine.querySelector('.versement-lot__bilan'))).toBe('Aucune image versée.');
       expect(refusees()).toEqual([
         '« loup » (animal) : licence à préciser',
         '« loup » (animal) : licence non partageable',
@@ -2138,7 +2133,7 @@ describe('Banque', () => {
       requeteVersement().flush({ versees: [a.id], dejaVersees: [b.id, c.id], refusees: [] });
       await stabiliser();
 
-      expect(texte(racine.querySelector('.banque__bilan'))).toBe(
+      expect(texte(racine.querySelector('.versement-lot__bilan'))).toBe(
         '1 image versée. 2 étaient déjà dans la banque.',
       );
       expect(cochees()).toEqual([]);
@@ -2196,7 +2191,7 @@ describe('Banque', () => {
 
       expect(bandeau()).toBeUndefined();
       expect(bilan()).toBe('649 images versées.');
-      expect(texte(racine.querySelector('.banque__partage'))).toBe(
+      expect(texte(racine.querySelector('.versement-lot__partage'))).toBe(
         'Les images restent les vôtres. Les collègues peuvent les utiliser, personne ne peut les modifier.',
       );
     }, 20_000);
@@ -2249,7 +2244,7 @@ describe('Banque', () => {
       expect(reprise.request.body).toEqual({ imageIds: [a.id, b.id] });
       reprise.flush({ versees: [a.id, b.id], dejaVersees: [], refusees: [] });
       await stabiliser();
-      expect(texte(racine.querySelector('.banque__bilan'))).toBe('2 images versées.');
+      expect(texte(racine.querySelector('.versement-lot__bilan'))).toBe('2 images versées.');
     });
 
     it('panneau ouvert sur une Image du lot versée : la Carte est relue, badge « versée »', async () => {
@@ -2370,7 +2365,7 @@ describe('Banque', () => {
       imagesAjoutees.set(1);
       await stabiliser();
       await servir(requeteImages('mes-mots'), premieres, 100);
-      const versement = racine.querySelector('.banque__erreur-versement');
+      const versement = racine.querySelector('.versement-lot__erreur');
       expect(texte(versement?.querySelector('[role="alert"]'))).toBe(MESSAGE_RESEAU);
 
       versement!.querySelector<HTMLButtonElement>('.bandeau-erreur__reessayer')!.click();
@@ -2417,6 +2412,9 @@ describe('Banque', () => {
       expect(bouton('Verser')?.getAttribute('aria-disabled')).not.toBe('true');
     });
 
+    // Délai de 20 s, comme les deux « gros lot » : le rendu de 650 vignettes prend à lui seul 3,5 à 4 s (seul), contre
+    // 5 s par défaut, et dépasse ce délai quand toute la suite tourne en parallèle ; la logique du versement n'y est pour
+    // rien.
     it('filtres changés pendant l’envoi : le paquet suivant n’est pas envoyé, rien n’est écrit', async () => {
       await ouvrirPage();
       const toutes = images(650);
@@ -2442,7 +2440,7 @@ describe('Banque', () => {
       // La page demandée pendant l'envoi reprend les Images versées.
       expect(texte(vignettes()[0].querySelector('.vignette__meta'))).toContain('versée');
       expect(caseDe(0).hasAttribute('aria-disabled')).toBe(false);
-    });
+    }, 20_000);
 
     it('page quittée pendant l’envoi : le paquet suivant n’est pas envoyé', async () => {
       await ouvrirPage();
@@ -2459,7 +2457,7 @@ describe('Banque', () => {
       await tour();
 
       serveur.expectNone('/api/images/versements');
-    });
+    }, 20_000);
 
     it('Échap depuis un champ de saisie ou avec un dialogue ouvert : la sélection reste', async () => {
       await ouvrirPage();

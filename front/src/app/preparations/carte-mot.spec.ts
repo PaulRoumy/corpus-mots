@@ -38,6 +38,29 @@ describe('CarteMot', () => {
 
   const boutonRetirer = () => racine.querySelector<HTMLButtonElement>('.carte-mot__retirer')!;
 
+  it('Case de sélection : la première, nommée par le Mot ; son geste n’émet que `basculerSelection`', async () => {
+    const gestes: boolean[] = [];
+    let ouvertures = 0;
+    fixture.componentInstance.basculerSelection.subscribe((geste) => gestes.push(geste.plage));
+    fixture.componentInstance.choisirImage.subscribe(() => ouvertures++);
+    const caseSelection = racine.querySelector<HTMLInputElement>('app-case-selection input')!;
+
+    expect(racine.firstElementChild?.tagName.toLowerCase()).toBe('app-case-selection');
+    expect(caseSelection.getAttribute('aria-label')).toBe('Sélectionner « citrouille »');
+    caseSelection.click();
+    caseSelection.dispatchEvent(new MouseEvent('click', { bubbles: true, shiftKey: true }));
+    expect(gestes).toEqual([false, true]);
+    expect(ouvertures).toBe(0);
+    expect(racine.classList).not.toContain('carte-mot--selectionnee');
+
+    fixture.componentRef.setInput('selectionnee', true);
+    fixture.componentRef.setInput('selectionActive', true);
+    await fixture.whenStable();
+    expect(racine.classList).toContain('carte-mot--selectionnee');
+    expect(racine.classList).toContain('carte-mot--selection-active');
+    expect(caseSelection.checked).toBe(true);
+  });
+
   it('Carte « à illustrer » : vignette vide, Mot en cursive, badge « à illustrer »', () => {
     expect(racine.classList).toContain('carte-mot--a-illustrer');
     expect(racine.querySelector('.carte-mot__vignette mat-icon')?.getAttribute('aria-hidden')).toBe(

@@ -17,7 +17,7 @@ import { BadgeTypeImage } from '../commun/badge-type-image/badge-type-image';
 import { ChargementImage, ImageSecurisee } from '../commun/image-securisee/image-securisee';
 import { RepereSection } from '../commun/repere-section/repere-section';
 import { BasculeSelection, CaseSelection } from '../commun/selection/case-selection';
-import { nomImage } from './nom-image';
+import { nomImage } from '../commun/nom-image';
 
 /** Identifiant du Panneau Carte d'identité de la Banque, que la vignette ouverte contrôle (`aria-controls`). */
 export const ID_PANNEAU_CARTE_IDENTITE = 'banque-carte-identite';

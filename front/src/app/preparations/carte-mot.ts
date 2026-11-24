@@ -17,6 +17,7 @@ import { MotPreparationDto } from '../api/models/mot-preparation-dto';
 import { BadgeTypeImage } from '../commun/badge-type-image/badge-type-image';
 import { CompteCourant } from '../commun/compte-courant';
 import { ChargementImage, ImageSecurisee } from '../commun/image-securisee/image-securisee';
+import { BasculeSelection, CaseSelection } from '../commun/selection/case-selection';
 import { SuggestionsArasaac } from './suggestions-arasaac';
 
 /**
@@ -42,21 +43,47 @@ import { SuggestionsArasaac } from './suggestions-arasaac';
  * ellipse ; son nom accessible porte le nom complet (« Thème de « citrouille » : cuisine »). Il émet `changerTheme` :
  * la page ouvre le Dialogue du Thème. Tant que les Thèmes de l'école ne sont pas chargés (`theme` indéfini), il n'est
  * pas affiché.
+ *
+ * Case de sélection (story 3.3, partie 3b) : la première de la Carte dans l'ordre de tabulation, en haut à gauche,
+ * nommée « Sélectionner « forme » ». Elle paraît au survol et au focus de la Carte, et sur toutes les Cartes dès qu'une
+ * sélection existe (`selectionActive`) ; toujours sur un écran sans survol. Son geste (`basculerSelection`, Maj+clic :
+ * plage) n'ouvre rien. La Carte sélectionnée prend le fond `primary-container` et l'anneau `primary` de 2 px
+ * (DESIGN.md › case-selection), avec la case cochée : jamais la couleur seule.
  */
 @Component({
   selector: 'app-carte-mot',
-  imports: [BadgeTypeImage, ImageSecurisee, MatButtonModule, MatIconModule, SuggestionsArasaac],
+  imports: [
+    BadgeTypeImage,
+    CaseSelection,
+    ImageSecurisee,
+    MatButtonModule,
+    MatIconModule,
+    SuggestionsArasaac,
+  ],
   changeDetection: ChangeDetectionStrategy.OnPush,
   styleUrl: './carte-mot.scss',
-  host: { '[class.carte-mot--a-illustrer]': '!mot().illustre' },
+  host: {
+    '[class.carte-mot--a-illustrer]': '!mot().illustre',
+    '[class.carte-mot--selectionnee]': 'selectionnee()',
+    '[class.carte-mot--selection-active]': 'selectionActive()',
+  },
   template: `
+    <app-case-selection
+      class="carte-mot__case"
+      [nom]="nomSelection()"
+      [cochee]="selectionnee()"
+      [figee]="selectionFigee()"
+      (basculer)="basculerSelection.emit($event)"
+    />
     <button
       #boutonRetirer
       matIconButton
       class="carte-mot__retirer"
       type="button"
       [attr.aria-label]="'Retirer « ' + mot().forme + ' » de la préparation'"
-      (click)="retirer.emit()"
+      disabledInteractive
+      [disabled]="retraitIndisponible()"
+      (click)="retraitIndisponible() || retirer.emit()"
     >
       <mat-icon svgIcon="fermer" aria-hidden="true" />
     </button>
@@ -160,6 +187,19 @@ export class CarteMot {
   readonly illustre = output<MotPreparationDto>();
   /** Mot illustré ou retiré entre-temps (autre onglet), avec le message traduit : la page recharge la Préparation. */
   readonly aRecharger = output<string>();
+  /** Vrai si le Mot est dans la sélection (story 3.3). */
+  readonly selectionnee = input(false);
+  /** Vrai dès qu'une sélection existe dans la page : la Case de sélection reste visible. */
+  readonly selectionActive = input(false);
+  /** Vrai pendant une action en lot : la Case de sélection ne bascule plus. */
+  readonly selectionFigee = input(false);
+  /** Vrai pendant un retrait en lot : « Retirer » reste focusable mais attend (un seul Bandeau « Annuler » à la fois). */
+  readonly retraitIndisponible = input(false);
+  /** Clic ou Espace sur la Case de sélection (Maj+clic : plage). */
+  readonly basculerSelection = output<BasculeSelection>();
+
+  /** Nom de la Case de sélection : « Sélectionner « citrouille » ». */
+  protected readonly nomSelection = computed(() => `Sélectionner « ${this.mot().forme} »`);
 
   private readonly api = inject(Api);
   private readonly compteCourant = inject(CompteCourant);

@@ -1,0 +1,28 @@
+// Carte ou vignette qui accueille une Case de sélection (story 3.3) : la case est masquée et inerte au pointeur au
+// repos ; visible au survol, au focus de la carte, sur toutes les cartes dès qu'une sélection existe
+// (`$classe-active`), et toujours sur un écran sans survol. Partagé par la Carte de Mot et la vignette de la Banque.
+//
+// `--case-selection-anneau-carte` : épaisseur de l'anneau d'une carte sélectionnée (DESIGN.md › case-selection,
+// selected-card-ring, 2 px), dérivée d'un jeton existant et définie ici, dans les styles chargés à la demande, et non
+// dans _jetons.scss : le paquet initial ne grossit pas.
+@mixin visibilite($classe-active) {
+  :host {
+    --case-selection-opacite: 0;
+    --case-selection-pointeur: none;
+    --case-selection-anneau-carte: calc(var(--cm-epaisseur-separateur) * 2);
+  }
+
+  :host(:hover),
+  :host(:focus-within),
+  :host(.#{$classe-active}) {
+    --case-selection-opacite: 1;
+    --case-selection-pointeur: auto;
+  }
+
+  @media (hover: none) {
+    :host {
+      --case-selection-opacite: 1;
+      --case-selection-pointeur: auto;
+    }
+  }
+}

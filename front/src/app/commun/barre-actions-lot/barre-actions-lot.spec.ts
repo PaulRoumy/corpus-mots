@@ -2,7 +2,7 @@ import { LiveAnnouncer } from '@angular/cdk/a11y';
 import { Component, signal } from '@angular/core';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { MATERIAL_ANIMATIONS } from '@angular/material/core';
-import { BarreActionsLot, libelleSelection } from './barre-actions-lot';
+import { BarreActionsLot, libelleSelection, libelleSelectionMots } from './barre-actions-lot';
 
 @Component({
   imports: [BarreActionsLot],
@@ -12,6 +12,7 @@ import { BarreActionsLot, libelleSelection } from './barre-actions-lot';
       [ouverte]="ouverte()"
       [figee]="figee()"
       [annoncer]="annoncer()"
+      [libelleNombre]="libelleNombre()"
       (toutSelectionner)="tout = tout + 1"
       (deselectionner)="aucun = aucun + 1"
     >
@@ -25,6 +26,7 @@ class Hote {
   readonly ouverte = signal(false);
   readonly figee = signal(false);
   readonly annoncer = signal(true);
+  readonly libelleNombre = signal<(nombre: number) => string>(libelleSelection);
   tout = 0;
   aucun = 0;
 }
@@ -61,6 +63,24 @@ describe('BarreActionsLot', () => {
     expect(libelleSelection(0)).toBe('Aucune image sélectionnée');
     expect(libelleSelection(1)).toBe('1 image sélectionnée');
     expect(libelleSelection(650)).toBe('650 images sélectionnées');
+  });
+
+  it('accorde le libellé des Mots (Préparation)', () => {
+    expect(libelleSelectionMots(0)).toBe('Aucun mot sélectionné');
+    expect(libelleSelectionMots(1)).toBe('1 mot sélectionné');
+    expect(libelleSelectionMots(3)).toBe('3 mots sélectionnés');
+  });
+
+  it('libellé fourni par la page : affiché et annoncé', async () => {
+    await poser((hote) => {
+      hote.libelleNombre.set(libelleSelectionMots);
+      hote.nombre.set(2);
+    });
+
+    expect(racine.querySelector('.barre-actions-lot__nombre')?.textContent?.trim()).toBe(
+      '2 mots sélectionnés',
+    );
+    expect(announce).toHaveBeenLastCalledWith('2 mots sélectionnés.', 'polite');
   });
 
   it('sans sélection : masquée, rien d’annoncé', () => {

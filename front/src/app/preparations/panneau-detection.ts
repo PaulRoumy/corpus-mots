@@ -483,6 +483,18 @@ export class PanneauDetection {
     });
   }
 
+  /** Vrai quand le panneau montre un résultat ou un échec (story 3.3 : Échap le masque avant de vider la sélection). */
+  readonly ouvert = computed(() => this.etat().nom !== 'masque');
+
+  /** Masque le panneau sans toucher au champ ; la frappe suivante relance la détection. */
+  masquer(): void {
+    ++this.derniereFrappe;
+    this.imageChoisie.set(null);
+    this.sensChoisi.set(null);
+    this.reinitialiserCreations();
+    this.etat.set({ nom: 'masque' });
+  }
+
   /** ↓ choisit l'Image suivante (la première sans choix), sans boucler ; ↑ la précédente ou aucune ; Échap aucune. */
   naviguer(navigation: Navigation): void {
     const options = this.options();

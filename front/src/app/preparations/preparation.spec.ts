@@ -28,6 +28,8 @@ import {
   heuresEnMinutes,
   annonceAjoutAvecSens,
   libelleIllustres,
+  messageEchecRetablissement,
+  messageEchecRetrait,
   MESSAGE_SENS_PLUS_PROPOSE,
   MESSAGE_TEMPS_PASSE_INVALIDE,
   minutesEnHeures,
@@ -3352,7 +3354,7 @@ describe('Preparation (En-tête)', () => {
       expect(racine.querySelector('app-bandeau-erreur.erreur-retablissement')).toBeNull();
     });
 
-    it('deux retraits en échec : un seul Bandeau au pluriel, « Réessayer » les retire tous deux', async () => {
+    it('deux retraits en échec : un seul Bandeau au pluriel, « Réessayer » les retire en lot, un seul Bandeau « Annuler »', async () => {
       await ouvrirAvec([GALETTE, CITROUILLE, LAPIN]);
       await retirer('galette');
       await retirer('lapin');
@@ -3368,12 +3370,15 @@ describe('Preparation (En-tête)', () => {
 
       await reessayer('erreur-retrait');
       expect(cartes()).toEqual(['citrouille']);
+      // En lot : les retraits partent l'un après l'autre.
       retrait(GALETTE).flush(GALETTE);
+      await stabiliser();
       retrait(LAPIN).flush(LAPIN);
       await stabiliser();
 
       expect(cartes()).toEqual(['citrouille']);
-      expect(afficher).toHaveBeenCalledTimes(2);
+      expect(afficher).toHaveBeenCalledTimes(1);
+      expect(afficher.mock.lastCall![0]).toBe('2 mots retirés de la préparation.');
     });
 
     it('échec du rétablissement, focus perdu : il revient au Champ de saisie rapide', async () => {
@@ -4164,6 +4169,103 @@ describe('Preparation (En-tête)', () => {
       expect(panneau()).toBeNull();
       expect(racine.querySelector('.disposition')?.classList).not.toContain('disposition--panneau');
       expect(document.activeElement).toBe(vignette('citrouille'));
+    });
+
+    it('sélection (story 3.3, partie 3b) : « Verser » relit la Carte ouverte ; Échap ferme le panneau avant de vider la sélection', async () => {
+      await ouvrirGrille();
+      await ouvrirCarte('citrouille');
+      const carte = {
+        id: IMAGE_1,
+        proprietaireId: MOI,
+        etat: 'privee' as const,
+        aRemplacer: null,
+        reutilisable: true,
+        typeImage: 'image_libre' as const,
+        aCompleter: false,
+        motId: CITROUILLE.motId,
+        forme: 'citrouille',
+        sens: { id: CITROUILLE.motId, libelle: 'légume', categorie: 'nom', aCompleter: false },
+        albumOrigine: null,
+        licence: 'cc0_domaine_public' as const,
+        source: 'site web',
+        auteur: null,
+        sections: [],
+        module: null,
+        themes: [],
+        sensModifiable: false,
+        versabilite: 'versable' as const,
+      };
+      serveur.expectOne(`/api/images/${IMAGE_1}`).flush(carte);
+      await stabiliser();
+      const caseDe = (forme: string) =>
+        racine.querySelector<HTMLInputElement>(
+          `app-carte-mot input[aria-label="Sélectionner « ${forme} »"]`,
+        )!;
+      const cochees = () =>
+        [...racine.querySelectorAll('app-carte-mot.carte-mot--selectionnee .carte-mot__mot')].map(
+          (mot) => mot.textContent?.trim(),
+        );
+      caseDe('citrouille').click();
+      caseDe('potiron').click();
+      await stabiliser();
+
+      [...racine.querySelectorAll<HTMLButtonElement>('app-barre-actions-lot button')]
+        .find((bouton) => bouton.textContent?.trim() === 'Verser')!
+        .click();
+      await stabiliser();
+      serveur
+        .expectOne(
+          (requete) => requete.method === 'POST' && requete.url === '/api/images/versements',
+        )
+        .flush({
+          versees: [IMAGE_1],
+          dejaVersees: [],
+          refusees: [{ imageId: IMAGE_2, code: 'image.versement.type_inconnu', licence: null }],
+        });
+      await stabiliser();
+      // La Carte d'identité ouverte sur l'Image versée est relue.
+      serveur
+        .expectOne(`/api/images/${IMAGE_1}`)
+        .flush({ ...carte, etat: 'versee', versabilite: null });
+      await stabiliser();
+      expect(cochees()).toEqual(['potiron']);
+
+      const echap = () =>
+        caseDe('potiron').dispatchEvent(
+          new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }),
+        );
+      echap();
+      await stabiliser();
+      expect(panneau()).toBeNull();
+      expect(cochees()).toEqual(['potiron']);
+
+      caseDe('potiron').focus();
+      echap();
+      await stabiliser();
+      expect(cochees()).toEqual([]);
+    });
+
+    it('sélection (story 3.3, partie 3b) : le panneau ouvert sur un Mot sélectionné se ferme au retrait en lot', async () => {
+      vi.spyOn(TestBed.inject(BandeauAnnuler), 'afficher').mockImplementation(() => undefined);
+      await ouvrirGrille();
+      await ouvrirCarte('citrouille');
+      serveur.expectOne(`/api/images/${IMAGE_1}`);
+      racine
+        .querySelector<HTMLInputElement>(
+          'app-carte-mot input[aria-label="Sélectionner « citrouille »"]',
+        )!
+        .click();
+      await stabiliser();
+
+      [...racine.querySelectorAll<HTMLButtonElement>('app-barre-actions-lot button')]
+        .find((bouton) => bouton.textContent?.trim() === 'Retirer de la préparation')!
+        .click();
+      await stabiliser();
+
+      expect(panneau()).toBeNull();
+      expect(cartes()).toEqual(['galette', 'potiron']);
+      serveur.expectOne(`${URL_MOTS}/${CITROUILLE.id}`).flush(CITROUILLE);
+      await stabiliser();
     });
 
     it('« Fermer » ferme le panneau et rend le focus à la vignette', async () => {
@@ -5232,6 +5334,562 @@ describe('Preparation (En-tête)', () => {
     });
   });
 
+  describe('Sélection et actions en lot (story 3.3, partie 3b)', () => {
+    const GALETTE = motPreparation('galette', 1);
+    const CITROUILLE = motPreparation('citrouille', 2);
+    const LAPIN = motPreparation('lapin', 3);
+    const RENARD = motPreparation('renard', 4);
+    const IMAGE_MIENNE = '0190f0a0-0000-7000-8000-0000000c0041';
+    const IMAGE_ZOE = '0190f0a0-0000-7000-8000-0000000c0042';
+    const URL_VERSEMENTS = '/api/images/versements';
+    const URL_RETABLISSEMENT = `${URL_MOTS}/retablissement`;
+
+    function avecImage(
+      mot: MotPreparationDto,
+      id: string,
+      modifications: Partial<NonNullable<MotPreparationDto['image']>> = {},
+    ): MotPreparationDto {
+      return {
+        ...mot,
+        illustre: true,
+        image: {
+          id,
+          proprietaireId: MOI,
+          etat: 'privee',
+          aRemplacer: null,
+          reutilisable: true,
+          typeImage: 'photo_personnelle',
+          aCompleter: false,
+          versabilite: 'versable',
+          ...modifications,
+        },
+      };
+    }
+
+    let afficher: ReturnType<typeof vi.fn<(message: string, annuler: () => unknown) => void>>;
+
+    beforeEach(() => {
+      afficher = vi.fn<(message: string, annuler: () => unknown) => void>();
+      vi.spyOn(TestBed.inject(BandeauAnnuler), 'afficher').mockImplementation(afficher);
+      TestBed.inject(CompteCourant).mettreAJour({
+        id: MOI,
+        administrateur: false,
+        email: 'moi@ecole.fr',
+        nomAffiche: 'Moi',
+      });
+    });
+
+    afterEach(() => {
+      serveur.match((requete) => requete.url.endsWith('/fichier'));
+    });
+
+    async function ouvrirAvec(mots: MotPreparationDto[]) {
+      await ouvrir(
+        { ...PREPARATION, nombreMots: mots.length },
+        MODULES,
+        THEMES,
+        albumDe(PREPARATION),
+        mots,
+      );
+    }
+
+    const caseDe = (forme: string) =>
+      racine.querySelector<HTMLInputElement>(
+        `app-carte-mot input[aria-label="Sélectionner « ${forme} »"]`,
+      )!;
+    const nombre = () => texte('app-barre-actions-lot .barre-actions-lot__nombre');
+    const barreAffichee = () =>
+      racine.querySelector('app-barre-actions-lot .barre-actions-lot') !== null;
+    const boutonsBarre = () =>
+      [...racine.querySelectorAll<HTMLButtonElement>('app-barre-actions-lot button')].map(
+        (bouton) => bouton.textContent?.trim(),
+      );
+    const boutonBarre = (libelle: string) =>
+      [...racine.querySelectorAll<HTMLButtonElement>('app-barre-actions-lot button')].find(
+        (bouton) => bouton.textContent?.trim() === libelle,
+      );
+    const cochees = () =>
+      [...racine.querySelectorAll('app-carte-mot.carte-mot--selectionnee .carte-mot__mot')].map(
+        (mot) => mot.textContent?.trim(),
+      );
+    const champSaisie = () => racine.querySelector<HTMLInputElement>('app-saisie-rapide input')!;
+    const boutonRetirer = (forme: string) =>
+      racine.querySelector<HTMLButtonElement>(
+        `app-carte-mot button[aria-label="Retirer « ${forme} » de la préparation"]`,
+      )!;
+    const retraits = () =>
+      serveur.match((requete) => requete.method === 'DELETE' && requete.url.startsWith(URL_MOTS));
+    const retablissements = () =>
+      serveur.match((requete) => requete.method === 'POST' && requete.url === URL_RETABLISSEMENT);
+    const versement = (): TestRequest =>
+      serveur.expectOne((requete) => requete.method === 'POST' && requete.url === URL_VERSEMENTS);
+
+    async function cocher(forme: string, plage = false) {
+      caseDe(forme).dispatchEvent(
+        new MouseEvent('click', { bubbles: true, cancelable: true, shiftKey: plage }),
+      );
+      await stabiliser();
+    }
+
+    async function cliquerBarre(libelle: string) {
+      boutonBarre(libelle)!.click();
+      await stabiliser();
+    }
+
+    /** Coche les Cases de `formes`, puis « Retirer de la préparation ». */
+    async function retirerEnLot(formes: string[]) {
+      for (const forme of formes) {
+        await cocher(forme);
+      }
+      await cliquerBarre('Retirer de la préparation');
+    }
+
+    async function echap(cible: HTMLElement) {
+      cible.dispatchEvent(
+        new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }),
+      );
+      await stabiliser();
+    }
+
+    /**
+     * Répond aux retraits, envoyés un par un dans l'ordre de la Grille : chaque réponse est le Mot renvoyé, ou
+     * `'echec'` pour une erreur réseau.
+     */
+    async function repondreRetraits(reponses: (MotPreparationDto | 'echec')[], ordre: string[]) {
+      for (const [index, reponse] of reponses.entries()) {
+        const envoyes = retraits();
+        expect(envoyes).toHaveLength(1);
+        expect(envoyes[0].request.url).toBe(`${URL_MOTS}/${ordre[index]}`);
+        if (reponse === 'echec') {
+          envoyes[0].error(new ProgressEvent('error'));
+        } else {
+          envoyes[0].flush(reponse);
+        }
+        await stabiliser();
+      }
+      expect(retraits()).toHaveLength(0);
+    }
+
+    /** Répond aux rétablissements, envoyés un par un : chacun renvoie le Mot rétabli à sa place. */
+    async function repondreRetablissements(mots: MotPreparationDto[]) {
+      for (const mot of mots) {
+        const envoyes = retablissements();
+        expect(envoyes).toHaveLength(1);
+        expect(envoyes[0].request.body).toEqual(
+          expect.objectContaining({ motId: mot.motId, ordre: mot.ordre }),
+        );
+        envoyes[0].flush(mot, { status: 201, statusText: 'Created' });
+        await stabiliser();
+      }
+      expect(retablissements()).toHaveLength(0);
+    }
+
+    it('cocher une Case : barre « 1 mot sélectionné », « Verser » puis « Retirer de la préparation », rien ne s’ouvre', async () => {
+      await ouvrirAvec([GALETTE, CITROUILLE, LAPIN]);
+      expect(barreAffichee()).toBe(false);
+
+      await cocher('citrouille');
+
+      expect(caseDe('citrouille').checked).toBe(true);
+      expect(cochees()).toEqual(['citrouille']);
+      expect(nombre()).toBe('1 mot sélectionné');
+      expect(boutonsBarre()).toEqual([
+        'Tout sélectionner',
+        'Désélectionner',
+        'Verser',
+        'Retirer de la préparation',
+      ]);
+      expect(racine.querySelector('app-panneau-choix-image, app-carte-identite')).toBeNull();
+      expect(document.querySelector('mat-dialog-container')).toBeNull();
+
+      await cliquerBarre('Tout sélectionner');
+      expect(nombre()).toBe('3 mots sélectionnés');
+      await cliquerBarre('Désélectionner');
+      expect(barreAffichee()).toBe(false);
+    });
+
+    it('Maj+clic : les Mots de l’ancre au Mot cliqué, dans l’ordre de la Grille', async () => {
+      await ouvrirAvec([GALETTE, CITROUILLE, LAPIN, RENARD]);
+
+      await cocher('citrouille');
+      await cocher('renard', true);
+
+      expect(cochees()).toEqual(['citrouille', 'lapin', 'renard']);
+      expect(nombre()).toBe('3 mots sélectionnés');
+    });
+
+    it('Échap dans la saisie rapide garde la sélection ; depuis une Case, il la vide', async () => {
+      await ouvrirAvec([GALETTE, CITROUILLE]);
+      await cocher('galette');
+
+      champSaisie().focus();
+      await echap(champSaisie());
+      expect(cochees()).toEqual(['galette']);
+
+      caseDe('galette').focus();
+      await echap(caseDe('galette'));
+      expect(cochees()).toEqual([]);
+      expect(barreAffichee()).toBe(false);
+    });
+
+    it('Verser une sélection mixte : ma photo versée ; « pas d’image » et « image d’un collègue » hors du lot', async () => {
+      const photo = avecImage(GALETTE, IMAGE_MIENNE);
+      const deZoe = avecImage(LAPIN, IMAGE_ZOE, {
+        proprietaireId: COLLEGUE,
+        etat: 'versee',
+        versabilite: null,
+      });
+      await ouvrirAvec([photo, CITROUILLE, deZoe]);
+      await cocher('galette');
+      await cliquerBarre('Tout sélectionner');
+
+      await cliquerBarre('Verser');
+      expect(texte('app-barre-actions-lot .mots__verser')).toBe('Versement…');
+      const requete = versement();
+      expect(requete.request.body).toEqual({ imageIds: [IMAGE_MIENNE, IMAGE_ZOE] });
+      requete.flush({
+        versees: [IMAGE_MIENNE],
+        dejaVersees: [],
+        refusees: [{ imageId: IMAGE_ZOE, code: 'image.reservee_au_proprietaire', licence: null }],
+      });
+      await stabiliser();
+
+      expect(texte('.versement-lot__bilan')).toBe('1 image versée.');
+      expect(texte('.versement-lot__partage')).toBe(
+        "L'image reste la vôtre. Les collègues peuvent l'utiliser, personne ne peut la modifier.",
+      );
+      expect(
+        [...racine.querySelectorAll('.versement-lot__refusees li')].map((li) =>
+          li.textContent?.trim(),
+        ),
+      ).toEqual([
+        "« citrouille » (à compléter) : pas d'image",
+        "« lapin » (à compléter) : image d'un collègue",
+      ]);
+      const badges = [...racine.querySelectorAll('app-carte-mot')].map(
+        (carte) => carte.querySelector('.carte-mot__versee')?.textContent?.trim() ?? null,
+      );
+      expect(badges).toEqual(['versée', null, null]);
+      // Le Mot versé sort de la sélection, les refusés y restent.
+      expect(cochees()).toEqual(['citrouille', 'lapin']);
+      expect(nombre()).toBe('2 mots sélectionnés');
+    });
+
+    it('deux Mots, même Image : un seul identifiant envoyé', async () => {
+      const galette = avecImage(GALETTE, IMAGE_MIENNE);
+      const citrouille = avecImage(CITROUILLE, IMAGE_MIENNE);
+      await ouvrirAvec([galette, citrouille]);
+      await cocher('galette');
+      await cocher('citrouille');
+
+      await cliquerBarre('Verser');
+      const requete = versement();
+      expect(requete.request.body).toEqual({ imageIds: [IMAGE_MIENNE] });
+      requete.flush({ versees: [IMAGE_MIENNE], dejaVersees: [], refusees: [] });
+      await stabiliser();
+
+      expect(texte('.versement-lot__bilan')).toBe('1 image versée.');
+      expect(racine.querySelectorAll('app-carte-mot .carte-mot__versee')).toHaveLength(2);
+      expect(cochees()).toEqual([]);
+    });
+
+    it('Retirer en lot : les Cartes disparaissent, les retraits partent un par un, un seul Bandeau « Annuler »', async () => {
+      await ouvrirAvec([GALETTE, CITROUILLE, LAPIN, RENARD]);
+      await cocher('galette');
+      await cocher('lapin', true);
+
+      await cliquerBarre('Retirer de la préparation');
+
+      expect(cartes()).toEqual(['renard']);
+      expect(texte('.entete__compteur')).toBe('1 mot, 0 déjà illustré');
+      // Focus à la Carte qui suit le dernier Mot retiré.
+      expect(document.activeElement).toBe(boutonRetirer('renard'));
+      expect(barreAffichee()).toBe(false);
+      await repondreRetraits([GALETTE, CITROUILLE, LAPIN], [GALETTE.id, CITROUILLE.id, LAPIN.id]);
+
+      expect(afficher).toHaveBeenCalledTimes(1);
+      expect(afficher.mock.lastCall![0]).toBe('3 mots retirés de la préparation.');
+      expect(cartes()).toEqual(['renard']);
+    });
+
+    it('Retirer en lot les derniers Mots : le focus va au Champ de saisie rapide', async () => {
+      await ouvrirAvec([GALETTE, CITROUILLE]);
+      await retirerEnLot(['galette', 'citrouille']);
+
+      expect(cartes()).toEqual([]);
+      expect(document.activeElement).toBe(champSaisie());
+      await repondreRetraits([GALETTE, CITROUILLE], [GALETTE.id, CITROUILLE.id]);
+    });
+
+    it('« Annuler » du lot : trois rétablissements, chaque Mot à sa place, « 3 mots rétablis. »', async () => {
+      await ouvrirAvec([GALETTE, CITROUILLE, LAPIN, RENARD]);
+      await retirerEnLot(['galette', 'citrouille', 'renard']);
+      await repondreRetraits([GALETTE, CITROUILLE, RENARD], [GALETTE.id, CITROUILLE.id, RENARD.id]);
+      expect(cartes()).toEqual(['lapin']);
+
+      afficher.mock.lastCall![1]();
+      await stabiliser();
+      await repondreRetablissements([GALETTE, CITROUILLE, RENARD]);
+
+      expect(cartes()).toEqual(['galette', 'citrouille', 'lapin', 'renard']);
+      expect(texte('p[aria-live="polite"]')).toBe('3 mots rétablis.');
+      expect(document.activeElement).toBe(boutonRetirer('galette'));
+    });
+
+    it('« Annuler » du lot, un rétablissement en échec : le Bandeau d’erreur existant le nomme', async () => {
+      await ouvrirAvec([GALETTE, CITROUILLE]);
+      await retirerEnLot(['galette', 'citrouille']);
+      await repondreRetraits([GALETTE, CITROUILLE], [GALETTE.id, CITROUILLE.id]);
+
+      afficher.mock.lastCall![1]();
+      await stabiliser();
+      retablissements()[0].flush(GALETTE, { status: 201, statusText: 'Created' });
+      await stabiliser();
+      retablissements()[0].error(new ProgressEvent('error'));
+      await stabiliser();
+
+      expect(cartes()).toEqual(['galette']);
+      expect(bandeau('erreur-retablissement')).toBe(
+        `« citrouille » n'a pas été rétabli. ${MESSAGE_RESEAU}`,
+      );
+      expect(texte('p[aria-live="polite"]')).toBe('« galette » rétabli.');
+
+      await reessayer('erreur-retablissement');
+      await repondreRetablissements([CITROUILLE]);
+      expect(cartes()).toEqual(['galette', 'citrouille']);
+    });
+
+    it('échec partiel : le Mot revient, le Bandeau d’erreur le nomme, « Annuler » ne rétablit que les autres', async () => {
+      await ouvrirAvec([GALETTE, CITROUILLE, LAPIN]);
+      await retirerEnLot(['galette', 'citrouille', 'lapin']);
+      await repondreRetraits([GALETTE, 'echec', LAPIN], [GALETTE.id, CITROUILLE.id, LAPIN.id]);
+
+      expect(cartes()).toEqual(['citrouille']);
+      expect(bandeau('erreur-retrait')).toBe(
+        `« citrouille » n'a pas été retiré. ${MESSAGE_RESEAU}`,
+      );
+      expect(afficher).toHaveBeenCalledTimes(1);
+      expect(afficher.mock.lastCall![0]).toBe('2 mots retirés de la préparation.');
+
+      afficher.mock.lastCall![1]();
+      await stabiliser();
+      await repondreRetablissements([GALETTE, LAPIN]);
+      expect(cartes()).toEqual(['galette', 'citrouille', 'lapin']);
+      expect(texte('p[aria-live="polite"]')).toBe('2 mots rétablis.');
+
+      // « Réessayer » retire de nouveau le Mot en échec.
+      await reessayer('erreur-retrait');
+      expect(cartes()).toEqual(['galette', 'lapin']);
+      await repondreRetraits([CITROUILLE], [CITROUILLE.id]);
+      expect(afficher.mock.lastCall![0]).toBe('« citrouille » retiré de la préparation.');
+    });
+
+    it('un seul Mot sélectionné : le message du retrait unitaire', async () => {
+      await ouvrirAvec([GALETTE, CITROUILLE]);
+      await retirerEnLot(['galette']);
+      await repondreRetraits([GALETTE], [GALETTE.id]);
+
+      expect(afficher.mock.lastCall![0]).toBe('« galette » retiré de la préparation.');
+      afficher.mock.lastCall![1]();
+      await stabiliser();
+      await repondreRetablissements([GALETTE]);
+      expect(texte('p[aria-live="polite"]')).toBe('« galette » rétabli.');
+    });
+
+    it('retrait en lot puis navigation : le Bandeau se ferme, rien n’est rétabli', async () => {
+      // Bandeau réel : le snackbar s'affiche et se ferme au début de la navigation.
+      vi.mocked(TestBed.inject(BandeauAnnuler).afficher).mockRestore();
+      await ouvrirAvec([GALETTE, CITROUILLE, LAPIN]);
+      await retirerEnLot(['galette', 'citrouille']);
+      await repondreRetraits([GALETTE, CITROUILLE], [GALETTE.id, CITROUILLE.id]);
+      expect(document.querySelector('app-bandeau-annuler')?.textContent).toContain(
+        '2 mots retirés de la préparation.',
+      );
+
+      await TestBed.inject(Router).navigateByUrl('/');
+      await stabiliser();
+
+      expect(document.querySelector('app-bandeau-annuler')).toBeNull();
+      // `serveur.verify()` (afterEach) : aucune requête de rétablissement.
+    });
+
+    it('ouverture d’une autre Préparation : la sélection est vide', async () => {
+      await ouvrirAvec([GALETTE, CITROUILLE]);
+      await cocher('galette');
+      expect(nombre()).toBe('1 mot sélectionné');
+
+      fixture.componentRef.setInput('id', AUTRE_ID);
+      await stabiliser();
+      expect(barreAffichee()).toBe(false);
+      await ouvrir({ ...LOUP, nombreMots: 1 }, MODULES_LOUP, THEMES, albumDe(LOUP), [
+        motPreparation('loup', 1),
+      ]);
+      expect(barreAffichee()).toBe(false);
+
+      // Retour à la première : le même Mot n'est pas resélectionné.
+      fixture.componentRef.setInput('id', ID);
+      await stabiliser();
+      await ouvrirAvec([GALETTE, CITROUILLE]);
+      expect(cochees()).toEqual([]);
+      expect(barreAffichee()).toBe(false);
+    });
+
+    it('versement en échec réseau : Bandeau, un Mot désélectionné, « Réessayer » n’envoie que l’Image restante', async () => {
+      const IMAGE_AUTRE = '0190f0a0-0000-7000-8000-0000000c0043';
+      await ouvrirAvec([avecImage(GALETTE, IMAGE_MIENNE), avecImage(CITROUILLE, IMAGE_AUTRE)]);
+      await cocher('galette');
+      await cocher('citrouille');
+
+      await cliquerBarre('Verser');
+      versement().error(new ProgressEvent('error'));
+      await stabiliser();
+      expect(bandeau('versement-lot__erreur')).toBe(MESSAGE_RESEAU);
+      expect(texte('app-barre-actions-lot .mots__verser')).toBe('Verser');
+
+      await cocher('galette');
+      expect(cochees()).toEqual(['citrouille']);
+      await reessayer('versement-lot__erreur');
+      const requete = versement();
+      expect(requete.request.body).toEqual({ imageIds: [IMAGE_AUTRE] });
+      requete.flush({ versees: [IMAGE_AUTRE], dejaVersees: [], refusees: [] });
+      await stabiliser();
+
+      expect(texte('.versement-lot__bilan')).toBe('1 image versée.');
+      expect(bandeau('versement-lot__erreur')).toBeUndefined();
+    });
+
+    it('versement en cours puis autre Préparation : barre et bilan disparaissent, la réponse tardive n’écrit rien', async () => {
+      await ouvrirAvec([avecImage(GALETTE, IMAGE_MIENNE), CITROUILLE]);
+      await cocher('galette');
+      await cliquerBarre('Verser');
+      const requete = versement();
+
+      fixture.componentRef.setInput('id', AUTRE_ID);
+      await stabiliser();
+      await ouvrir({ ...LOUP, nombreMots: 1 }, MODULES_LOUP, THEMES, albumDe(LOUP), [
+        motPreparation('loup', 1),
+      ]);
+      expect(barreAffichee()).toBe(false);
+
+      requete.flush({ versees: [IMAGE_MIENNE], dejaVersees: [], refusees: [] });
+      await stabiliser();
+      expect(barreAffichee()).toBe(false);
+      expect(racine.querySelector('.versement-lot__bilan')).toBeNull();
+
+      // La sélection n'est pas restée figée : une Case coche aussitôt, « Verser » est disponible.
+      await cocher('loup');
+      expect(nombre()).toBe('1 mot sélectionné');
+      expect(boutonBarre('Verser')!.disabled).toBe(false);
+    });
+
+    it('Mot coché puis « Retirer » sur sa Carte : la barre disparaît', async () => {
+      await ouvrirAvec([GALETTE, CITROUILLE]);
+      await cocher('galette');
+      expect(barreAffichee()).toBe(true);
+
+      boutonRetirer('galette').click();
+      await stabiliser();
+
+      expect(barreAffichee()).toBe(false);
+      await repondreRetraits([GALETTE], [GALETTE.id]);
+    });
+
+    it('pendant un retrait en lot : sélection figée, « Retirer » des Cartes en attente', async () => {
+      await ouvrirAvec([GALETTE, CITROUILLE, LAPIN]);
+      await retirerEnLot(['galette']);
+      const envoye = serveur.expectOne(`${URL_MOTS}/${GALETTE.id}`);
+
+      await cocher('citrouille');
+      expect(barreAffichee()).toBe(false);
+      expect(caseDe('citrouille').checked).toBe(false);
+      expect(boutonRetirer('citrouille').getAttribute('aria-disabled')).toBe('true');
+      boutonRetirer('citrouille').click();
+      await stabiliser();
+      expect(cartes()).toEqual(['citrouille', 'lapin']);
+
+      envoye.flush(GALETTE);
+      await stabiliser();
+      expect(boutonRetirer('citrouille').getAttribute('aria-disabled')).toBeNull();
+      await cocher('citrouille');
+      expect(nombre()).toBe('1 mot sélectionné');
+      expect(boutonBarre('Retirer de la préparation')!.disabled).toBe(false);
+    });
+
+    it('deux rétablissements en échec : message au pluriel, « Réessayer » renvoie les deux, « 2 mots rétablis. »', async () => {
+      await ouvrirAvec([GALETTE, CITROUILLE, LAPIN]);
+      await retirerEnLot(['galette', 'citrouille']);
+      await repondreRetraits([GALETTE, CITROUILLE], [GALETTE.id, CITROUILLE.id]);
+
+      afficher.mock.lastCall![1]();
+      await stabiliser();
+      retablissements()[0].error(new ProgressEvent('error'));
+      await stabiliser();
+      retablissements()[0].error(new ProgressEvent('error'));
+      await stabiliser();
+
+      expect(cartes()).toEqual(['lapin']);
+      expect(bandeau('erreur-retablissement')).toBe(
+        `« galette », « citrouille » n'ont pas été rétablis. ${MESSAGE_RESEAU}`,
+      );
+
+      await reessayer('erreur-retablissement');
+      await repondreRetablissements([GALETTE, CITROUILLE]);
+      expect(cartes()).toEqual(['galette', 'citrouille', 'lapin']);
+      expect(texte('p[aria-live="polite"]')).toBe('2 mots rétablis.');
+      expect(bandeau('erreur-retablissement')).toBeUndefined();
+    });
+
+    it('rétablissements en échec, l’un refusé : pas de « Réessayer », le message du refus', async () => {
+      await ouvrirAvec([GALETTE, CITROUILLE, LAPIN]);
+      await retirerEnLot(['galette', 'citrouille']);
+      await repondreRetraits([GALETTE, CITROUILLE], [GALETTE.id, CITROUILLE.id]);
+
+      afficher.mock.lastCall![1]();
+      await stabiliser();
+      retablissements()[0].flush(
+        { status: 409, code: 'preparation.mot_deja_present' },
+        { status: 409, statusText: 'Conflict' },
+      );
+      await stabiliser();
+      retablissements()[0].error(new ProgressEvent('error'));
+      await stabiliser();
+
+      expect(bandeau('erreur-retablissement')).toBe(
+        `« galette », « citrouille » n'ont pas été rétablis. ${MESSAGES_PAR_CODE['preparation.mot_deja_present']}`,
+      );
+      expect(
+        [...racine.querySelectorAll('app-bandeau-erreur.erreur-retablissement button')].map(
+          (bouton) => bouton.textContent?.trim(),
+        ),
+      ).not.toContain('Réessayer');
+    });
+
+    it('Échap depuis le Panneau de détection : la détection se masque d’abord, la sélection reste', async () => {
+      await ouvrirAvec([GALETTE, CITROUILLE]);
+      await cocher('galette');
+      champSaisie().value = 'loup';
+      champSaisie().dispatchEvent(new Event('input'));
+      await fixture.whenStable();
+      await new Promise((fin) => setTimeout(fin, DELAI_DETECTION_MS + 20));
+      await stabiliser();
+      serveur
+        .expectOne((requete) => requete.url === `/api/preparations/${ID}/detection`)
+        .flush({ forme: 'loup', mots: [] });
+      await stabiliser();
+      const detection = () =>
+        racine.querySelector('app-panneau-detection .detection__annonce')?.textContent?.trim();
+      expect(detection()).toBe('loup — nouveau mot');
+
+      await echap(racine.querySelector<HTMLElement>('app-panneau-detection')!);
+      expect(detection()).toBe('');
+      expect(cochees()).toEqual(['galette']);
+      expect(champSaisie().value).toBe('loup');
+
+      await echap(caseDe('galette'));
+      expect(cochees()).toEqual([]);
+    });
+  });
+
   describe('Grille et annonces (rétrospective de l’Epic 2, B-1 et B-7)', () => {
     const GALETTE = motPreparation('galette', 1);
     const CITROUILLE = motPreparation('citrouille', 2);
@@ -5617,6 +6275,25 @@ describe('Preparation (Carte d’identité sous 600 px)', () => {
 });
 
 describe('Libellés', () => {
+  it('échec de retrait ou de rétablissement : les Mots nommés jusqu’à trois, leur nombre au-delà', () => {
+    const mots = (nombre: number) =>
+      Array.from({ length: nombre }, (_, index) => motPreparation('m' + (index + 1), index + 1));
+    expect(messageEchecRetrait({ mots: mots(1), message: 'X' })).toBe(
+      "« m1 » n'a pas été retiré. X",
+    );
+    expect(messageEchecRetrait({ mots: mots(3), message: 'X' })).toBe(
+      "« m1 », « m2 », « m3 » n'ont pas été retirés. X",
+    );
+    expect(
+      messageEchecRetablissement({
+        preparationId: ID,
+        mots: mots(12),
+        message: 'X',
+        reessayable: true,
+      }),
+    ).toBe("12 mots n'ont pas été rétablis. X");
+  });
+
   it('annonce d’un ajout avec un Sens, avec ou sans catégorie', () => {
     const mot = motPreparation('étalé', 1);
     expect(annonceAjoutAvecSens(mot)).toBe('« étalé » ajouté (à compléter).');

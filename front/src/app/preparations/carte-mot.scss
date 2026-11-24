@@ -1,9 +1,14 @@
 @use '@angular/material' as mat;
+@use '../commun/selection/case-selection-hote' as case-selection;
 
 // Carte de Mot (key-preparation.html › `.wc`, `.todo`). La Carte « à illustrer » s'étend sur trois colonnes de la
 // Grille (`preparation.scss`) : partie gauche de 120 px (`.todo .l`) séparée par des tirets, suggestions ARASAAC à
 // droite (`.todo .r`, story 2.4), suivies de « Téléverser » (story 2.5). La Carte illustrée (`.wc`) occupe une colonne :
 // vignette carrée de la miniature, Badge de type, Mot en cursive.
+
+// Case de sélection (story 3.3) : visibilité partagée avec la vignette de la Banque.
+@include case-selection.visibilite('carte-mot--selection-active');
+
 :host {
   position: relative;
   display: block;
@@ -23,6 +28,24 @@
   color: var(--cm-etat-a-illustrer-texte);
 }
 
+// Carte sélectionnée (DESIGN.md › case-selection : selected-card-background, selected-card-ring) : fond
+// `primary-container` et anneau `primary` de 2 px, avec la case cochée.
+:host(.carte-mot--selectionnee) {
+  outline: var(--case-selection-anneau-carte) solid var(--mat-sys-primary);
+  background: var(--mat-sys-primary-container);
+  color: var(--mat-sys-on-primary-container);
+}
+
+// Dans le coin haut gauche, en miroir du bouton « Retirer » et sur le même fond : la partie gauche lui réserve sa
+// hauteur, la case ne couvre ni la vignette ni le « + ».
+.carte-mot__case {
+  position: absolute;
+  inset-block-start: var(--cm-espace-1);
+  inset-inline-start: var(--cm-espace-1);
+  border-radius: var(--cm-arrondi-plein);
+  background: var(--mat-sys-surface);
+}
+
 .carte-mot__gauche {
   display: flex;
   flex-direction: column;
@@ -33,6 +56,7 @@
   height: 100%;
   min-width: 0;
   padding: var(--cm-espace-3) var(--cm-espace-2);
+  padding-block-start: calc(var(--cm-taille-bouton-icone) + var(--cm-espace-1));
   text-align: center;
 
   :host(.carte-mot--a-illustrer) & {

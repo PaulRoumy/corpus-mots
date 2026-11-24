@@ -74,6 +74,9 @@ export function raisonRefusLot(code: string, licence: LicenceImage): string {
   return Object.hasOwn(RAISONS_LOT, code) ? RAISONS_LOT[code] : raisonVersement(code, licence);
 }
 
+/** Raison d'un Mot sans Image, resté hors d'un versement en lot depuis la Préparation. */
+export const RAISON_PAS_D_IMAGE = "pas d'image";
+
 /** Phrase affichée sous « Verser » indisponible : « Verser indisponible : source à préciser. » */
 export function phraseVersementIndisponible(code: string, licence: LicenceImage): string {
   return `Verser indisponible : ${raisonVersement(code, licence)}.`;
