@@ -147,6 +147,26 @@
   }
 }
 
+// Badge d'état « versée » (DESIGN.md › badge-etat `versee`) : coche et libellé, jamais la couleur seule.
+.carte-mot__versee {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--cm-espace-1);
+  height: var(--cm-hauteur-badge);
+  padding: 0 var(--cm-espace-2);
+  border-radius: var(--cm-arrondi-sm);
+  background: var(--cm-etat-versee-fond);
+  color: var(--cm-etat-versee-texte);
+  font: var(--cm-typo-label-sm);
+  white-space: nowrap;
+
+  mat-icon {
+    flex: none;
+    width: var(--cm-taille-icone-badge);
+    height: var(--cm-taille-icone-badge);
+  }
+}
+
 // Bouton « Retirer » (croix), toujours visible, dans le coin haut droit de la Carte ; sur fond carte, pour rester
 // lisible au-dessus de la vignette d'une Carte illustrée.
 .carte-mot__retirer {

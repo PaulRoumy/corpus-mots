@@ -257,3 +257,6 @@
 - source_spec: `docs/realisation/spec-3-3-1-verser-cote-back.md`
   summary: Retrait admin — le motif et le texte (`retrait_admin_motif`, `retrait_admin_texte`) ne sont exposés à aucun DTO : le propriétaire ne voit que `versabilite = image.versement.retrait_admin`. À montrer sur la Carte d'identité, et à décrire dans la page Données personnelles, quand la modération (Epic 6) écrira ces colonnes.
   evidence: Revue de la story 3.3 partie 1, lignes 11 et 12 du journal de tri.
+- source_spec: `docs/realisation/spec-3-3-2-verser-depuis-la-carte-identite.md`
+  summary: Badge d'état « versée » écrit trois fois (Carte d'identité, Carte de Mot, vignette de la Banque) : extraire un composant `app-badge-etat` (UX-DR-10) avec les badges « image retirée de la banque » et « à remplacer » de la story 3.5.
+  evidence: Revue de la story 3.3 partie 2, ligne 13 du journal de tri.

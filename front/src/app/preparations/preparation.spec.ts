@@ -4294,6 +4294,56 @@ describe('Preparation (En-tête)', () => {
         .forEach((surcouche) => surcouche.remove());
     });
 
+    it('« Verser » dans la Carte : la Carte de Mot prend le badge « versée »', async () => {
+      TestBed.inject(CompteCourant).mettreAJour({
+        id: MOI,
+        administrateur: false,
+        email: 'moi@ecole.fr',
+        nomAffiche: 'Moi',
+      });
+      await ouvrirGrille();
+      await ouvrirCarte('citrouille');
+      const carte = {
+        id: IMAGE_1,
+        proprietaireId: MOI,
+        etat: 'privee' as const,
+        aRemplacer: null,
+        reutilisable: true,
+        typeImage: 'image_libre' as const,
+        aCompleter: false,
+        motId: CITROUILLE.motId,
+        forme: 'citrouille',
+        sens: { id: CITROUILLE.motId, libelle: 'légume', categorie: 'nom', aCompleter: false },
+        albumOrigine: null,
+        licence: 'cc0_domaine_public' as const,
+        source: 'site web',
+        auteur: null,
+        sections: [],
+        module: null,
+        themes: [],
+        sensModifiable: false,
+        versabilite: 'versable' as const,
+      };
+      serveur.expectOne(`/api/images/${IMAGE_1}`).flush(carte);
+      await stabiliser();
+      const versee = (forme: string) =>
+        [...racine.querySelectorAll('app-carte-mot')]
+          .find((element) => element.textContent?.includes(forme))!
+          .querySelector('.carte-mot__versee')
+          ?.textContent?.trim();
+      expect(versee('citrouille')).toBeUndefined();
+
+      panneau()!.querySelector<HTMLButtonElement>('app-versement-image button')!.click();
+      await stabiliser();
+      serveur
+        .expectOne(`/api/images/${IMAGE_1}/versement`)
+        .flush({ ...carte, etat: 'versee', versabilite: null });
+      await stabiliser();
+
+      expect(versee('citrouille')).toBe('versée');
+      expect(versee('potiron')).toBeUndefined();
+    });
+
     it('« Carte d’identité » ouvre le panneau à la place du Panneau de choix d’Image : un seul à la fois', async () => {
       await ouvrirGrille();
       await ouvrirCarte('citrouille');

@@ -1,3 +1,4 @@
+import { LiveAnnouncer } from '@angular/cdk/a11y';
 import { provideHttpClient } from '@angular/common/http';
 import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
@@ -9,6 +10,11 @@ import { CompteCourant } from '../compte-courant';
 import { DialogueConfirmation } from '../dialogue-confirmation/dialogue-confirmation';
 import { MESSAGE_RESEAU, MESSAGES_PAR_CODE } from '../erreurs/message-erreur';
 import { provideIcones } from '../icones';
+import {
+  LIBELLE_VERSEMENT_EN_COURS,
+  LIBELLE_VERSER,
+  MESSAGE_VERSEMENT,
+} from '../versement/raisons-versement';
 import { CarteIdentite, CONFIRMATION_IMAGE_ALBUM, MESSAGE_SENS_FIGE } from './carte-identite';
 
 const MOI = '0190f0a0-0000-7000-8000-00000000e001';
@@ -1314,6 +1320,488 @@ describe('CarteIdentite', () => {
           ),
         ).toEqual(['automne']);
       });
+    });
+  });
+
+  describe('versement', () => {
+    const URL_VERSEMENT = `/api/images/${IMAGE}/versement`;
+    const URL_DESCRIPTION = `/api/images/${IMAGE}/description`;
+    const VERSABLE: CarteIdentiteImageDto = { ...CARTE, versabilite: 'versable' };
+    const VERSEE: CarteIdentiteImageDto = { ...CARTE, etat: 'versee', versabilite: null };
+
+    const bouton = () =>
+      racine.querySelector<HTMLButtonElement>('app-versement-image .versement__bouton');
+    const raison = () => {
+      const id = bouton()?.getAttribute('aria-describedby');
+      return id ? document.getElementById(id)?.textContent?.trim() : undefined;
+    };
+    const message = () =>
+      racine.querySelector<HTMLElement>('app-versement-image .versement__message');
+    const repereVersee = () => texte('.carte-identite__reperes .carte-identite__versee');
+    const bandeau = () => texte('app-bandeau-erreur [role="alert"]');
+    const libellesBandeau = () =>
+      [...racine.querySelectorAll('app-bandeau-erreur button')].map((b) => b.textContent?.trim());
+    const entreeSource = () =>
+      [...racine.querySelectorAll<HTMLElement>('mat-form-field')]
+        .find((element) => element.querySelector('mat-label')?.textContent?.trim() === 'Source')!
+        .querySelector<HTMLInputElement>('input')!;
+
+    function appliquees(): CarteIdentiteImageDto[] {
+      const emises: CarteIdentiteImageDto[] = [];
+      fixture.componentRef.setInput('appliquer', (carte: CarteIdentiteImageDto) =>
+        emises.push(carte),
+      );
+      return emises;
+    }
+
+    function annonces(): ReturnType<typeof vi.fn> {
+      return vi.spyOn(TestBed.inject(LiveAnnouncer), 'announce').mockResolvedValue() as never;
+    }
+
+    async function verser() {
+      bouton()!.click();
+      await stabiliser();
+    }
+
+    async function reessayer() {
+      [...racine.querySelectorAll<HTMLButtonElement>('app-bandeau-erreur button')]
+        .find((b) => b.textContent?.trim() === 'Réessayer')!
+        .click();
+      await stabiliser();
+    }
+
+    /** Saisit dans Source, sans quitter le champ si `quitter` est faux. */
+    async function saisirSource(valeur: string, quitter = true) {
+      const champ = entreeSource();
+      champ.focus();
+      champ.value = valeur;
+      champ.dispatchEvent(new Event('input'));
+      if (quitter) {
+        champ.dispatchEvent(new Event('blur'));
+      }
+      await stabiliser();
+    }
+
+    function refuser(code: string, status = 400) {
+      serveur.expectOne(URL_VERSEMENT).flush({ status, code }, { status, statusText: 'Refus' });
+    }
+
+    it('Image versable : bouton tonal « Verser dans la banque de l’école » actif, sans raison', async () => {
+      await servir(VERSABLE);
+
+      expect(bouton()?.textContent?.trim()).toBe(LIBELLE_VERSER);
+      expect(bouton()?.getAttribute('aria-disabled')).not.toBe('true');
+      expect(bouton()?.hasAttribute('aria-describedby')).toBe(false);
+      expect(racine.querySelector('.versement__raison')).toBeNull();
+      expect(repereVersee()).toBeUndefined();
+    });
+
+    it('verser : POST, « Versement… », Carte appliquée, message focalisé (sans région vive), repère « versée »', async () => {
+      await servir(VERSABLE);
+      const emises = appliquees();
+
+      await verser();
+      const requete = serveur.expectOne(URL_VERSEMENT);
+      expect(requete.request.method).toBe('POST');
+      expect(bouton()?.textContent?.trim()).toBe(LIBELLE_VERSEMENT_EN_COURS);
+      expect(bouton()?.getAttribute('aria-disabled')).toBe('true');
+      // Un second clic pendant l'envoi n'envoie rien.
+      await verser();
+      serveur.expectNone(URL_VERSEMENT);
+
+      requete.flush(VERSEE);
+      await stabiliser();
+
+      expect(emises).toEqual([VERSEE]);
+      expect(bouton()).toBeNull();
+      expect(message()?.textContent?.trim()).toBe(MESSAGE_VERSEMENT);
+      expect(message()?.hasAttribute('role')).toBe(false);
+      expect(message()?.closest('[aria-live]')).toBeNull();
+      expect(document.activeElement).toBe(message());
+      expect(repereVersee()).toBe('versée');
+    });
+
+    it('le message de partage reste jusqu’au changement d’Image', async () => {
+      await servir(VERSABLE);
+      await verser();
+      serveur.expectOne(URL_VERSEMENT).flush(VERSEE);
+      await stabiliser();
+      await saisirSource('Wikimedia');
+      serveur.expectOne(URL_DESCRIPTION).flush({ ...VERSEE, source: 'Wikimedia' });
+      await stabiliser();
+      expect(message()).not.toBeNull();
+
+      fixture.componentRef.setInput('imageId', AUTRE);
+      await stabiliser();
+      await servir({ ...VERSABLE, id: AUTRE, forme: 'galette' }, AUTRE);
+      expect(message()).toBeNull();
+      expect(bouton()?.textContent?.trim()).toBe(LIBELLE_VERSER);
+    });
+
+    const refus: [string, Partial<CarteIdentiteImageDto>, string][] = [
+      [
+        'image d’album',
+        {
+          typeImage: 'image_album',
+          licence: 'usage_pedagogique_album',
+          albumOrigine: { id: ROULE_GALETTE.id, titre: 'Roule galette', auteur: 'Natha Caputo' },
+          versabilite: 'image.versement.image_album',
+        },
+        "Verser indisponible : une image d'album reste dans Mes mots.",
+      ],
+      [
+        'type inconnu',
+        { typeImage: 'inconnu', versabilite: 'image.versement.type_inconnu' },
+        "Verser indisponible : type inconnu, précisez le type de l'image.",
+      ],
+      [
+        'licence absente',
+        { licence: null, versabilite: 'image.versement.licence_non_versable' },
+        'Verser indisponible : licence à préciser.',
+      ],
+      [
+        'licence Pixabay',
+        { licence: 'pixabay', versabilite: 'image.versement.licence_non_versable' },
+        'Verser indisponible : licence non partageable.',
+      ],
+      [
+        'source manquante',
+        { source: null, versabilite: 'image.versement.source_manquante' },
+        'Verser indisponible : source à préciser.',
+      ],
+      [
+        'retrait admin',
+        { versabilite: 'image.versement.retrait_admin' },
+        "Verser indisponible : image retirée par l'administrateur ; modifiez sa carte d'identité pour la verser à nouveau.",
+      ],
+    ];
+    for (const [cas, modifications, attendue] of refus) {
+      it(`${cas} : « Verser » indisponible mais focusable, raison liée par aria-describedby`, async () => {
+        await servir({ ...CARTE, ...modifications });
+
+        expect(bouton()?.textContent?.trim()).toBe(LIBELLE_VERSER);
+        expect(bouton()?.getAttribute('aria-disabled')).toBe('true');
+        expect(bouton()?.hasAttribute('disabled')).toBe(false);
+        bouton()!.focus();
+        expect(document.activeElement).toBe(bouton());
+        expect(raison()).toBe(attendue);
+
+        await verser();
+        serveur.expectNone(URL_VERSEMENT);
+      });
+    }
+
+    it('correction : la source renseignée puis enregistrée, la raison disparaît et le bouton devient actif', async () => {
+      await servir({ ...CARTE, source: null, versabilite: 'image.versement.source_manquante' });
+      expect(raison()).toBe('Verser indisponible : source à préciser.');
+
+      await saisirSource('Wikimedia');
+      serveur
+        .expectOne(URL_DESCRIPTION)
+        .flush({ ...CARTE, source: 'Wikimedia', versabilite: 'versable' });
+      await stabiliser();
+
+      expect(raison()).toBeUndefined();
+      expect(racine.querySelector('.versement__raison')).toBeNull();
+      expect(bouton()?.getAttribute('aria-disabled')).not.toBe('true');
+    });
+
+    it('enregistrement en file qui rend l’Image non versable : rien n’est envoyé, la raison est annoncée', async () => {
+      await servir(VERSABLE);
+      const annonce = annonces();
+
+      await saisirSource('');
+      const description = serveur.expectOne(URL_DESCRIPTION);
+      await verser();
+      description.flush({
+        ...CARTE,
+        source: null,
+        versabilite: 'image.versement.source_manquante',
+      });
+      await stabiliser();
+
+      serveur.expectNone(URL_VERSEMENT);
+      expect(raison()).toBe('Verser indisponible : source à préciser.');
+      expect(annonce).toHaveBeenCalledWith('Verser indisponible : source à préciser.', 'polite');
+      expect(bouton()?.textContent?.trim()).toBe(LIBELLE_VERSER);
+    });
+
+    it('collègue : pas de section Verser, repère « versée » visible', async () => {
+      await servir({ ...CARTE, proprietaireId: ZOE, etat: 'versee', versabilite: null });
+
+      expect(racine.querySelector('app-versement-image')).toBeNull();
+      expect(repereVersee()).toBe('versée');
+      expect(texte('.carte-identite__lecture-seule')).toBe('lecture seule');
+    });
+
+    it('déjà versée : pas de section Verser, repère « versée »', async () => {
+      await servir(VERSEE);
+
+      expect(racine.querySelector('app-versement-image')).toBeNull();
+      expect(repereVersee()).toBe('versée');
+    });
+
+    it('400 image.versement.source_manquante : Carte relue et appliquée, raison affichée et annoncée', async () => {
+      await servir(VERSABLE);
+      const emises = appliquees();
+      const annonce = annonces();
+
+      bouton()!.focus();
+      await verser();
+      refuser('image.versement.source_manquante');
+      await stabiliser();
+      const relue: CarteIdentiteImageDto = {
+        ...CARTE,
+        source: null,
+        versabilite: 'image.versement.source_manquante',
+      };
+      serveur.expectOne(`/api/images/${IMAGE}`).flush(relue);
+      await stabiliser();
+
+      expect(emises).toEqual([relue]);
+      expect(raison()).toBe('Verser indisponible : source à préciser.');
+      expect(annonce).toHaveBeenCalledWith('Verser indisponible : source à préciser.', 'polite');
+      expect(document.activeElement).toBe(bouton());
+      expect(racine.querySelector('app-bandeau-erreur')).toBeNull();
+      expect(message()).toBeNull();
+    });
+
+    it('400 alors que la Carte relue est encore versable : la raison reçue s’affiche dans le Bandeau', async () => {
+      await servir(VERSABLE);
+
+      await verser();
+      refuser('image.versement.retrait_admin');
+      await stabiliser();
+      serveur.expectOne(`/api/images/${IMAGE}`).flush(VERSABLE);
+      await stabiliser();
+
+      expect(bandeau()).toBe(
+        "Verser indisponible : image retirée par l'administrateur ; modifiez sa carte d'identité pour la verser à nouveau.",
+      );
+      expect(libellesBandeau()).not.toContain('Réessayer');
+    });
+
+    it('relecture : la saisie non enregistrée de Source et le champ signalé restent', async () => {
+      await servir(VERSABLE);
+      const auteur = racine.querySelector<HTMLInputElement>('input.carte-identite__auteur')!;
+      auteur.value = 'Claire';
+      auteur.dispatchEvent(new Event('input'));
+      auteur.dispatchEvent(new Event('blur'));
+      await stabiliser();
+      serveur
+        .expectOne(URL_DESCRIPTION)
+        .flush({ status: 500, code: 'erreur.interne' }, { status: 500, statusText: 'Error' });
+      await stabiliser();
+      await saisirSource('Wikimedia', false);
+
+      await verser();
+      refuser('ressource.modifiee_entre_temps', 409);
+      await stabiliser();
+      serveur
+        .expectOne(`/api/images/${IMAGE}`)
+        .flush({ ...VERSABLE, source: 'autre site', auteur: 'Zoé', sections: ['ms'] });
+      await stabiliser();
+
+      expect(entreeSource().value).toBe('Wikimedia');
+      expect(auteur.value).toBe('Claire');
+      expect(texte('mat-error')).toBe('Non enregistré');
+      // Champ non modifié : il suit la Carte relue.
+      expect(
+        racine.querySelector('.carte-identite__section--ms')?.getAttribute('aria-selected') ??
+          racine
+            .querySelector('.carte-identite__section--ms [aria-selected]')
+            ?.getAttribute('aria-selected'),
+      ).toBe('true');
+    });
+
+    it('409 ressource.modifiee_entre_temps : Carte relue et appliquée, message dans le Bandeau d’erreur', async () => {
+      await servir(VERSABLE);
+      const emises = appliquees();
+
+      await verser();
+      refuser('ressource.modifiee_entre_temps', 409);
+      await stabiliser();
+      const relue = { ...VERSABLE, auteur: 'Zoé' };
+      serveur.expectOne(`/api/images/${IMAGE}`).flush(relue);
+      await stabiliser();
+
+      expect(emises).toEqual([relue]);
+      expect(bandeau()).toBe(MESSAGES_PAR_CODE['ressource.modifiee_entre_temps']);
+      expect(racine.querySelector<HTMLInputElement>('input.carte-identite__auteur')?.value).toBe(
+        'Zoé',
+      );
+      expect(message()).toBeNull();
+    });
+
+    it('409 puis relecture échouée : Bandeau de l’erreur de lecture, « Réessayer » relit la Carte', async () => {
+      await servir(VERSABLE);
+
+      await verser();
+      refuser('ressource.modifiee_entre_temps', 409);
+      await stabiliser();
+      serveur.expectOne(`/api/images/${IMAGE}`).error(new ProgressEvent('error'));
+      await stabiliser();
+      expect(bandeau()).toBe(MESSAGE_RESEAU);
+
+      await reessayer();
+      serveur.expectNone(URL_VERSEMENT);
+      serveur.expectOne(`/api/images/${IMAGE}`).flush(VERSEE);
+      await stabiliser();
+      expect(racine.querySelector('app-bandeau-erreur')).toBeNull();
+      expect(repereVersee()).toBe('versée');
+    });
+
+    it('Carte relue déjà versée : le bouton disparaît, le focus revient au panneau', async () => {
+      await servir(VERSABLE);
+
+      bouton()!.focus();
+      await verser();
+      refuser('ressource.modifiee_entre_temps', 409);
+      await stabiliser();
+      serveur.expectOne(`/api/images/${IMAGE}`).flush(VERSEE);
+      await stabiliser();
+
+      expect(racine.querySelector('app-versement-image')).toBeNull();
+      expect(document.activeElement).toBe(racine.querySelector('aside'));
+    });
+
+    it('404 image.indisponible : Bandeau d’erreur, sans « Réessayer »', async () => {
+      await servir(VERSABLE);
+
+      await verser();
+      refuser('image.indisponible', 404);
+      await stabiliser();
+
+      expect(bandeau()).toBe(MESSAGES_PAR_CODE['image.indisponible']);
+      expect(libellesBandeau()).not.toContain('Réessayer');
+      expect(bouton()?.textContent?.trim()).toBe(LIBELLE_VERSER);
+    });
+
+    it('échec réseau : Bandeau d’erreur, « Réessayer » relance le versement', async () => {
+      await servir(VERSABLE);
+
+      await verser();
+      serveur.expectOne(URL_VERSEMENT).error(new ProgressEvent('error'));
+      await stabiliser();
+      expect(bandeau()).toBe(MESSAGE_RESEAU);
+
+      await reessayer();
+      serveur.expectOne(URL_VERSEMENT).flush(VERSEE);
+      await stabiliser();
+
+      expect(racine.querySelector('app-bandeau-erreur')).toBeNull();
+      expect(message()).not.toBeNull();
+    });
+
+    it('échec réseau du versement puis échec 5xx d’un champ : « Réessayer » renvoie le champ', async () => {
+      await servir(VERSABLE);
+
+      await verser();
+      serveur.expectOne(URL_VERSEMENT).error(new ProgressEvent('error'));
+      await stabiliser();
+      await saisirSource('Wikimedia');
+      serveur
+        .expectOne(URL_DESCRIPTION)
+        .flush({ status: 500, code: 'erreur.interne' }, { status: 500, statusText: 'Error' });
+      await stabiliser();
+
+      await reessayer();
+      serveur.expectNone(URL_VERSEMENT);
+      serveur.expectOne(URL_DESCRIPTION).flush({ ...VERSABLE, source: 'Wikimedia' });
+      await stabiliser();
+      expect(racine.querySelector('app-bandeau-erreur')).toBeNull();
+    });
+
+    it('Bandeau du versement fermé, puis échec d’un champ : « Réessayer » renvoie le champ', async () => {
+      await servir(VERSABLE);
+
+      await verser();
+      serveur.expectOne(URL_VERSEMENT).error(new ProgressEvent('error'));
+      await stabiliser();
+      [...racine.querySelectorAll<HTMLButtonElement>('app-bandeau-erreur button')]
+        .find((b) => b.textContent?.trim() !== 'Réessayer')!
+        .click();
+      await stabiliser();
+      await saisirSource('Wikimedia');
+      serveur.expectOne(URL_DESCRIPTION).error(new ProgressEvent('error'));
+      await stabiliser();
+
+      await reessayer();
+      serveur.expectNone(URL_VERSEMENT);
+      serveur.expectOne(URL_DESCRIPTION).flush({ ...VERSABLE, source: 'Wikimedia' });
+      await stabiliser();
+    });
+
+    it('erreur de la page dans `appliquer` : le versement reste réussi', async () => {
+      await servir(VERSABLE);
+      const erreurConsole = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+      fixture.componentRef.setInput('appliquer', () => {
+        throw new Error('page');
+      });
+
+      await verser();
+      serveur.expectOne(URL_VERSEMENT).flush(VERSEE);
+      await stabiliser();
+
+      expect(racine.querySelector('app-bandeau-erreur')).toBeNull();
+      expect(message()).not.toBeNull();
+      expect(erreurConsole).toHaveBeenCalled();
+      erreurConsole.mockRestore();
+    });
+
+    it('fermé pendant l’envoi : la Carte passe par `appliquer`, rien n’est écrit dans le panneau', async () => {
+      await servir(VERSABLE);
+      const emises = appliquees();
+
+      await verser();
+      const requete = serveur.expectOne(URL_VERSEMENT);
+      fixture.destroy();
+      requete.flush(VERSEE);
+      await new Promise((fin) => setTimeout(fin));
+
+      expect(emises).toEqual([VERSEE]);
+    });
+
+    it('refus arrivé après la fermeture : la Carte est relue et passée à `appliquer`', async () => {
+      await servir(VERSABLE);
+      const emises = appliquees();
+
+      await verser();
+      const requete = serveur.expectOne(URL_VERSEMENT);
+      fixture.destroy();
+      requete.flush(
+        { status: 400, code: 'image.versement.source_manquante' },
+        { status: 400, statusText: 'Bad Request' },
+      );
+      await new Promise((fin) => setTimeout(fin));
+      const relue: CarteIdentiteImageDto = {
+        ...CARTE,
+        source: null,
+        versabilite: 'image.versement.source_manquante',
+      };
+      serveur.expectOne(`/api/images/${IMAGE}`).flush(relue);
+      await new Promise((fin) => setTimeout(fin));
+
+      expect(emises).toEqual([relue]);
+    });
+
+    it('autre Image pendant l’envoi : la Carte passe par `appliquer`, la nouvelle Image reste affichée', async () => {
+      await servir(VERSABLE);
+      const emises = appliquees();
+
+      await verser();
+      const requete = serveur.expectOne(URL_VERSEMENT);
+      fixture.componentRef.setInput('imageId', AUTRE);
+      await stabiliser();
+      await servir({ ...VERSABLE, id: AUTRE, forme: 'galette' }, AUTRE);
+      requete.flush(VERSEE);
+      await stabiliser();
+
+      expect(emises).toEqual([VERSEE]);
+      expect(champs()[0]).toBe('Mot : galette');
+      expect(message()).toBeNull();
+      expect(repereVersee()).toBeUndefined();
+      expect(bouton()?.textContent?.trim()).toBe(LIBELLE_VERSER);
     });
   });
 });

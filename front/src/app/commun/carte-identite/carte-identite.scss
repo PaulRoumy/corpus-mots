@@ -97,6 +97,26 @@
   }
 }
 
+// Repère « versée » (DESIGN.md › badge-etat `versee`) : coche et libellé, jamais la couleur seule.
+.carte-identite__versee {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--cm-espace-1);
+  height: var(--cm-hauteur-badge);
+  padding: 0 var(--cm-espace-2);
+  border-radius: var(--cm-arrondi-sm);
+  background: var(--cm-etat-versee-fond);
+  color: var(--cm-etat-versee-texte);
+  font: var(--cm-typo-label-sm);
+  white-space: nowrap;
+
+  mat-icon {
+    flex: none;
+    width: var(--cm-taille-icone-badge);
+    height: var(--cm-taille-icone-badge);
+  }
+}
+
 .carte-identite__champs {
   display: grid;
   grid-template-columns: var(--cm-largeur-intitule-carte-identite) minmax(0, 1fr);

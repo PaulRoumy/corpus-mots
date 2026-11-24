@@ -2,6 +2,7 @@ import { provideHttpClient } from '@angular/common/http';
 import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { MotPreparationDto } from '../api/models/mot-preparation-dto';
+import { CompteCourant } from '../commun/compte-courant';
 import { provideIcones } from '../commun/icones';
 import { CarteMot } from './carte-mot';
 
@@ -145,6 +146,8 @@ describe('CarteMot', () => {
 
 describe('CarteMot illustrée', () => {
   const IMAGE = '0190f0a0-0000-7000-8000-0000000c0001';
+  const MOI = '0190f0a0-0000-7000-8000-00000000e001';
+  const ZOE = '0190f0a0-0000-7000-8000-00000000e002';
   const MOT_ILLUSTRE: MotPreparationDto = {
     id: '0190f0a0-0000-7000-8000-0000000f0001',
     motId: '0190f0a0-0000-7000-8000-0000000e0001',
@@ -277,5 +280,35 @@ describe('CarteMot illustrée', () => {
 
     expect(ouvertures).toBe(1);
     expect(fixture.componentInstance.elementVignette()).toBe(bouton);
+  });
+
+  it('badge « versée » : sur une Image versée de l’enseignant connecté, jamais sur celle d’un collègue', async () => {
+    miniature().flush(new Blob(['png'], { type: 'image/png' }));
+    const versee = () => racine.querySelector('.carte-mot__versee')?.textContent?.trim();
+    TestBed.inject(CompteCourant).mettreAJour({
+      id: MOI,
+      nomAffiche: 'Claire',
+      email: 'claire@ecole.fr',
+      administrateur: false,
+    });
+    await stabiliser();
+    expect(versee()).toBeUndefined();
+
+    fixture.componentRef.setInput('mot', {
+      ...MOT_ILLUSTRE,
+      image: { ...MOT_ILLUSTRE.image!, etat: 'versee' },
+    });
+    await stabiliser();
+    expect(versee()).toBe('versée');
+    expect(racine.querySelector('.carte-mot__versee mat-icon')?.getAttribute('svgicon')).toBe(
+      'coche',
+    );
+
+    fixture.componentRef.setInput('mot', {
+      ...MOT_ILLUSTRE,
+      image: { ...MOT_ILLUSTRE.image!, etat: 'versee', proprietaireId: ZOE },
+    });
+    await stabiliser();
+    expect(versee()).toBeUndefined();
   });
 });

@@ -1583,15 +1583,24 @@ export class Preparation {
   }
 
   /**
-   * Carte d'identité modifiée dans le panneau : le type et le repère « à compléter » de l'Image sont reportés sur
-   * chaque Carte de Mot qui l'affiche (Badge de type).
+   * Carte d'identité modifiée ou versée dans le panneau : le type, le repère « à compléter » et l'état de l'Image
+   * (`etat`, `aRemplacer`, `reutilisable`, `versabilite`) sont reportés sur chaque Carte de Mot qui l'affiche (Badge de
+   * type, Badge « versée »).
    */
   protected readonly appliquerCarteIdentite = (carte: CarteIdentiteImageDto): void => {
     for (const mot of this.mots() ?? []) {
       if (mot.image?.id === carte.id) {
         this.grille.remplacer({
           ...mot,
-          image: { ...mot.image, typeImage: carte.typeImage, aCompleter: carte.aCompleter },
+          image: {
+            ...mot.image,
+            typeImage: carte.typeImage,
+            aCompleter: carte.aCompleter,
+            etat: carte.etat,
+            aRemplacer: carte.aRemplacer,
+            reutilisable: carte.reutilisable,
+            versabilite: carte.versabilite,
+          },
         });
       }
     }

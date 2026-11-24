@@ -1,8 +1,10 @@
+import { LiveAnnouncer } from '@angular/cdk/a11y';
 import {
   afterNextRender,
   ChangeDetectionStrategy,
   Component,
   computed,
+  DestroyRef,
   effect,
   ElementRef,
   inject,
@@ -41,6 +43,7 @@ import { classerImage } from '../../api/fn/images-resource/classer-image';
 import { fichierImage } from '../../api/fn/images-resource/fichier-image';
 import { listerSensImage } from '../../api/fn/images-resource/lister-sens-image';
 import { modifierDescriptionImage } from '../../api/fn/images-resource/modifier-description-image';
+import { verserImage } from '../../api/fn/images-resource/verser-image';
 import { creerTheme } from '../../api/fn/themes-resource/creer-theme';
 import { listerThemes } from '../../api/fn/themes-resource/lister-themes';
 import { AlbumDto } from '../../api/models/album-dto';
@@ -85,6 +88,8 @@ import {
   SECTIONS,
 } from '../repere-section/repere-section';
 import { Squelette } from '../squelette/squelette';
+import { estRefusVersement, phraseVersementIndisponible } from '../versement/raisons-versement';
+import { VersementImage } from './versement-image';
 
 /** Valeur affichée d'un champ vide. */
 export const CHAMP_VIDE = '—';
@@ -112,12 +117,17 @@ const CODE_SENS_NON_MODIFIABLE = 'image.sens_non_modifiable';
 /** Refus d'un Sens qui n'est plus proposé (liste lue périmée). */
 const CODE_SENS_INVALIDE = 'image.sens_invalide';
 
+/** Refus d'une écriture concurrente (`@Version`) : la Carte a changé ailleurs. */
+const CODE_MODIFIEE_ENTRE_TEMPS = 'ressource.modifiee_entre_temps';
+
 /** Nombre de suggestions d'Albums demandées. */
 const NOMBRE_SUGGESTIONS = 20;
 
 interface ErreurAffichee {
   readonly message: string;
   readonly reessayable: boolean;
+  /** Action de « Réessayer » (versement, relecture) ; sans elle, le champ signalé est renvoyé. */
+  readonly reprendre?: () => void;
 }
 
 /** Choix « Aucun module » de la liste des Modules. */
@@ -287,6 +297,16 @@ function texte(saisie: string): string | null {
  * « Nouveau sens » déplie la Création de Sens partagée (`CreationSens`), catégorie préremplie avec celle du Sens de
  * l'Image. Le Sens créé ou réutilisé (`POST /images/{id}/sens`, dans la même file) devient le Sens de l'Image et le
  * focus va au champ Sens.
+ *
+ * Versement du propriétaire (story 3.3, partie 2) : un repère « versée » s'ajoute aux repères d'une Image versée, pour
+ * tous. Pour le propriétaire d'une Image privée (`versabilite` non nulle), la section `VersementImage` propose « Verser
+ * dans la banque de l'école », ou le montre indisponible avec la raison exacte ; chaque Carte renvoyée met
+ * `versabilite` à jour. Le versement (`POST /images/{id}/versement`) part dans la file des enregistrements ; la Carte
+ * renvoyée est passée à `appliquer` puis affichée, le message de partage remplace le bouton et prend le focus, jusqu'au
+ * changement d'Image ou à la fermeture. Un refus de versabilité (`400`) ou un conflit (`409`) fait relire la Carte,
+ * même panneau fermé (pour `appliquer`), sans toucher aux saisies non enregistrées ; le refus est annoncé, le conflit
+ * affiché dans le Bandeau d'erreur. Toute autre erreur s'affiche dans le Bandeau ; « Réessayer » reprend l'action
+ * échouée (versement, relecture ou champ).
  */
 @Component({
   selector: 'app-carte-identite',
@@ -307,6 +327,7 @@ function texte(saisie: string): string | null {
     ReactiveFormsModule,
     RepereSection,
     Squelette,
+    VersementImage,
   ],
   changeDetection: ChangeDetectionStrategy.OnPush,
   styleUrl: './carte-identite.scss',
@@ -344,6 +365,12 @@ function texte(saisie: string): string | null {
         </div>
         <div class="carte-identite__reperes">
           <app-badge-type-image [type]="carte.typeImage" />
+          @if (carte.etat === 'versee') {
+            <span class="carte-identite__versee">
+              <mat-icon svgIcon="coche" aria-hidden="true" />
+              versée
+            </span>
+          }
           @if (carte.typeImage === 'image_album') {
             <span class="carte-identite__repere carte-identite__basse-resolution"
               >basse résolution</span
@@ -678,6 +705,16 @@ function texte(saisie: string): string | null {
               <dd class="carte-identite__proprietaire">{{ proprietaire() }}</dd>
             </dl>
           </div>
+          @if (carte.versabilite || versementReussi()) {
+            <app-versement-image
+              class="carte-identite__versement"
+              [versabilite]="carte.versabilite ?? null"
+              [licence]="carte.licence ?? null"
+              [enCours]="versementEnCours()"
+              [versee]="versementReussi()"
+              (verser)="verser()"
+            />
+          }
         } @else {
           <dl class="carte-identite__champs">
             <ng-container *ngTemplateOutlet="debutChamps; context: { $implicit: carte }" />
@@ -789,6 +826,7 @@ export class CarteIdentite {
   private readonly compteCourant = inject(CompteCourant);
   private readonly confirmation = inject(DialogueConfirmation);
   private readonly injecteur = inject(Injector);
+  private readonly annonceur = inject(LiveAnnouncer);
 
   protected readonly vide = CHAMP_VIDE;
   protected readonly libellesTypes = LIBELLES_TYPE_IMAGE;
@@ -864,6 +902,12 @@ export class CarteIdentite {
 
   protected readonly carte = signal<CarteIdentiteImageDto | null>(null);
   protected readonly erreur = signal<ErreurAffichee | null>(null);
+
+  /** Vrai pendant l'envoi du versement de l'Image affichée. */
+  protected readonly versementEnCours = signal(false);
+  /** Vrai après le versement réussi de l'Image affichée : le message de partage reste jusqu'au changement d'Image. */
+  protected readonly versementReussi = signal(false);
+  private readonly versement = viewChild(VersementImage);
 
   private readonly panneau = viewChild.required<ElementRef<HTMLElement>>('panneau');
 
@@ -967,6 +1011,8 @@ export class CarteIdentite {
   private fileEnregistrements: Promise<void> = Promise.resolve();
 
   constructor() {
+    // Fermé, le panneau n'écrit plus rien : les réponses tardives ne passent plus que par `appliquer`.
+    inject(DestroyRef).onDestroy(() => this.derniereLecture++);
     void this.annuaire.charger();
     this.album.valueChanges.pipe(takeUntilDestroyed()).subscribe((valeur) => {
       this.albumAffiche.set(valeur);
@@ -995,6 +1041,8 @@ export class CarteIdentite {
     const numero = ++this.derniereLecture;
     this.carte.set(null);
     this.erreur.set(null);
+    this.versementEnCours.set(false);
+    this.versementReussi.set(false);
     try {
       const carte = await this.api.invoke(carteIdentiteImage, { id });
       if (numero === this.derniereLecture) {
@@ -1332,7 +1380,204 @@ export class CarteIdentite {
   }
 
   protected reessayerEnregistrement(): void {
+    const reprendre = this.erreurEnregistrement()?.reprendre;
+    if (reprendre !== undefined) {
+      this.erreurEnregistrement.set(null);
+      reprendre();
+      return;
+    }
     void this.enregistrer(this.champEnErreur() ?? 'type');
+  }
+
+  /** « Verser dans la banque de l'école » : le versement part dans la file des enregistrements. */
+  protected verser(): void {
+    const carte = this.carte();
+    if (
+      carte === null ||
+      !this.modifiable() ||
+      carte.versabilite !== 'versable' ||
+      this.versementEnCours()
+    ) {
+      return;
+    }
+    const numero = this.derniereLecture;
+    this.versementEnCours.set(true);
+    this.fileEnregistrements = this.fileEnregistrements
+      .then(() => this.envoyerVersement(carte.id, numero))
+      .catch(() => undefined)
+      .finally(() => {
+        if (numero === this.derniereLecture) {
+          this.versementEnCours.set(false);
+        }
+      });
+  }
+
+  private async envoyerVersement(id: string, numero: number): Promise<void> {
+    // Les enregistrements passés avant lui ont pu rendre l'Image non versable : rien n'est envoyé.
+    const actuelle = this.carte();
+    if (numero !== this.derniereLecture || actuelle?.id !== id) {
+      return;
+    }
+    if (actuelle.versabilite !== 'versable') {
+      this.annoncerRefus(actuelle);
+      return;
+    }
+    let maj: CarteIdentiteImageDto;
+    try {
+      maj = await this.api.invoke(verserImage, { id });
+    } catch (erreur) {
+      await this.echecVersement(erreur, id, numero);
+      return;
+    }
+    // La page reçoit la Carte même si le panneau a été fermé ou remplacé entre-temps.
+    this.transmettre(maj);
+    if (numero !== this.derniereLecture) {
+      return;
+    }
+    this.carte.set(maj);
+    this.versementEnCours.set(false);
+    this.versementReussi.set(true);
+    if (this.erreurEnregistrement()?.reprendre !== undefined) {
+      this.erreurEnregistrement.set(null);
+    }
+    // Le bouton disparaît : le focus passe au message de partage.
+    afterNextRender(() => this.versement()?.focusMessage(), { injector: this.injecteur });
+  }
+
+  /**
+   * Échec du versement. Refus de versabilité (`400`) ou conflit (`409`) : la Carte a changé ailleurs, elle est relue
+   * (et passée à `appliquer`, même panneau fermé ou remplacé) ; le refus est annoncé, le conflit affiché dans le
+   * Bandeau. Toute autre erreur s'affiche dans le Bandeau, dont « Réessayer » relance le versement.
+   */
+  private async echecVersement(erreur: unknown, id: string, numero: number): Promise<void> {
+    const code = codeErreur(erreur);
+    const conflit = code === CODE_MODIFIEE_ENTRE_TEMPS;
+    if (!estRefusVersement(code) && !conflit) {
+      if (numero === this.derniereLecture) {
+        this.afficherErreur(erreur, () => this.verser());
+      }
+      return;
+    }
+    const relue = await this.relire(id, numero);
+    if (relue === null) {
+      return;
+    }
+    if (conflit) {
+      this.afficherErreur(erreur);
+    } else if (estRefusVersement(code) && relue.versabilite === 'versable') {
+      // Refus que la Carte relue ne montre pas : la raison reçue va dans le Bandeau.
+      this.erreurEnregistrement.set({
+        message: phraseVersementIndisponible(code, relue.licence),
+        reessayable: false,
+      });
+    } else {
+      this.annoncerRefus(relue);
+    }
+  }
+
+  /**
+   * Relit la Carte sans repasser par le squelette et la passe à `appliquer`. Panneau toujours sur cette Image : la
+   * Carte affichée est remplacée, sans toucher aux saisies non enregistrées ni aux champs signalés, et la Carte relue
+   * est renvoyée ; sinon `null`. En échec, l'erreur de lecture s'affiche dans le Bandeau, dont « Réessayer » relit.
+   */
+  private async relire(id: string, numero: number): Promise<CarteIdentiteImageDto | null> {
+    let relue: CarteIdentiteImageDto;
+    try {
+      relue = await this.api.invoke(carteIdentiteImage, { id });
+    } catch (erreur) {
+      if (numero === this.derniereLecture) {
+        this.afficherErreur(erreur, () => void this.relire(id, numero));
+      }
+      return null;
+    }
+    this.transmettre(relue);
+    if (numero !== this.derniereLecture) {
+      return null;
+    }
+    const panneau = this.panneau().nativeElement;
+    const avaitLeFocus = panneau.contains(document.activeElement);
+    const ancienne = this.carte();
+    this.carte.set(relue);
+    if (ancienne !== null) {
+      this.reprendreRelue(ancienne, relue);
+    }
+    if (avaitLeFocus) {
+      // Un élément focalisé disparu (bouton « Verser » d'une Image versée ailleurs) rend le focus au panneau.
+      afterNextRender(
+        () => {
+          if (!panneau.contains(document.activeElement)) {
+            panneau.focus();
+          }
+        },
+        { injector: this.injecteur },
+      );
+    }
+    return relue;
+  }
+
+  /**
+   * Reporte la Carte relue dans les champs que l'enseignant n'a pas modifiés (valeur encore égale à l'ancienne
+   * Carte) ; les saisies non enregistrées et le champ signalé restent tels quels.
+   */
+  private reprendreRelue(ancienne: CarteIdentiteImageDto, relue: CarteIdentiteImageDto): void {
+    const signale = this.champEnErreur();
+    if (signale !== 'type' && this.typeImage.value === ancienne.typeImage) {
+      this.typeImage.setValue(relue.typeImage);
+      this.typeChoisi.set(relue.typeImage);
+    }
+    if (signale !== 'licence' && this.licence.value === licenceChoisie(ancienne.licence)) {
+      this.licence.setValue(licenceChoisie(relue.licence));
+    }
+    if (signale !== 'source' && texte(this.source.value) === (ancienne.source ?? null)) {
+      this.source.setValue(relue.source ?? '');
+    }
+    if (signale !== 'auteur' && texte(this.auteur.value) === (ancienne.auteur ?? null)) {
+      this.auteur.setValue(relue.auteur ?? '');
+    }
+    if (signale !== 'sections' && this.sections().join(',') === ancienne.sections.join(',')) {
+      this.sections.set([...relue.sections]);
+    }
+    if (signale !== 'module' && this.module.value === (ancienne.module?.id ?? null)) {
+      this.module.setValue(relue.module?.id ?? null);
+    }
+    const themesAnciens = ancienne.themes.map((theme) => theme.id).join(',');
+    if (signale !== 'themes' && this.themesChoisis().join(',') === themesAnciens) {
+      this.themesChoisis.set(relue.themes.map((theme) => theme.id));
+    }
+    if (signale !== 'sens' && this.sens.value === ancienne.sens.id) {
+      this.sens.setValue(relue.sens.id);
+      this.sensChoisiId.set(relue.sens.id);
+      this.oublierSensLus();
+    }
+  }
+
+  /** Annonce poliment la raison qui empêche de verser l'Image. */
+  private annoncerRefus(carte: CarteIdentiteImageDto): void {
+    const versabilite = carte.versabilite;
+    if (estRefusVersement(versabilite)) {
+      void this.annonceur.announce(
+        phraseVersementIndisponible(versabilite, carte.licence),
+        'polite',
+      );
+    }
+  }
+
+  /** Passe la Carte à `appliquer` ; une erreur de la page n'est pas prise pour un échec de l'action. */
+  private transmettre(carte: CarteIdentiteImageDto): void {
+    try {
+      this.appliquer()?.(carte);
+    } catch (erreur) {
+      console.error(erreur);
+    }
+  }
+
+  /** Bandeau d'erreur ; `reprendre` est l'action de « Réessayer » (sinon, le champ signalé est renvoyé). */
+  private afficherErreur(erreur: unknown, reprendre?: () => void): void {
+    this.erreurEnregistrement.set({
+      message: messageErreur(erreur),
+      reessayable: erreurPassagere(erreur),
+      reprendre,
+    });
   }
 
   /**

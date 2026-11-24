@@ -851,6 +851,27 @@ describe('Banque', () => {
       );
     });
 
+    it('« Verser » dans la Carte : la vignette prend le badge « versée »', async () => {
+      await ouvrirPage();
+      const loup = image();
+      await servir(requeteImages('mes-mots'), [loup, image()]);
+      await ouvrirCarte(0, loup, carteDe(loup, { versabilite: 'versable' }));
+      expect(meta(0)).toBe('Section GS Type : image libre');
+
+      panneau()!.querySelector<HTMLButtonElement>('app-versement-image button')!.click();
+      await stabiliser();
+      serveur
+        .expectOne(`/api/images/${loup.id}/versement`)
+        .flush(carteDe(loup, { etat: 'versee', versabilite: null }));
+      await stabiliser();
+
+      expect(meta(0)).toBe('Section GS Type : image libre versée');
+      expect(meta(1)).toBe('Section GS Type : image libre');
+      expect(panneau()!.querySelector('.versement__message')?.textContent?.trim()).toBe(
+        "L'image reste la vôtre. Les collègues peuvent l'utiliser, personne ne peut la modifier.",
+      );
+    });
+
     it('le propriétaire change le type puis les Sections : la vignette suit, le total ne change pas', async () => {
       await ouvrirPage();
       const loup = image();

@@ -579,7 +579,8 @@ export class Banque {
    * Carte d'identité enregistrée, panneau ouvert ou non (B-2) : la vignette suit ses Sections, son type, son Mot et son
    * Sens. Changée de Sens, l'Image passe après la dernière Image chargée de ce Sens, ou reste à sa place s'il n'y en a
    * pas : les groupes, faits par Sens, n'apparaissent jamais deux fois. L'état (`etat`, « versée », `aRemplacer`,
-   * `reutilisable`) suit aussi. Le total ne change pas ; le focus reste où il était, y compris sur la vignette déplacée.
+   * `reutilisable`, `versabilite`) suit aussi. Le total ne change pas ; le focus reste où il était, y compris sur la
+   * vignette déplacée.
    */
   protected readonly appliquerCarteIdentite = (carte: CarteIdentiteImageDto): void => {
     const images = this.images();
@@ -594,6 +595,7 @@ export class Banque {
       versee: carte.etat === 'versee',
       aRemplacer: carte.aRemplacer,
       reutilisable: carte.reutilisable,
+      versabilite: carte.versabilite,
       sections: carte.sections,
       typeImage: carte.typeImage,
       motId: carte.motId,

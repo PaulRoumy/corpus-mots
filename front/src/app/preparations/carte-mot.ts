@@ -15,6 +15,7 @@ import { Api } from '../api/api';
 import { fichierImage } from '../api/fn/images-resource/fichier-image';
 import { MotPreparationDto } from '../api/models/mot-preparation-dto';
 import { BadgeTypeImage } from '../commun/badge-type-image/badge-type-image';
+import { CompteCourant } from '../commun/compte-courant';
 import { ChargementImage, ImageSecurisee } from '../commun/image-securisee/image-securisee';
 import { SuggestionsArasaac } from './suggestions-arasaac';
 
@@ -29,9 +30,10 @@ import { SuggestionsArasaac } from './suggestions-arasaac';
  *
  * Une fois illustrée, la Carte occupe une colonne (key-preparation.html › `.wc`) : vignette de la miniature de l'Image,
  * chargée en `blob` par le client généré (`?taille=miniature`, AD-23), d'alternative « Mot, Sens » ; Badge de type
- * d'image ; Mot en cursive. Une miniature qui ne se charge pas laisse voir l'icône d'image. La vignette est un bouton
- * « Changer l'image de « forme » », qui émet `choisirImage` : la page ouvre le Panneau de choix d'Image (story 2.7,
- * partie 3), d'où l'on ouvre la Carte d'identité (story 2.6).
+ * d'image, suivi du Badge d'état « versée » pour une Image versée dont l'enseignant connecté est le propriétaire
+ * (story 3.3 ; FR-18) ; Mot en cursive. Une miniature qui ne se charge pas laisse voir l'icône d'image. La vignette est
+ * un bouton « Changer l'image de « forme » », qui émet `choisirImage` : la page ouvre le Panneau de choix d'Image
+ * (story 2.7, partie 3), d'où l'on ouvre la Carte d'identité (story 2.6).
  *
  * Le bouton icône « Retirer « forme » de la préparation » (croix), toujours visible, émet `retirer` : le retrait se
  * fait sans confirmation et s'annule par le Bandeau « Annuler » (story 2.3, partie 2).
@@ -94,6 +96,12 @@ import { SuggestionsArasaac } from './suggestions-arasaac';
       <span class="carte-mot__mot">{{ mot().forme }}</span>
       @if (mot().image; as image) {
         <app-badge-type-image class="carte-mot__type" [type]="image.typeImage" />
+        @if (versee()) {
+          <span class="carte-mot__versee">
+            <mat-icon svgIcon="coche" aria-hidden="true" />
+            versée
+          </span>
+        }
       }
       @if (!mot().illustre) {
         <span class="carte-mot__etat">
@@ -154,6 +162,13 @@ export class CarteMot {
   readonly aRecharger = output<string>();
 
   private readonly api = inject(Api);
+  private readonly compteCourant = inject(CompteCourant);
+
+  /** Badge « versée » : Image versée de l'enseignant connecté, jamais celle d'un collègue réutilisée. */
+  protected readonly versee = computed(() => {
+    const image = this.mot().image;
+    return image?.etat === 'versee' && image.proprietaireId === this.compteCourant.compte()?.id;
+  });
 
   /** Image liée, par son seul identifiant : la vignette ne se recharge que si l'Image change. */
   private readonly imageId = computed(() => this.mot().image?.id ?? null);
