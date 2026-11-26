@@ -161,6 +161,7 @@ Pendant la saisie, l'application indique si le Mot existe déjà dans l'école. 
 Un enseignant peut retenir une Image proposée pour un Mot de sa Préparation en une seule action. Réalise UJ-1.
 - L'Image est liée et non copiée (voir FR-21).
 - Les Images proposées sont classées dans cet ordre : d'abord celles qui visent la Section de la Préparation, puis, à Section égale, celles déjà utilisées pour ce Sens dans d'autres Albums. C'est l'application du principe « même image pour un même Sens dans une même Section ».
+- Dans la saisie en série, valider le Mot retient la première Image proposée. L'enseignant peut en choisir une autre ou la changer ensuite.
 
 #### FR-10 : Gestion des Sens
 Un enseignant peut, pour un Mot existant, choisir l'un de ses Sens ou en créer un nouveau, avec un libellé court. Réalise UJ-1 (cas limite).
@@ -180,6 +181,7 @@ Un enseignant peut lister, ouvrir, renommer, dupliquer et supprimer ses Prépara
 Un enseignant peut, depuis un Mot, rechercher et choisir des pictogrammes ARASAAC sans quitter l'application. Réalise UJ-1.
 - Pour un Mot sans Image, les résultats ARASAAC sont proposés automatiquement.
 - Une Image ARASAAC enregistrée porte automatiquement sa source, sa licence (CC BY-NC-SA) et ses auteurs.
+- Un pictogramme dont l'enseignant possède déjà l'Image pour ce Mot est signalé, et le choisir réutilise cette Image au lieu d'en créer une nouvelle.
 
 #### FR-13 : Téléversement d'une Image
 Un enseignant peut téléverser une Image depuis son ordinateur en indiquant son type, sa source, sa licence et son auteur.
@@ -197,6 +199,7 @@ Un enseignant peut consulter la Carte d'identité de toute Image visible et modi
 Un enseignant peut filtrer les Images de Mes mots et de la Banque de l'école par Mot, Sens, Section, Album, Module, Thème, catégorie grammaticale, type d'image et propriétaire. Réalise UJ-4.
 - Les filtres se combinent (par exemple « automne » + « GS » + « verbe »).
 - Dans Mes mots, le filtre Section retient aussi les Images utilisées dans une Préparation de cette Section, même si l'Image ne la coche pas.
+- Le filtre Album retient les images d'album de cet Album et les Images que l'enseignant a utilisées dans une Préparation de cet Album.
 
 #### FR-16 : Repères de qualité
 À l'ajout d'une Image, l'application affiche un repère visuel court : « simple, claire, peu de détails ». Le motif « image inadaptée » fait partie des motifs de retrait de FR-30.

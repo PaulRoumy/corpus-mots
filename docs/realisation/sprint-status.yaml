@@ -29,7 +29,7 @@
 # - Dev moves story to 'review', then runs code-review (fresh context, different LLM recommended)
 # - Retrospective appends its action items to action_items; the status view surfaces open ones
 generated: 10-30-2026 18:50
-last_updated: 11-22-2026 14:09
+last_updated: 11-26-2026 13:30
 project: corpus-mots
 project_key: NOKEY
 tracking_system: file-system
@@ -56,12 +56,14 @@ development_status:
   2-8-choisir-ou-créer-un-sens: done
   2-9-reprendre-les-mots-déjà-illustrés-pour-l-album: done
   2-10-gérer-ses-préparations: done
+  2-11-saisir-des-mots-qui-arrivent-illustrés: backlog
   epic-2-retrospective: done
 
   epic-3: in-progress
   3-1-parcourir-la-banque-ouverte-sur-mes-mots: done
   3-2-filtrer-la-banque-et-rechercher-un-mot: done
   3-3-verser-ses-images-dans-la-banque: done
+  3-7-filtre-album-annuler-en-lot-et-finitions-de-la-banque: backlog  # avant 3.4 (proposition de changement du 2026-11-26)
   3-4-réutiliser-l-image-d-un-collègue: backlog
   3-5-notifications-et-ne-plus-verser: backlog
   3-6-supprimer-ses-images-sans-casser-le-travail-des-autres: backlog

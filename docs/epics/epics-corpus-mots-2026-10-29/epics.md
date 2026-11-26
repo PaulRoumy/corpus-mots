@@ -175,7 +175,7 @@ Ce document découpe en epics et en stories réalisables les exigences de corpus
 - UX-DR-10 : Badge d'état (« à illustrer », « image retirée de la banque », « image supprimée, à remplacer », « versée ») avec icône et libellé. Marque « déjà utilisée » (icône historique, `tertiary-container`) posée sur l'Image déjà utilisée par l'enseignant pour ce Sens, à Section égale.
 - UX-DR-11 : Vignette d'Image (`rounded.md`), avec propriété toujours visible et texte alternatif « Mot + Sens ». Image chargée par la directive `image-securisee` (miniature dans les listes).
 - UX-DR-12 : Case de sélection et Barre d'actions en lot, au comportement identique dans Préparation, Banque et Import. Case visible au survol et au focus, puis toutes visibles dès qu'une sélection existe. Espace coche, Maj+clic sélectionne une plage, « Tout sélectionner », Échap désélectionne. La barre affiche le nombre sélectionné et les actions ; les Images non versables restent hors du lot, avec leur raison.
-- UX-DR-13 : Bandeau « Annuler » (snackbar). Pas de confirmation pour les gestes courants. Annulation possible pendant 8 s, décompte suspendu au survol et au focus, un seul bandeau à la fois, annoncé aux lecteurs d'écran. « Annuler » appelle l'opération inverse.
+- UX-DR-13 : Bandeau « Annuler » (snackbar). Pas de confirmation pour les gestes courants. Geste unitaire : annulation possible pendant 8 s, décompte suspendu au survol et au focus. Geste en lot : aucune minuterie, le bandeau reste jusqu'au geste suivant de l'enseignant ou sa fermeture. Un seul bandeau à la fois, annoncé aux lecteurs d'écran ; quitter la page le ferme sans annuler. « Annuler » appelle l'opération inverse.
 - UX-DR-14 : Bandeau d'erreur. Bannière `error-container` avec « Réessayer », affichée jusqu'à résolution. La saisie en cours est conservée, et le bandeau est annoncé aux lecteurs d'écran.
 - UX-DR-15 : Dialogue de confirmation pour les actions graves (supprimer une Image, une Préparation ou un compte ; « Ne plus verser » une Image réutilisée par des collègues), avec un bouton `error` et le bouton par défaut sur « annuler ». Dialogue de retrait (administrateur) avec quatre motifs en boutons radio (« autre » exige un texte), bouton « Retirer de la banque » actif dès qu'un motif est choisi.
 - UX-DR-16 : Puces de filtre (32 px, combinables) et filtre de provenance à choix unique « Mes mots / Banque de l'école / Tout », sur Mes mots par défaut.
@@ -191,9 +191,9 @@ Ce document découpe en epics et en stories réalisables les exigences de corpus
 - UX-DR-23 : Accueil Préparations. Cartes de Préparation (vignette, titre, repère de Section, « n mots · n à illustrer » ; menu renommer, dupliquer avec choix de la Section, supprimer). Encart Import tant que la banque de l'enseignant est vide. Carte « Import en cours » avec « Reprendre ». État vide « Pas encore de préparation… ».
 - UX-DR-24 : Dialogue « Nouvelle préparation » : Album (recherche pendant la frappe, « Créer l'album », titres proches signalés), Section préremplie avec celle de la dernière Préparation, Module, Thème par défaut ; « Créer » ouvre la Préparation.
 - UX-DR-25 : En-tête de Préparation : titre de l'Album, repère de Section, Module modifiable (avec « Nouveau module »), Thème par défaut, compteur « N mots, M déjà illustrés » mis à jour à chaque ajout, « Temps passé » facultatif, menu de correction de l'Album (créateur) et bouton plein « Générer une fiche ». Enregistrement automatique à la sortie de chaque champ.
-- UX-DR-26 : Champ de saisie rapide et Panneau de détection. Entrée ajoute le Mot et garde le focus ; aide « Entrée pour ajouter » ; détection pendant la frappe, annoncée en `aria-live` poli sans voler le focus. Images ordonnées selon FR-9 (mes Images avant celles des collègues à rang égal), ↑ ↓ + Entrée pour choisir, première proposition mise en avant, suggestions ARASAAC pour un Mot nouveau, « Nouveau sens ».
+- UX-DR-26 : Champ de saisie rapide et Panneau de détection. Entrée ajoute le Mot et garde le focus ; aide « Entrée pour ajouter » ; détection pendant la frappe, annoncée en `aria-live` poli sans voler le focus. Images ordonnées selon FR-9 (mes Images avant celles des collègues à rang égal), première proposition mise en avant et retenue par Entrée, ↑ ↓ + Entrée pour en choisir une autre ; seul un Mot sans aucune Image visible arrive « à illustrer » ; suggestions ARASAAC pour un Mot nouveau, « Nouveau sens ».
 - UX-DR-27 : Encart « mots déjà illustrés » (`tertiary-container`, vignettes de 56 px), avec « Tout reprendre » ou un choix un par un. Écarter un Mot est annulable. L'encart disparaît quand il ne reste plus rien à reprendre.
-- UX-DR-28 : Grille de Cartes de Mot dans l'ordre de saisie. Carte de Mot (vignette et Mot en cursive ; clic ou Entrée ouvre le Panneau de choix d'Image ; Image retirée grisée à 0,4 avec badge rouge ; retrait de la Préparation annulable). Carte « à illustrer » (bordure en tirets, suggestions ARASAAC en ligne, « Téléverser »). Actions en lot : Verser, retirer de la Préparation.
+- UX-DR-28 : Grille de Cartes de Mot dans l'ordre de saisie. Carte de Mot (vignette et Mot en cursive ; clic ou Entrée ouvre le Panneau de choix d'Image ; Image retirée grisée à 0,4 avec badge rouge ; retrait de la Préparation annulable). Carte « à illustrer » (bordure en tirets, Images existantes classées selon FR-9 puis suggestions ARASAAC en ligne, Marque « déjà utilisée » sur celles que l'enseignant possède déjà, « Téléverser »). Actions en lot : Verser, retirer de la Préparation.
 - UX-DR-29 : Panneau de choix d'Image, panneau latéral droit de 400 px qui laisse la grille visible : Mot en cursive et Sens modifiable, Repère de qualité, Images ordonnées comme la détection, ↑ ↓ + Entrée ou clic pour choisir et fermer, « Ajouter une image », Échap pour fermer.
 - UX-DR-30 : Banque et Panneau Carte d'identité. Grille regroupée par Mot et Sens, filtres et provenance, état vide « Aucune image » avec « Effacer les filtres ». Panneau latéral avec les champs dans l'ordre du Glossaire, modifiable par le propriétaire seulement et enregistré à la sortie de chaque champ (une erreur est signalée sur le champ). Raison exacte quand Verser est indisponible (« image d'album », « type inconnu », « licence à préciser », « licence non partageable »). Message de versement « L'image reste la vôtre… ». « Ne plus verser » est distinct de « Retirer de la banque ». Actions Supprimer et « Utiliser dans une préparation ». Sélection, puis « Créer une fiche avec cette sélection ».
 - UX-DR-31 : Ajouter une image. Recherche ARASAAC aux résultats progressifs, et « Téléverser » si ARASAAC ne donne rien ou est indisponible. Type, source, licence, et Album obligatoire pour une image d'album (blocage « Album d'origine requis »). Repère de qualité.
@@ -435,7 +435,7 @@ Afin de trouver rapidement chaque fonctionnalité (NFR-1).
 **Étant donné** les composants partagés du front
 **Quand** ils sont livrés
 **Alors** `commun/` fournit, avec leurs tests de composant (UX-DR-13, 14, 22) :
-- le Bandeau « Annuler » : 8 s, décompte suspendu au survol et au focus, un seul à la fois, annoncé aux lecteurs d'écran ;
+- le Bandeau « Annuler » : 8 s, décompte suspendu au survol et au focus, un seul à la fois, annoncé aux lecteurs d'écran (mode « lot » sans minuterie ajouté par la Story 3.7) ;
 - le Bandeau d'erreur : reste affiché, propose « Réessayer », annoncé aux lecteurs d'écran ;
 - le Dialogue de confirmation, dont le bouton par défaut est « Annuler » ;
 - l'État vide et les squelettes de chargement.
@@ -660,6 +660,7 @@ Afin d'illustrer un nouveau Mot en un geste (FR-12, FR-16).
 **Et** l'Image est créée à l'état `privee`, avec le type `image_libre`, la licence `arasaac_cc_by_nc_sa`, la source et les auteurs ARASAAC, le Sens retenu et `type_media` = `image` (AD-4, NFR-9)
 **Et** elle est liée au Mot de la Préparation par `Usages.lierImage` avec l'origine `nouvelle`, après un verrou `SELECT … FOR UPDATE` sur l'Image (AD-14, AD-17)
 **Et** la carte quitte l'état « à illustrer » et affiche la vignette
+*Complété par la Story 2.11 : pictogramme déjà possédé réutilisé, Section de la Préparation.*
 
 **Étant donné** l'affichage d'une vignette
 **Quand** le front charge l'image
@@ -776,6 +777,7 @@ Afin de ne jamais refaire ce qui existe et de garder la même image pour un mêm
 **Quand** l'enseignant choisit une Image avec ↑ ↓ puis Entrée, ou d'un clic
 **Alors** le Mot est ajouté et l'Image est liée par `Usages.lierImage` avec l'origine `reutilisee`. L'Image n'est jamais copiée (AD-5)
 **Et** l'Entrée seule, sans choix, ajoute le Mot « à illustrer »
+*Remplacé par la Story 2.11 : l'Entrée seule retient la première Image proposée.*
 
 **Étant donné** une Carte de Mot
 **Quand** l'enseignant clique dessus ou appuie sur Entrée
@@ -868,6 +870,43 @@ Afin de reprendre un album pour une autre Section ou une autre année (FR-11).
 **Quand** l'enseignant tente de la renommer, de la dupliquer ou de la supprimer par l'API
 **Alors** l'API répond `403` ou `404`, et rien n'est modifié (FR-22)
 
+### Story 2.11 : Saisir des Mots qui arrivent illustrés, sans doublon ni Section à refaire
+
+*Ajoutée par la proposition de changement du 2026-11-26 (démo du 25 novembre).*
+
+En tant qu'enseignant,
+Je veux qu'un Mot déjà illustré arrive avec son Image dès que je valide, et que mes nouvelles Images portent la Section de ma Préparation,
+Afin de ne faire aucun geste de plus pour ce qui existe déjà et de ne jamais créer deux fois la même Image (FR-6, FR-9, FR-12, §4.4).
+
+**Critères d'acceptation :**
+
+**Étant donné** le Champ de saisie rapide et un Mot qui a au moins une Image `proposable`
+**Quand** l'enseignant appuie sur Entrée sans choisir d'Image
+**Alors** le Mot est ajouté et la première Image proposée (ordre FR-9) est liée par `Usages.lierImage` avec l'origine `reutilisee` (UX-DR-26)
+**Et** ↓ ↑ + Entrée ou un clic retient une autre Image, comme avant
+**Et** un Mot sans aucune Image visible arrive « à illustrer »
+**Et** l'annonce `aria-live` indique que le Mot est arrivé illustré
+
+**Étant donné** une Carte « à illustrer » d'un Mot qui a des Images `proposable`
+**Quand** elle s'affiche
+**Alors** ces Images apparaissent d'abord, classées comme dans la détection, avec la Marque « déjà utilisée », puis les suggestions ARASAAC et « Téléverser » (UX-DR-28)
+
+**Étant donné** une suggestion ARASAAC dont l'enseignant possède déjà une Image pour ce Mot et ce Sens
+**Quand** la suggestion s'affiche
+**Alors** elle porte la Marque « déjà utilisée »
+**Et** la choisir lie cette Image existante (origine `reutilisee`) sans rien télécharger ni créer ; son état, ses Sections et ses Thèmes sont gardés (AD-5)
+**Et** le pictogramme d'une Image est identifié par une colonne `arasaac_id` ajoutée par une nouvelle migration et remplie pour les Images existantes à partir de leur source (AD-22)
+**Et** seules les Images de l'enseignant comptent, et la décision passe par `VisibiliteImages` (AD-2)
+
+**Étant donné** une Image créée depuis une Préparation (pictogramme ARASAAC, « Téléverser » depuis la carte, Panneau de choix ou « Ajouter une image » ouvert pour un Mot)
+**Quand** elle est enregistrée
+**Alors** elle reçoit d'office la Section de la Préparation, modifiable ensuite dans la Carte d'identité
+**Et** une Image ajoutée par « + › Ajouter une image », sans Préparation, ne reçoit aucune Section d'office
+
+**Étant donné** la liste de recherche d'Album à la création d'une Préparation
+**Quand** l'enseignant choisit « Créer l'album »
+**Alors** la liste « Aucun album trouvé » ne se rouvre pas
+
 ## Epic 3 : Partager dans la Banque de l'école et réutiliser le travail des collègues
 
 Un enseignant parcourt ses Images et celles de l'école dans une Banque qu'il peut filtrer. Il verse ses Images sans en céder la propriété et réutilise celles des collègues par lien. Il retrouve un Mot depuis la barre de recherche et supprime ses Images sans casser le travail des autres. Il est notifié quand une Image qu'il réutilise est retirée de la Banque.
@@ -915,6 +954,7 @@ Afin de trouver en quelques secondes, par exemple, tous les verbes « automne »
 **Étant donné** la Banque
 **Quand** l'enseignant combine des puces de filtre parmi Mot, Sens, Section, Album, Module, Thème, catégorie grammaticale, type d'image et propriétaire
 **Alors** la grille ne garde que les Images qui satisfont tous les filtres, et les filtres sont passés en paramètres de requête nommés comme les champs
+*Filtre Album élargi par la Story 3.7.*
 
 **Étant donné** la provenance « Mes mots » et un filtre Section
 **Quand** le filtre s'applique
@@ -957,6 +997,7 @@ Afin de partager mon travail sans le céder (FR-19).
 **Quand** l'enseignant coche des Cases de sélection (au survol ou au focus, Espace, Maj+clic pour une plage, « Tout sélectionner », Échap pour désélectionner)
 **Alors** la Barre d'actions en lot apparaît avec le nombre d'éléments sélectionnés et ses actions (UX-DR-12)
 **Et** dans une Préparation, la barre propose aussi « Retirer de la Préparation », annulable
+*Bandeau sans minuterie pour un geste en lot : Story 3.7.*
 
 **Étant donné** une sélection mixte
 **Quand** l'enseignant choisit « Verser » dans la Barre d'actions en lot
@@ -1046,6 +1087,35 @@ Afin de faire le ménage dans Mes mots sans priver mes collègues de ce qu'ils u
 **Étant donné** une Image d'un collègue
 **Quand** un enseignant tente de la supprimer par l'API
 **Alors** l'API répond `403`
+
+### Story 3.7 : Filtre Album par usage, Annuler en lot et finitions de la Banque
+
+*Ajoutée par la proposition de changement du 2026-11-26 (démo du 25 novembre) ; à réaliser avant la Story 3.4.*
+
+En tant qu'enseignant,
+Je veux retrouver par Album toutes les Images que j'y ai utilisées, et pouvoir annuler un geste en lot sans course contre la montre,
+Afin de retrouver mon travail par album et de rattraper une erreur sur plusieurs Mots (FR-15, FR-19, UX-DR-13).
+
+**Critères d'acceptation :**
+
+**Étant donné** la Banque et le filtre Album
+**Quand** il s'applique
+**Alors** il retient les images d'album dont c'est l'album d'origine et les Images liées dans une Préparation de l'enseignant pour cet Album, quelle que soit la provenance
+**Et** le lien d'un collègue ne compte jamais, comme pour le filtre Section (FR-8, AD-2)
+
+**Étant donné** un geste en lot annulable (« Retirer de la Préparation » sur plusieurs Mots)
+**Quand** le Bandeau « Annuler » s'affiche
+**Alors** il n'a aucune minuterie et reste jusqu'au geste suivant de l'enseignant (une action qui modifie des données, ou un autre bandeau) ou jusqu'à sa fermeture (UX-DR-13)
+**Et** il se ferme sans annuler quand l'enseignant quitte la page
+**Et** un geste unitaire garde 8 s, décompte suspendu au survol et au focus
+
+**Étant donné** une de mes Images versable par ailleurs, dont le Sens est « à compléter »
+**Quand** je choisis « Verser »
+**Alors** elle est versée ; le Sens « à compléter » reste mis en avant dans la Carte d'identité sans bloquer le versement (test dédié)
+
+**Étant donné** la Banque et la Carte d'identité
+**Quand** elles s'affichent
+**Alors** le libellé « Temps passé (facultatif) » est lisible en entier, aucun fond de focus ne reste sur une puce de provenance après un clic (le focus clavier reste visible), et les cartes avec et sans badge « versée » sont alignées dans la grille
 
 ## Epic 4 : Générer des fiches et les exporter en Word et PowerPoint
 
@@ -1331,6 +1401,10 @@ Afin de ranger 80 mots en quelques gestes (FR-24).
 **Étant donné** le type « image libre » sans source ni licence
 **Quand** la paire est complétée
 **Alors** la paire reste importable, mais ne pourra être versée qu'une fois ces champs remplis (règle de l'Epic 3)
+
+**Étant donné** des paires écartées en lot
+**Quand** le Bandeau « Annuler » s'affiche
+**Alors** il n'a aucune minuterie, comme tout geste en lot (UX-DR-13)
 
 ### Story 5.4 : Valider l'Import
 
