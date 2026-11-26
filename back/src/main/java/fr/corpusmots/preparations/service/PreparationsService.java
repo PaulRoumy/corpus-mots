@@ -19,6 +19,7 @@ import fr.corpusmots.vocabulaire.service.CopierPreparationCommande;
 import fr.corpusmots.vocabulaire.service.CreerSensCommande;
 import fr.corpusmots.vocabulaire.service.DetectionMots;
 import fr.corpusmots.vocabulaire.service.DetectionVue;
+import fr.corpusmots.vocabulaire.service.ImageDetecteeVue;
 import fr.corpusmots.vocabulaire.service.ImageVue;
 import fr.corpusmots.vocabulaire.service.Images;
 import fr.corpusmots.vocabulaire.service.Lexique;
@@ -292,6 +293,11 @@ public class PreparationsService {
      * <li>{@code nouveauSens} : le Mot {@code motId} (à défaut, celui de la saisie, obtenu ou créé), avec le Sens tapé,
      * obtenu ou créé par {@link Lexique#obtenirOuCreerSensSaisi} (AD-19).</li>
      * </ul>
+     * Le Mot arrive illustré s'il a une Image proposable (story 2.11, FR-9) : la première que
+     * {@link DetectionMots#propositions} classe pour lui, dans ce Sens s'il est donné, est liée avec l'origine
+     * {@code reutilisee}, sans copie (AD-5), et son Sens devient le Sens retenu. Une Image devenue indisponible avant son
+     * verrou n'est pas liée et le Mot arrive « à illustrer », sans refus ({@link Usages#lierImageSiPossible}). Seul le
+     * Mot ajouté compte, jamais un Mot de forme voisine (accents différents).
      * Une seule transaction, Préparation verrouillée : rien n'est écrit en cas de refus, ni Mot, ni Sens. Les ajouts à
      * une même Préparation passent un à un.
      *
@@ -332,12 +338,22 @@ public class PreparationsService {
         UUID sensId = commande.nouveauSens() == null ? commande.sensId()
                 : lexique.obtenirOuCreerSensSaisi(mot.id(), commande.nouveauSens().libelle(),
                         commande.nouveauSens().categorie()).id();
+        // Story 2.11 (FR-9) : sans Image choisie, la première Image proposée, classée comme la détection, est retenue.
+        Optional<ImageDetecteeVue> premiere = detectionMots.propositions(mot.id(), preparation.albumId(),
+                preparation.section(), sensId).images().stream().findFirst();
+        if (premiere.isPresent()) {
+            sensId = premiere.get().sens().sens().id();
+        }
         PreparationMot ligne = PreparationMot.nouveau(preparationMots.nouvelIdentifiant(), preparation.id(), mot.id(),
                 preparationMots.dernierOrdre(preparation.id()) + 1, preparation.themeDefautId());
         preparationMots.persistAndFlush(ligne);
         SensVue sens = usages.retenirSens(new RetenirSensCommande(preparation.id(), ligne.id(), mot.id(),
                 preparation.albumId(), preparation.section(), sensId));
-        return vue(ligne, mot, sens, null);
+        ImageVue image = premiere.isEmpty() ? null
+                : usages.lierImageSiPossible(new LierImageCommande(preparation.id(), ligne.id(),
+                        premiere.get().image().id(), preparation.albumId(), preparation.section(),
+                        OrigineLien.REUTILISEE)).orElse(null);
+        return vue(ligne, mot, sens, image);
     }
 
     /** Mot de la saisie, normalisée par {@link Lexique#normaliser}, obtenu ou créé. */

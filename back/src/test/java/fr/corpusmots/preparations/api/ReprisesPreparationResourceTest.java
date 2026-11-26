@@ -234,10 +234,12 @@ class ReprisesPreparationResourceTest {
         UUID sensRenard = sens(renard, "animal", "nom");
         UUID imageRenard = imageDAlbum(PAUL, sensRenard, "privee", rouleGalette);
         MotVue galette = mot("galette");
-        imageDAlbum(ZOE, sens(galette, "gâteau", "nom"), "versee", rouleGalette);
+        UUID sensGalette = sens(galette, "gâteau", "nom");
+        UUID imageGalette = imageDAlbum(ZOE, sensGalette, "versee", rouleGalette);
         MotVue etale = mot("étalé");
         UUID sensEtale = sens(etale, "chute", "nom");
         UUID imageEtale = imageDAlbum(ZOE, sensEtale, "versee", rouleGalette);
+        // Saisi, il arrive illustré par son Image (story 2.11) ; déjà présent, « Tout reprendre » l'ignore.
         ajouter("galette");
 
         reprendre(preparation, List.of(renard.id().toString(), galette.id().toString(), etale.id().toString()))
@@ -251,8 +253,9 @@ class ReprisesPreparationResourceTest {
                 .body("[1].sens.id", equalTo(sensRenard.toString()))
                 .body("[1].image.id", equalTo(imageRenard.toString()));
 
-        assertEquals(List.of("galette:1:null", "étalé:2:reutilisee", "renard:3:reutilisee"), motsEnBase());
-        assertEquals(List.of(sensEtale + "|" + imageEtale, sensRenard + "|" + imageRenard), sensEtImagesLies());
+        assertEquals(List.of("galette:1:reutilisee", "étalé:2:reutilisee", "renard:3:reutilisee"), motsEnBase());
+        assertEquals(List.of(sensGalette + "|" + imageGalette, sensEtale + "|" + imageEtale,
+                sensRenard + "|" + imageRenard), sensEtImagesLies());
         assertEquals(3L, nombre("select count(*) from image"));
         reprises(preparation).statusCode(200).body("", empty());
     }

@@ -90,6 +90,7 @@ class DetectionPreparationResourceTest {
                 .body("mots", hasSize(1))
                 .body("mots[0].forme", equalTo("farine"))
                 .body("mots[0].dejaDansLaPreparation", equalTo(false))
+                .body("mots[0].formeSaisie", equalTo(true))
                 .body("mots[0].sens.libelle", contains("à compléter"))
                 .body("mots[0].sens[0].aCompleter", equalTo(true))
                 .body("mots[0].albums", empty())
@@ -127,8 +128,14 @@ class DetectionPreparationResourceTest {
                 .statusCode(200)
                 .body("forme", equalTo("cote"))
                 .body("mots.forme", contains("côte", "côté"))
+                // Story 2.11 : seul le Mot exactement tapé, accents compris, est de la forme saisie.
+                .body("mots.formeSaisie", contains(false, false))
                 .body("mots[0].sens.libelle", contains("corps"))
                 .body("mots[1].sens.libelle", contains("direction"));
+        detecter(preparation, "Côté")
+                .statusCode(200)
+                .body("mots.forme", contains("côte", "côté"))
+                .body("mots.formeSaisie", contains(false, true));
         detecter(preparation, "L’ARBRE").statusCode(200).body("forme", equalTo("ARBRE")).body("mots", empty());
         detecter(preparation, "far").statusCode(200).body("forme", equalTo("far")).body("mots", empty());
     }

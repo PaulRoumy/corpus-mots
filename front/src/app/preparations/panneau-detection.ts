@@ -108,8 +108,9 @@ export function libelleSens(mot: DetectionMotDto): string | null {
  * Pour chaque Mot existant et visible : le Mot en cursive, son état (« existe déjà · 2 images, dans 1 album », ou
  * « déjà dans la préparation »), ses Sens, ses Albums, puis ses Images dans l'ordre du back (jamais reclassées ici) :
  * miniature, Repères de Section, Badge de type, album d'origine et propriétaire (« vous » ou son nom dans l'Annuaire),
- * Marque « déjà utilisée », Sens si le Mot en a plusieurs. La première proposition est mise en avant. Un Mot nouveau,
- * ou sans Image, montre les suggestions ARASAAC et le Repère de qualité, une fois la frappe arrêtée depuis
+ * Marque « déjà utilisée », Sens si le Mot en a plusieurs. L'Image que l'Entrée seule retiendra est mise en avant
+ * (`premiereImageId`, story 2.11) : la première du Mot exactement saisi, jamais celle d'un Mot de forme voisine. Un Mot
+ * nouveau, ou sans Image, montre les suggestions ARASAAC et le Repère de qualité, une fois la frappe arrêtée depuis
  * `DELAI_SUGGESTIONS_MS` (ARASAAC n'est pas interrogé pour chaque fragment).
  *
  * Seul un résumé (l'en-tête de chaque Mot, le Sens choisi et le nombre de ses Images, ou le message d'échec) est
@@ -119,10 +120,12 @@ export function libelleSens(mot: DetectionMotDto): string | null {
  * Retenir une Image (story 2.7, partie 2) : les Images sont les options d'une liste (`role="listbox"`, un groupe par
  * Mot, nommé par son en-tête, ses Sens et ses Albums, texte masqué dans la liste) que le Champ de saisie rapide pilote
  * en combobox ARIA 1.2 (`idListe`, `idActif`, `deplie`) ; les Mots sans Image et leurs suggestions ARASAAC restent hors
- * de la liste. Aucune n'est choisie d'emblée ; ↓ choisit la première, ↓ ↑ parcourent les Images de tous les Mots dans
- * l'ordre, sans boucler ; ↑ sur la première et Échap retirent le choix (`naviguer`), qui tombe aussi à chaque frappe et
- * à chaque nouveau résultat. Tant que la détection d'une nouvelle saisie est attendue, rien n'est proposé. La page lit
- * `choix()` à l'Entrée. Un clic sur une Image émet `retenir`, sans prendre le focus du champ.
+ * de la liste. Aucune n'est choisie explicitement d'emblée : Entrée seule ajoute la saisie et le back lui lie la
+ * première Image proposée du Mot exactement saisi, celle mise en avant, ou l'ajoute « à illustrer » s'il n'en a aucune
+ * (story 2.11) ; ↓ choisit la première, ↓ ↑ parcourent les Images de tous les Mots dans l'ordre, sans boucler ; ↑ sur
+ * la première et Échap retirent le choix (`naviguer`), qui tombe aussi à chaque frappe et à chaque nouveau résultat.
+ * Tant que la détection d'une nouvelle saisie est attendue, rien n'est proposé. La page lit `choix()` à l'Entrée. Un
+ * clic sur une Image émet `retenir`, sans prendre le focus du champ.
  *
  * Sens dans la détection (story 2.8, partie 3) : un Mot à au moins deux Sens visibles montre, à la place de la ligne
  * « Sens : … », une rangée de puces à bascule (groupe « Sens de « étalé » », `aria-pressed`, coche en plus de la
@@ -390,7 +393,10 @@ export class PanneauDetection {
   /** Image choisie au clavier, `null` si aucune. */
   protected readonly imageChoisie = signal<string | null>(null);
 
-  /** Image choisie, avec son Mot ; `null` si aucune : Entrée ajoute alors le Mot « à illustrer ». */
+  /**
+   * Image choisie explicitement (↓ ↑ ou clic), avec son Mot ; `null` si aucune : Entrée ajoute alors la saisie, que le
+   * back illustre de l'Image mise en avant s'il y en a une (story 2.11).
+   */
   readonly choix = computed(
     () => this.options().find((option) => option.imageId === this.imageChoisie()) ?? null,
   );
@@ -401,10 +407,25 @@ export class PanneauDetection {
     return choix === null ? null : this.idOption(choix.imageId);
   });
 
-  /** Première proposition, mise en avant : la première Image du premier Mot qui en a. */
-  protected readonly premiereImageId = computed(
-    () => this.motsIllustres().flatMap((mot) => this.imagesDe(mot))[0]?.id ?? null,
-  );
+  /**
+   * Image mise en avant : exactement celle que l'Entrée sans choix fera retenir par le back (story 2.11). C'est la
+   * première Image, dans l'ordre du back, du Mot dont un Sens est choisi, limitée à ce Sens ; sans Sens choisi, celle
+   * du Mot exactement saisi (`formeSaisie`, accents compris). `null` si ce Mot n'a pas d'Image ou figure déjà dans la
+   * Préparation (Entrée serait refusée), si la saisie ne correspond à aucun Mot illustré (« cote » ne met en avant ni
+   * « côte » ni « côté ») ou si une détection est attendue.
+   */
+  protected readonly premiereImageId = computed(() => {
+    if (this.saisie().trim() !== this.saisieDuResultat()) {
+      return null;
+    }
+    const choisi = this.choixSens();
+    const mot = this.motsIllustres().find((autre) =>
+      choisi === null ? autre.formeSaisie : autre.motId === choisi.motId,
+    );
+    return mot === undefined || mot.dejaDansLaPreparation
+      ? null
+      : (this.imagesDe(mot)[0]?.id ?? null);
+  });
 
   /** Créations de Sens affichées, une par Mot. */
   private readonly creations = viewChildren(CreationSens);

@@ -12,11 +12,22 @@ import static org.junit.jupiter.api.Assertions.assertNotEquals;
 
 import fr.corpusmots.commun.api.EnseignantsDeTest;
 import fr.corpusmots.commun.api.ProblemeDto;
+import fr.corpusmots.commun.service.Section;
 import fr.corpusmots.referentiels.api.ReferentielsDeTest;
+import fr.corpusmots.vocabulaire.api.ImagesDeTest;
+import fr.corpusmots.vocabulaire.service.DetectionMots;
+import fr.corpusmots.vocabulaire.service.EtatImage;
+import fr.corpusmots.vocabulaire.service.ImageDetecteeVue;
+import fr.corpusmots.vocabulaire.service.ImageVue;
 import fr.corpusmots.vocabulaire.service.Lexique;
+import fr.corpusmots.vocabulaire.service.MotDetecteVue;
 import fr.corpusmots.vocabulaire.service.MotVue;
+import fr.corpusmots.vocabulaire.service.SensProposeVue;
 import fr.corpusmots.vocabulaire.service.SensVue;
+import fr.corpusmots.vocabulaire.service.TypeImage;
+import fr.corpusmots.vocabulaire.service.Versabilite;
 import io.quarkus.narayana.jta.QuarkusTransaction;
+import io.quarkus.test.junit.QuarkusMock;
 import io.quarkus.test.junit.QuarkusTest;
 import io.quarkus.test.security.TestSecurity;
 import io.quarkus.test.security.oidc.Claim;
@@ -35,7 +46,8 @@ import org.junit.jupiter.api.Test;
 /**
  * Mots d'une Préparation (story 2.3) : ajout par le Champ de saisie rapide, normalisé par le Lexique, avec le Sens
  * retenu par {@code Usages}, liste dans l'ordre de saisie (partie 1), retrait et rétablissement (partie 2), Thème de
- * chaque Mot (partie 3). Une ligne de test par ligne de la matrice de chaque spec.
+ * chaque Mot (partie 3) ; Mot qui arrive illustré par la première Image proposée (story 2.11, partie 1). Une ligne de
+ * test par ligne de la matrice de chaque spec.
  */
 @QuarkusTest
 @TestSecurity(user = MotsPreparationResourceTest.CLAIRE)
@@ -50,6 +62,9 @@ class MotsPreparationResourceTest {
 
     @Inject
     ReferentielsDeTest referentiels;
+
+    @Inject
+    ImagesDeTest images;
 
     @Inject
     Lexique lexique;
@@ -171,6 +186,118 @@ class MotsPreparationResourceTest {
                 .statusCode(201)
                 .body("sens.id", equalTo(peluche.id().toString()))
                 .body("sens.libelle", equalTo("peluche"));
+    }
+
+    // --- Story 2.11, partie 1 : l'Entrée seule retient la première Image proposée ---
+
+    @Test
+    void unMotIllustreArriveAvecLaPremiereImageProposee() {
+        MotVue farine = mot("farine");
+        UUID poudre = sens(farine, "poudre");
+        UUID ingredient = sens(farine, "ingrédient");
+        // La première coche MS, la Section de la Préparation ; l'autre, plus récente, non (FR-9).
+        UUID premiere = image(CLAIRE, ingredient, "ms");
+        image(CLAIRE, poudre, "gs");
+        // Le Sens que Claire retenait d'habitude cède la place à celui de l'Image.
+        UUID autre = preparation(CLAIRE, "gs", "2026-11-08T09:00:00Z");
+        sensRetenu(autre, motDePreparation(autre, farine.id(), 1), poudre, CLAIRE, "gs");
+
+        String id = ajouter(preparation, "la farine")
+                .statusCode(201)
+                .body("forme", equalTo("farine"))
+                .body("sens.id", equalTo(ingredient.toString()))
+                .body("illustre", equalTo(true))
+                .body("image.id", equalTo(premiere.toString()))
+                .body("image.proprietaireId", equalTo(CLAIRE))
+                .extract().path("id");
+
+        assertEquals(premiere + "|" + CLAIRE + "|" + rouleGalette + "|ms|reutilisee", lienEnBase(UUID.fromString(id)));
+        assertEquals("ingrédient|" + preparation + "|" + CLAIRE + "|" + rouleGalette + "|ms",
+                sensRetenuEnBase(UUID.fromString(id)));
+        assertEquals(2L, nombre("select count(*) from image"));
+        given().when().get("/api/preparations/" + preparation)
+                .then().statusCode(200).body("nombreMots", equalTo(1)).body("nombreIllustres", equalTo(1));
+    }
+
+    @Test
+    void lImageVerseeDUnCollegueEstRetenueSansCopie() {
+        MotVue farine = mot("farine");
+        UUID deZoe = images.image(UUID.fromString(ZOE), sens(farine, "poudre"), "versee", new byte[] { 1 },
+                new byte[] { 2 });
+
+        String id = ajouter(preparation, "farine")
+                .statusCode(201)
+                .body("image.id", equalTo(deZoe.toString()))
+                .body("image.proprietaireId", equalTo(ZOE))
+                .extract().path("id");
+
+        assertEquals(deZoe + "|" + CLAIRE + "|" + rouleGalette + "|ms|reutilisee", lienEnBase(UUID.fromString(id)));
+        assertEquals(1L, nombre("select count(*) from image"));
+        assertEquals("versee", images.etat(deZoe));
+    }
+
+    @Test
+    void unMotTapeSansSesAccentsArriveAIllustrer() {
+        image(CLAIRE, sens(mot("côte"), "corps"), "ms");
+        image(CLAIRE, sens(mot("côté"), "direction"), "ms");
+
+        ajouter(preparation, "cote")
+                .statusCode(201)
+                .body("forme", equalTo("cote"))
+                .body("sens.libelle", equalTo("à compléter"))
+                .body("illustre", equalTo(false))
+                .body("image", nullValue());
+
+        assertEquals(List.of("cote:1"), motsEnBase(preparation));
+        assertEquals(0L, nombre("select count(*) from lien_image"));
+    }
+
+    @Test
+    void unMotSansImageVisibleArriveAIllustrer() {
+        // Seule une Image privée de Zoé l'illustre : elle n'est jamais proposée à Claire (AD-2).
+        images.image(UUID.fromString(ZOE), sens(mot("loup"), "animal"), "privee", new byte[] { 1 },
+                new byte[] { 2 });
+
+        ajouter(preparation, "loup")
+                .statusCode(201)
+                .body("sens.libelle", equalTo("à compléter"))
+                .body("illustre", equalTo(false))
+                .body("image", nullValue());
+        ajouter(preparation, "galette").statusCode(201).body("illustre", equalTo(false));
+
+        assertEquals(0L, nombre("select count(*) from lien_image"));
+    }
+
+    @Test
+    void uneImageDevenueIndisponibleAvantSonVerrouLaisseLeMotAIllustrer() {
+        MotVue loup = mot("loup");
+        UUID animal = sens(loup, "animal");
+        // Image privée de Zoé : le verrou de lierImageSiPossible la refuse à Claire (AD-2).
+        UUID deZoe = images.image(UUID.fromString(ZOE), animal, "privee", new byte[] { 1 }, new byte[] { 2 });
+        // Classement périmé : il la propose encore, comme lu juste avant qu'elle ne devienne indisponible.
+        QuarkusMock.installMockForType(new ClassementPerime(loup, animal, deZoe), DetectionMots.class);
+
+        ajouter(preparation, "loup")
+                .statusCode(201)
+                .body("forme", equalTo("loup"))
+                // Le Sens de l'Image proposée est retenu : seul le classement périmé pouvait le donner.
+                .body("sens.id", equalTo(animal.toString()))
+                .body("illustre", equalTo(false))
+                .body("image", nullValue());
+
+        assertEquals(List.of("loup:1"), motsEnBase(preparation));
+        assertEquals(0L, nombre("select count(*) from lien_image"));
+    }
+
+    @Test
+    void unMotIllustreDejaPresentNEcritRien() {
+        image(CLAIRE, sens(mot("farine"), "poudre"), "ms");
+        ajouter(preparation, "farine").statusCode(201).body("illustre", equalTo(true));
+        List<Long> avant = nombres();
+
+        refus(preparation, "Farine", 409, "preparation.mot_deja_present");
+
+        assertEquals(avant, nombres());
     }
 
     @Test
@@ -817,8 +944,68 @@ class MotsPreparationResourceTest {
         });
     }
 
+    private MotVue mot(String forme) {
+        return QuarkusTransaction.requiringNew().call(() -> lexique.obtenirOuCreerMot(forme));
+    }
+
+    private UUID sens(MotVue mot, String libelle) {
+        return QuarkusTransaction.requiringNew().call(() -> lexique.obtenirOuCreerSens(mot.id(), libelle, "nom")).id();
+    }
+
+    /** Image libre de ce propriétaire, privée, qui coche cette Section. */
+    private UUID image(String proprietaire, UUID sensId, String section) {
+        UUID image = images.image(UUID.fromString(proprietaire), sensId, "privee", new byte[] { 1 }, new byte[] { 2 });
+        images.classer(image, null, List.of(), List.of(section));
+        return image;
+    }
+
+    /** Lien du Mot de Préparation en base : « image|enseignant|album|section|origine ». */
+    private String lienEnBase(UUID preparationMotId) {
+        return QuarkusTransaction.requiringNew().call(() -> {
+            Object[] ligne = (Object[]) entityManager.createNativeQuery(
+                    "select image_id, enseignant_id, album_id, section, origine from lien_image"
+                            + " where preparation_mot_id = :id")
+                    .setParameter("id", preparationMotId)
+                    .getSingleResult();
+            return ligne[0] + "|" + ligne[1] + "|" + ligne[2] + "|" + ligne[3] + "|" + ligne[4];
+        });
+    }
+
+    /** Nombre de lignes de {@code preparation_mot}, {@code sens_retenu}, {@code lien_image}, {@code image}, {@code sens}. */
+    private List<Long> nombres() {
+        return List.of(nombre("select count(*) from preparation_mot"), nombre("select count(*) from sens_retenu"),
+                nombre("select count(*) from lien_image"), nombre("select count(*) from image"),
+                nombre("select count(*) from sens"));
+    }
+
     private long nombre(String requete) {
         return QuarkusTransaction.requiringNew()
                 .call(() -> ((Number) entityManager.createNativeQuery(requete).getSingleResult()).longValue());
+    }
+
+    /**
+     * Classement périmé (story 2.11, partie 1) : propose une Image que le verrou refusera, pour reproduire une Image
+     * devenue indisponible entre le classement et son verrou. {@code QuarkusMock} exige une instance de la classe du bean.
+     */
+    static class ClassementPerime extends DetectionMots {
+
+        private final MotVue mot;
+        private final UUID sensId;
+        private final UUID imageId;
+
+        ClassementPerime(MotVue mot, UUID sensId, UUID imageId) {
+            this.mot = mot;
+            this.sensId = sensId;
+            this.imageId = imageId;
+        }
+
+        @Override
+        public MotDetecteVue propositions(UUID motId, UUID albumId, Section section, UUID sensFiltre) {
+            SensVue sens = new SensVue(sensId, mot.id(), "animal", null);
+            ImageVue image = new ImageVue(imageId, UUID.fromString(ZOE), EtatImage.PRIVEE, null, false,
+                    TypeImage.IMAGE_LIBRE, false, Versabilite.VERSABLE);
+            return new MotDetecteVue(mot, true, List.of(new SensProposeVue(sens, false)), List.of(),
+                    List.of(new ImageDetecteeVue(image, List.of(), null, new SensProposeVue(sens, false), false)));
+        }
     }
 }

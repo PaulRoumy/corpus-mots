@@ -97,7 +97,8 @@ public class DetectionMots {
         if (enseignant == null || trouves.isEmpty()) {
             return new DetectionVue(forme, List.of());
         }
-        return new DetectionVue(forme, detectes(trouves, albumId, section, enseignant, false, null));
+        return new DetectionVue(forme,
+                detectes(trouves, albumId, section, enseignant, false, null, Lexique.cle(forme)));
     }
 
     /**
@@ -105,7 +106,8 @@ public class DetectionMots {
      * l'Album {@code albumId} et de la Section {@code section} (Panneau de choix d'Image, story 2.7) : ses Sens visibles,
      * ses Albums et ses Images {@link VisibiliteImages#proposable proposables}, classées comme la détection : celles du
      * Sens {@code sensId} seulement s'il est donné (story 2.8), sinon celles de tous ses Sens. La liste des Sens visibles
-     * reste complète. Lecture seule. L'appelant a vérifié que le Mot est celui d'une Préparation de l'enseignant courant.
+     * reste complète. Le Mot est toujours marqué de la forme saisie. Lecture seule. L'appelant a vérifié que le Mot est
+     * celui d'une Préparation de l'enseignant courant, ou celui qu'il ajoute ({@code PreparationsService#ajouterMot}).
      *
      * @throws IllegalArgumentException si le Mot n'existe pas
      */
@@ -118,9 +120,9 @@ public class DetectionMots {
         }
         if (enseignant == null) {
             Mot mot = trouves.get(0);
-            return new MotDetecteVue(new MotVue(mot.id(), mot.forme()), List.of(), List.of(), List.of());
+            return new MotDetecteVue(new MotVue(mot.id(), mot.forme()), true, List.of(), List.of(), List.of());
         }
-        return detectes(trouves, albumId, section, enseignant, true, sensId).get(0);
+        return detectes(trouves, albumId, section, enseignant, true, sensId, null).get(0);
     }
 
     /**
@@ -157,10 +159,11 @@ public class DetectionMots {
      * Calcul commun de la détection et des propositions : pour chacun de ces Mots, par forme, ses Sens visibles, ses
      * Albums et ses Images proposables classées. Un Mot sans Image proposable ni Sens retenu par l'enseignant est omis,
      * sauf si {@code garderTous}. Si {@code sensFiltre} est donné, seules les Images de ce Sens sont montrées ; Sens
-     * visibles et Albums restent complets.
+     * visibles et Albums restent complets. Un Mot est de la forme saisie si sa {@code forme_cle} vaut
+     * {@code cleSaisie}, accents compris (AD-10), ou toujours si {@code cleSaisie} est {@code null}.
      */
     private List<MotDetecteVue> detectes(List<Mot> trouves, UUID albumId, Section section, UUID enseignant,
-            boolean garderTous, UUID sensFiltre) {
+            boolean garderTous, UUID sensFiltre, String cleSaisie) {
         List<UUID> motIds = trouves.stream().map(Mot::id).toList();
         Map<UUID, Sens> sensParId = sens.deMots(motIds).stream()
                 .collect(Collectors.toMap(Sens::id, Function.identity()));
@@ -209,8 +212,8 @@ public class DetectionMots {
                     .filter(image -> sensFiltre == null || sensFiltre.equals(image.sensId()))
                     .map(image -> imageDetectee(image, enseignant, albums, sensParId, dejaUtilisees))
                     .toList();
-            detectes.add(new MotDetecteVue(new MotVue(mot.id(), mot.forme()), sensDuMot, albumsMontres,
-                    imagesMontrees));
+            detectes.add(new MotDetecteVue(new MotVue(mot.id(), mot.forme()),
+                    cleSaisie == null || cleSaisie.equals(mot.formeCle()), sensDuMot, albumsMontres, imagesMontrees));
         }
         return detectes;
     }

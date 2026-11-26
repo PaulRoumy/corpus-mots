@@ -207,10 +207,13 @@ function motDeLAjout(ajout: Ajout): string {
   return ajout.image?.forme ?? ajout.sens?.forme ?? ajout.saisie;
 }
 
-/** « « étalé » ajouté (chute, nom). », ou « « étalé » ajouté (chute). » pour un Sens sans catégorie. */
+/**
+ * « « étalé » ajouté (chute, nom). », ou « « étalé » ajouté (chute). » pour un Sens sans catégorie ; « « étalé » ajouté
+ * avec son image (chute, nom). » quand le back lui a lié la première Image de ce Sens (story 2.11).
+ */
 export function annonceAjoutAvecSens(mot: MotPreparationDto): string {
   const sens = mot.sens.categorie ? `${mot.sens.libelle}, ${mot.sens.categorie}` : mot.sens.libelle;
-  return `« ${mot.forme} » ajouté (${sens}).`;
+  return `« ${mot.forme} » ajouté${mot.image ? ' avec son image' : ''} (${sens}).`;
 }
 
 /** « « citrouille » n'a pas été ajouté. », « « a », « b » n'ont pas été ajoutés. », suivi du message de l'échec. */
@@ -1180,7 +1183,9 @@ export class Preparation {
 
   /**
    * Entrée dans le Champ de saisie rapide : avec une Image choisie dans le Panneau de détection, son Mot est ajouté avec
-   * elle ; sinon la saisie est ajoutée « à illustrer ». L'ajout attend son tour, derrière les précédents.
+   * elle ; sinon la saisie (ou le Mot du Sens choisi) est ajoutée, et c'est le back qui lui lie la première Image
+   * proposée, celle que le panneau met en avant, ou l'ajoute « à illustrer » s'il n'en a aucune (story 2.11) : le
+   * résultat ne dépend pas d'une détection encore attendue. L'ajout attend son tour, derrière les précédents.
    */
   protected ajouterMot(saisie: string): void {
     const panneau = this.panneauDetection();
@@ -1292,10 +1297,10 @@ export class Preparation {
         }
       }
       this.annonces.annoncer(
-        image !== undefined
-          ? `« ${ajoute.forme} » ajouté avec son image.`
-          : sens !== undefined
-            ? annonceAjoutAvecSens(ajoute)
+        sens !== undefined && image === undefined
+          ? annonceAjoutAvecSens(ajoute)
+          : image !== undefined || ajoute.image
+            ? `« ${ajoute.forme} » ajouté avec son image.`
             : `« ${ajoute.forme} » ajouté.`,
       );
       issue?.resoudre();

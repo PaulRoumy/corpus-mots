@@ -527,6 +527,7 @@ describe('Dialogue « Nouvelle préparation »', () => {
     expect(volet()).toBeNull();
     expect(champAlbum().value).toBe('La Roule Galette');
     expect(document.activeElement).toBe(champAlbum());
+    expect(options()).toEqual([]);
     expect(etiquettes()).toContain('Module (facultatif)');
     expect(bouton('Créer').disabled).toBe(false);
     bouton('Annuler').click();
@@ -568,6 +569,8 @@ describe('Dialogue « Nouvelle préparation »', () => {
     expect(volet()).toBeNull();
     expect(champAlbum().value).toBe('La Moufle');
     expect(document.activeElement).toBe(champAlbum());
+    // Story 2.11 (écart E-2) : la liste « Aucun album trouvé » de la recherche ne se rouvre pas.
+    expect(options()).toEqual([]);
     expect(bouton('Créer').disabled).toBe(false);
     bouton('Créer').click();
     const preparation = serveur.expectOne({ method: 'POST', url: '/api/preparations' });

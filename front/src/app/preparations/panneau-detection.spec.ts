@@ -43,6 +43,7 @@ function mot(forme: string, modifications: Partial<DetectionMotDto> = {}): Detec
     motId: `mot-${forme}`,
     forme,
     dejaDansLaPreparation: false,
+    formeSaisie: true,
     sens: [ACOMPLETER],
     albums: [],
     images: [],
@@ -266,6 +267,7 @@ describe('PanneauDetection', () => {
       mots: [
         mot('four', {
           dejaDansLaPreparation: true,
+          formeSaisie: true,
           albums: [{ id: 'a1', titre: 'La petite poule rousse' }],
         }),
       ],
@@ -289,8 +291,12 @@ describe('PanneauDetection', () => {
     serveur.expectOne(url('cote')).flush({
       forme: 'cote',
       mots: [
-        mot('côte', { sens: [animal, mechant], images: [image('i1', { sens: mechant })] }),
-        mot('côté', { images: [image('i2')] }),
+        mot('côte', {
+          formeSaisie: false,
+          sens: [animal, mechant],
+          images: [image('i1', { sens: mechant })],
+        }),
+        mot('côté', { formeSaisie: false, images: [image('i2')] }),
       ],
     });
     await stabiliser();
@@ -306,7 +312,9 @@ describe('PanneauDetection', () => {
     ]);
     expect(textes('.detection__puce')).toEqual(['Tous', 'animal (nom)', 'méchant']);
     expect(textes('.vignette__sens')).toEqual(['méchant']);
-    expect(racine.querySelectorAll('.vignette--premiere')).toHaveLength(1);
+    // Story 2.11 : « cote » n'est exactement ni « côte » ni « côté » : l'Entrée seule n'en retiendra aucune Image, aucune
+    // n'est mise en avant.
+    expect(racine.querySelectorAll('.vignette--premiere')).toHaveLength(0);
     expect(textes('.vignette__origine')).toEqual(['vous', 'vous']);
   });
 
@@ -621,6 +629,68 @@ describe('PanneauDetection', () => {
       expect(panneau().choixSens()).toBeNull();
       expect(vignettes()).toEqual(['i1', 'i2', 'i3']);
       expect(racine.querySelector('.vignette--premiere')?.id).toContain('i1');
+      await attendreSuggestions();
+    });
+
+    it('story 2.11 : la mise en avant suit le Sens choisi, comme l’Image que l’Entrée fera retenir', async () => {
+      await afficher(ETALE);
+      expect(racine.querySelector('.vignette--premiere')?.id).toContain('i1');
+
+      await choisir('chute (nom)');
+      servirMiniatures();
+      await stabiliser();
+
+      expect(panneau().choix()).toBeNull();
+      expect(racine.querySelectorAll('.vignette--premiere')).toHaveLength(1);
+      expect(racine.querySelector('.vignette--premiere')?.id).toContain('i2');
+      await attendreSuggestions();
+    });
+
+    it('story 2.11 : rien n’est mis en avant pour un Mot déjà dans la préparation (Entrée serait refusée)', async () => {
+      await afficher(
+        {
+          forme: 'farine',
+          mots: [mot('farine', { dejaDansLaPreparation: true, images: [image('i1')] })],
+        },
+        'farine',
+      );
+
+      expect(vignettes()).toEqual(['i1']);
+      expect(racine.querySelector('.vignette--premiere')).toBeNull();
+      await attendreSuggestions();
+    });
+
+    it('story 2.11 : rien n’est mis en avant tant que la détection d’une nouvelle saisie est attendue', async () => {
+      await afficher(
+        { forme: 'farine', mots: [mot('farine', { images: [image('i1')] })] },
+        'farine',
+      );
+      expect(racine.querySelector('.vignette--premiere')?.id).toContain('i1');
+
+      await taper('farines');
+      serveur.expectOne(url('farines'));
+
+      expect(racine.querySelector('.vignette--premiere')).toBeNull();
+      await attendreSuggestions();
+    });
+
+    it('story 2.11 : seule la première Image du Mot exactement saisi est mise en avant', async () => {
+      await afficher(
+        {
+          forme: 'cote',
+          mots: [
+            mot('côte', { formeSaisie: false, images: [image('i1')] }),
+            mot('cote', { images: [image('i2'), image('i3')] }),
+          ],
+        },
+        'cote',
+      );
+
+      expect(racine.querySelectorAll('.vignette--premiere')).toHaveLength(1);
+      expect(racine.querySelector('.vignette--premiere')?.id).toContain('i2');
+      // ↓ parcourt toujours les Images de tous les Mots, dans l'ordre du back.
+      panneau().naviguer('suivant');
+      expect(panneau().choix()?.imageId).toBe('i1');
       await attendreSuggestions();
     });
 

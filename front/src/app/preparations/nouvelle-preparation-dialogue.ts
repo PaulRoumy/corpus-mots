@@ -13,7 +13,7 @@ import {
 } from '@angular/core';
 import { takeUntilDestroyed, toSignal } from '@angular/core/rxjs-interop';
 import { FormControl, ReactiveFormsModule } from '@angular/forms';
-import { MatAutocompleteModule } from '@angular/material/autocomplete';
+import { MatAutocompleteModule, MatAutocompleteTrigger } from '@angular/material/autocomplete';
 import { MatButtonModule } from '@angular/material/button';
 import { MatButtonToggleModule } from '@angular/material/button-toggle';
 import { MatDialog, MatDialogModule, MatDialogRef } from '@angular/material/dialog';
@@ -395,6 +395,7 @@ export class NouvellePreparationDialogue implements OnInit {
   protected readonly optionNouveauModule = OPTION_NOUVEAU_MODULE;
 
   private readonly champAlbum = viewChild<ElementRef<HTMLInputElement>>('champAlbum');
+  private readonly declencheurAlbum = viewChild(MatAutocompleteTrigger);
   private readonly champTitre = viewChild<ElementRef<HTMLInputElement>>('champTitre');
   private readonly listeModule = viewChild<MatSelect>('listeModule');
 
@@ -777,11 +778,16 @@ export class NouvellePreparationDialogue implements OnInit {
     }
   }
 
-  /** Choisit un Album au titre proche à la place d'en créer un : le volet se replie. */
+  /**
+   * Choisit un Album au titre proche, ou l'Album qui vient d'être créé : le volet se replie et le focus revient au champ
+   * Album, sans rouvrir la liste de la recherche précédente (« Aucun album trouvé », écart E-2 de la story 2.11).
+   */
   protected choisirAlbumProche(album: AlbumDto): void {
     this.fermerVolet();
     this.rechercheAlbum.setValue(album, { emitEvent: false });
     this.choisirAlbum(album);
+    // Après le focus que `fermerVolet` rend au champ, qui ouvre l'autocomplete.
+    afterNextRender(() => this.declencheurAlbum()?.closePanel(), { injector: this.injecteur });
   }
 
   /** Crée l'Album et le choisit ; un doublon (409) affiche le message et recharge les titres proches. */

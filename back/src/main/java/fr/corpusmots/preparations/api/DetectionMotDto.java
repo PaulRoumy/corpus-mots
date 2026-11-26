@@ -11,6 +11,10 @@ public record DetectionMotDto(
         @Schema(required = true, description = "Première forme saisie dans l'école, sans article") String forme,
         @Schema(required = true, description = "Vrai si le Mot figure déjà dans cette Préparation")
         boolean dejaDansLaPreparation,
+        @Schema(required = true, description = "Vrai pour le Mot exactement saisi (même forme sans tenir compte de"
+                + " la casse, accents comptés) : le seul dont l'Entrée seule retient la première Image ; toujours vrai"
+                + " dans les propositions d'un Mot de la Préparation")
+        boolean formeSaisie,
         @Schema(required = true, description = "Sens visibles, par libellé, « à compléter » en dernier")
         List<DetectionSensDto> sens,
         @Schema(required = true, description = "Albums d'origine des Images proposables et Albums des Préparations"
@@ -20,7 +24,7 @@ public record DetectionMotDto(
         List<DetectionImageDto> images) {
 
     static DetectionMotDto de(MotDetecteVue vue, boolean dejaDansLaPreparation) {
-        return new DetectionMotDto(vue.mot().id(), vue.mot().forme(), dejaDansLaPreparation,
+        return new DetectionMotDto(vue.mot().id(), vue.mot().forme(), dejaDansLaPreparation, vue.formeSaisie(),
                 vue.sens().stream().map(DetectionSensDto::de).toList(),
                 vue.albums().stream().map(DetectionAlbumDto::de).toList(),
                 vue.images().stream().map(DetectionImageDto::de).toList());

@@ -60,6 +60,7 @@ const PROPOSITIONS: DetectionMotDto = {
   motId: 'm1',
   forme: 'avocat',
   dejaDansLaPreparation: true,
+  formeSaisie: true,
   sens: [FRUIT, METIER],
   albums: [],
   images: [

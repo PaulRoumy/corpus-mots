@@ -258,6 +258,7 @@ class SensPreparationResourceTest {
                 .body("sens", hasSize(2));
         given().when().get("/api/preparations/" + preparation + "/mots/" + motPreparation + "/propositions")
                 .then().statusCode(200)
+                .body("formeSaisie", equalTo(true))
                 .body("images", hasSize(2));
         assertEquals(avant, nombres());
     }
@@ -376,11 +377,13 @@ class SensPreparationResourceTest {
     // --- Sens dans le Panneau de détection (story 2.8, partie 3) : POST /preparations/{id}/mots ---
 
     @Test
-    void ajouterAvecUnSensVisibleLeRetient() {
+    void ajouterAvecUnSensVisibleLeRetientAvecSaPremiereImage() {
+        // Story 2.11 : la première Image du Sens choisi est retenue, jamais celle d'un autre Sens.
         MotVue etale = mot("étalé");
-        sens(etale, "cuisine", "adjectif");
+        UUID cuisine = sens(etale, "cuisine", "adjectif");
         UUID chute = sens(etale, "chute", "nom");
-        image(PAUL, chute, "privee");
+        image(PAUL, cuisine, "privee");
+        UUID x = image(PAUL, chute, "privee");
         long sensAvant = nombre("select count(*) from sens");
 
         String motPreparation = ajouterAvec(Map.of("saisie", "étalé", "sensId", chute.toString()))
@@ -388,12 +391,49 @@ class SensPreparationResourceTest {
                 .body("forme", equalTo("étalé"))
                 .body("sens.id", equalTo(chute.toString()))
                 .body("sens.libelle", equalTo("chute"))
-                .body("illustre", equalTo(false))
+                .body("illustre", equalTo(true))
+                .body("image.id", equalTo(x.toString()))
                 .extract().path("id");
 
         assertEquals(chute, sensRetenu(UUID.fromString(motPreparation)));
         assertEquals(sensAvant, nombre("select count(*) from sens"));
-        assertEquals(0L, nombre("select count(*) from lien_image"));
+        assertEquals(1L, nombre("select count(*) from lien_image"));
+        assertEquals(1L, nombre("select count(*) from lien_image where image_id = '" + x
+                + "' and origine = 'reutilisee' and preparation_mot_id = '" + motPreparation + "'"));
+    }
+
+    @Test
+    void ajouterAvecUnSensVisibleSansImageLeRetientAIllustrer() {
+        MotVue avocat = mot("avocat");
+        image(PAUL, sens(avocat, "fruit", "nom"), "privee");
+        UUID metier = sens(avocat, "métier", "nom");
+        images.sensRetenu(metier, UUID.fromString(PAUL), pouleRousse);
+
+        String motPreparation = ajouterAvec(Map.of("saisie", "avocat", "sensId", metier.toString()))
+                .statusCode(201)
+                .body("sens.id", equalTo(metier.toString()))
+                .body("illustre", equalTo(false))
+                .body("image", nullValue())
+                .extract().path("id");
+
+        assertEquals(metier, sensRetenu(UUID.fromString(motPreparation)));
+        assertNull(lienEnBase(UUID.fromString(motPreparation)));
+    }
+
+    @Test
+    void ajouterAvecUnNouveauSensDejaIllustreRetientSaPremiereImage() {
+        MotVue etale = mot("étalé");
+        image(PAUL, sens(etale, "cuisine", "adjectif"), "privee");
+        UUID chute = sens(etale, "chute", "nom");
+        UUID x = image(PAUL, chute, "privee");
+
+        ajouterAvec(Map.of("saisie", "étalé", "motId", etale.id().toString(),
+                "nouveauSens", Map.of("libelle", " Chute ", "categorie", "nom")))
+                .statusCode(201)
+                .body("sens.id", equalTo(chute.toString()))
+                .body("illustre", equalTo(true))
+                .body("image.id", equalTo(x.toString()));
+        assertEquals(1L, nombre("select count(*) from lien_image where origine = 'reutilisee'"));
     }
 
     @Test

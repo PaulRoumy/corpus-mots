@@ -1789,6 +1789,7 @@ describe('Preparation (En-tête)', () => {
             motId: 'm1',
             forme: 'farine',
             dejaDansLaPreparation: false,
+            formeSaisie: true,
             sens: [{ id: 's1', libelle: 'à compléter', categorie: null, aCompleter: true }],
             albums: [],
             images: [],
@@ -1998,6 +1999,7 @@ describe('Preparation (En-tête)', () => {
         motId: `mot-${forme}`,
         forme,
         dejaDansLaPreparation: false,
+        formeSaisie: true,
         sens: [{ id: `sens-${forme}`, libelle: forme, categorie: 'nom', aCompleter: false }],
         albums: [],
         images: imageIds.map((id) => ({
@@ -2139,10 +2141,44 @@ describe('Preparation (En-tête)', () => {
       expect(document.activeElement).toBe(champSaisie());
     });
 
-    it('Entrée sans choix : le Mot est ajouté « à illustrer », comme avant', async () => {
+    it('story 2.11 : Entrée sans choix envoie la saisie, le back la rend illustrée par l’Image mise en avant', async () => {
       await ouvrir();
       champSaisie().focus();
-      await detecter('farine', [motDetecte('farine', ['i1'])]);
+      await detecter('farine', [motDetecte('farine', ['i1', 'i2'])]);
+      expect(options()[0].classList).toContain('vignette--premiere');
+
+      await entree();
+
+      serveur.expectNone(URL_REUTILISATION);
+      const requete = serveur.expectOne(URL_MOTS);
+      expect(requete.request.body).toEqual({ saisie: 'farine' });
+      requete.flush(motIllustre('farine', 1, 'i1'));
+      await stabiliser();
+      expect(cartes()).toEqual(['farine']);
+      expect(texte('.entete__compteur')).toBe('1 mot, 1 déjà illustré');
+      expect(texte('p[aria-live="polite"]')).toBe('« farine » ajouté avec son image.');
+    });
+
+    it('story 2.11 : Entrée avant la réponse de la détection, le back décide : le Mot arrive illustré', async () => {
+      await ouvrir();
+      champSaisie().focus();
+      champSaisie().value = 'farine';
+      champSaisie().dispatchEvent(new Event('input'));
+      await fixture.whenStable();
+
+      await entree();
+
+      serveur.expectNone(URL_REUTILISATION);
+      serveur.expectOne(URL_MOTS).flush(motIllustre('farine', 1, 'i1'));
+      await stabiliser();
+      expect(cartes()).toEqual(['farine']);
+      expect(texte('p[aria-live="polite"]')).toBe('« farine » ajouté avec son image.');
+    });
+
+    it('Entrée sans choix pour un Mot sans Image visible : il arrive « à illustrer »', async () => {
+      await ouvrir();
+      champSaisie().focus();
+      await detecter('farine', [motDetecte('farine', [])]);
 
       await entree();
 
@@ -2168,7 +2204,7 @@ describe('Preparation (En-tête)', () => {
       expect(document.activeElement).toBe(champSaisie());
     });
 
-    it('↑ sur la première et Échap retirent le choix ; Entrée ajoute alors « à illustrer »', async () => {
+    it('↑ sur la première et Échap retirent le choix ; Entrée envoie alors la saisie seule', async () => {
       await ouvrir();
       champSaisie().focus();
       await detecter('farine', [motDetecte('farine', ['i1', 'i2'])]);
@@ -4116,6 +4152,7 @@ describe('Preparation (En-tête)', () => {
         motId: mot.motId,
         forme,
         dejaDansLaPreparation: true,
+        formeSaisie: true,
         sens: [],
         albums: [],
         images: [],
@@ -4554,6 +4591,7 @@ describe('Preparation (En-tête)', () => {
       motId: FARINE.motId,
       forme: 'farine',
       dejaDansLaPreparation: true,
+      formeSaisie: true,
       sens: [{ id: FARINE.sens.id, libelle: 'farine', categorie: 'nom', aCompleter: false }],
       albums: [],
       images: [proposition(IMAGE_Y), proposition(IMAGE_X)],
@@ -4644,6 +4682,7 @@ describe('Preparation (En-tête)', () => {
         motId: GALETTE.motId,
         forme: 'galette',
         dejaDansLaPreparation: true,
+        formeSaisie: true,
         sens: [],
         albums: [],
         images: [],
@@ -6216,6 +6255,7 @@ describe('Preparation (Carte d’identité sous 600 px)', () => {
       motId: CITROUILLE.motId,
       forme: 'citrouille',
       dejaDansLaPreparation: true,
+      formeSaisie: true,
       sens: [],
       albums: [],
       images: [],
@@ -6300,6 +6340,23 @@ describe('Libellés', () => {
     expect(
       annonceAjoutAvecSens({ ...mot, sens: { ...mot.sens, libelle: 'chute', categorie: 'nom' } }),
     ).toBe('« étalé » ajouté (chute, nom).');
+    // Story 2.11 : le back a lié la première Image du Sens choisi.
+    expect(
+      annonceAjoutAvecSens({
+        ...mot,
+        sens: { ...mot.sens, libelle: 'chute', categorie: 'nom' },
+        illustre: true,
+        image: {
+          id: 'i1',
+          proprietaireId: 'p',
+          etat: 'privee',
+          aRemplacer: null,
+          reutilisable: true,
+          typeImage: 'image_libre',
+          aCompleter: false,
+        },
+      }),
+    ).toBe('« étalé » ajouté avec son image (chute, nom).');
   });
 
   it('libellé des Mots déjà illustrés', () => {

@@ -527,6 +527,7 @@ components:
       - motId
       - forme
       - dejaDansLaPreparation
+      - formeSaisie
       - sens
       - albums
       - images
@@ -541,6 +542,12 @@ components:
         dejaDansLaPreparation:
           type: boolean
           description: Vrai si le Mot figure déjà dans cette Préparation
+        formeSaisie:
+          type: boolean
+          description: "Vrai pour le Mot exactement saisi (même forme sans tenir compte\
+            \ de la casse, accents comptés) : le seul dont l'Entrée seule retient\
+            \ la première Image ; toujours vrai dans les propositions d'un Mot de\
+            \ la Préparation"
         sens:
           type: array
           items:

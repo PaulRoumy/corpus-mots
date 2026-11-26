@@ -260,3 +260,9 @@
 - source_spec: `docs/realisation/spec-3-3-2-verser-depuis-la-carte-identite.md`
   summary: Badge d'état « versée » écrit trois fois (Carte d'identité, Carte de Mot, vignette de la Banque) : extraire un composant `app-badge-etat` (UX-DR-10) avec les badges « image retirée de la banque » et « à remplacer » de la story 3.5.
   evidence: Revue de la story 3.3 partie 2, ligne 13 du journal de tri.
+- source_spec: none
+  summary: Story 2.11 partie 2 — une Image créée depuis une Préparation (pictogramme ARASAAC, « Téléverser » depuis la carte, Panneau de choix, « Ajouter une image » ouvert pour un Mot) reçoit d'office la Section de la Préparation ; sans Préparation, aucune Section d'office.
+  evidence: Découpage de la story 2.11 en trois parties (choix de Paul, 2026-11-26) ; livrable back indépendant de la partie 1.
+- source_spec: none
+  summary: Story 2.11 partie 3 — Carte « à illustrer » sans doublon : Images existantes classées d'abord avec la Marque « déjà utilisée », colonne `arasaac_id` par nouvelle migration remplie depuis `source`, pictogramme ARASAAC déjà possédé marqué et réutilisé (lien `reutilisee`, rien de téléchargé ni créé).
+  evidence: Découpage de la story 2.11 en trois parties (choix de Paul, 2026-11-26) ; livrable back + front indépendant, le plus gros.
