@@ -30,13 +30,16 @@ public record DetectionImageDto(
         @Schema(required = true, description = "Sens illustré par l'Image") DetectionSensDto sens,
         @Schema(required = true, description = "Vrai si l'enseignant connecté a déjà lié cette Image dans l'une de"
                 + " ses Préparations")
-        boolean dejaUtilisee) {
+        boolean dejaUtilisee,
+        @Schema(nullable = true, description = "Identifiant du pictogramme ARASAAC dont l'Image a été créée, null pour"
+                + " une autre Image")
+        Long idArasaac) {
 
     static DetectionImageDto de(ImageDetecteeVue vue) {
         ImageVue image = vue.image();
         return new DetectionImageDto(image.id(), image.proprietaireId(), image.etat().valeur(), image.aRemplacer(),
                 image.reutilisable(), image.typeImage().valeur(), image.aCompleter(),
                 vue.sections().stream().map(Section::valeur).toList(), DetectionAlbumDto.de(vue.albumOrigine()),
-                DetectionSensDto.de(vue.sens()), vue.dejaUtilisee());
+                DetectionSensDto.de(vue.sens()), vue.dejaUtilisee(), vue.idArasaac());
     }
 }

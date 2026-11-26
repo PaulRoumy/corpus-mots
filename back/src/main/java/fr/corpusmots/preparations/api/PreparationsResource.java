@@ -4,6 +4,7 @@ import fr.corpusmots.commun.api.ErreurMetier;
 import fr.corpusmots.commun.service.Pagination;
 import fr.corpusmots.commun.service.Section;
 import fr.corpusmots.preparations.service.AjouterMotCommande;
+import fr.corpusmots.preparations.service.MotPreparationVue;
 import fr.corpusmots.preparations.service.PreparationsService;
 import fr.corpusmots.preparations.service.TeleverserImageMotCommande;
 import fr.corpusmots.vocabulaire.service.CategorieGrammaticale;
@@ -35,6 +36,7 @@ import org.eclipse.microprofile.openapi.annotations.parameters.Parameter;
 import org.eclipse.microprofile.openapi.annotations.parameters.RequestBody;
 import org.eclipse.microprofile.openapi.annotations.responses.APIResponse;
 import org.jboss.resteasy.reactive.ResponseStatus;
+import org.jboss.resteasy.reactive.RestResponse;
 
 /**
  * Préparations de l'enseignant connecté (FR-6). La Préparation d'un collègue répond {@code 404 ressource.introuvable},
@@ -311,21 +313,26 @@ public class PreparationsResource {
         return MotPreparationDto.de(preparations.televerserImage(id, motPreparationId,
                 new TeleverserImageMotCommande(prepare.fichier(), prepare.typeImage(), prepare.licence(),
                         televersement.source, televersement.auteur,
-                        Boolean.TRUE.equals(televersement.remplacer))));
+                        Boolean.TRUE.equals(televersement.remplacer), null)));
     }
 
     @POST
     @Path("/{id}/mots/{motPreparationId}/pictogramme")
     @Consumes(MediaType.APPLICATION_JSON)
-    @ResponseStatus(201)
     @Operation(operationId = "choisirPictogrammeMotPreparation",
-            summary = "Illustrer un Mot d'une Préparation de l'enseignant connecté avec un pictogramme ARASAAC,"
-                    + " téléchargé par le back")
+            summary = "Illustrer un Mot d'une Préparation de l'enseignant connecté avec un pictogramme ARASAAC :"
+                    + " l'Image que l'enseignant possède déjà pour ce pictogramme et le Sens retenu est liée, sinon"
+                    + " le back télécharge le pictogramme et crée l'Image")
+    @APIResponse(responseCode = "200",
+            description = "Image déjà possédée par l'enseignant pour ce pictogramme et ce Sens, liée au Mot (origine"
+                    + " reutilisee), sans téléchargement ni création",
+            content = @Content(mediaType = MediaType.APPLICATION_JSON,
+                    schema = @Schema(implementation = MotPreparationDto.class)))
     @APIResponse(responseCode = "201",
             description = "Image créée (privee, image_libre, licence ARASAAC), réduite et liée au Mot (origine nouvelle)",
             content = @Content(mediaType = MediaType.APPLICATION_JSON,
                     schema = @Schema(implementation = MotPreparationDto.class)))
-    public MotPreparationDto choisirPictogramme(@PathParam("id") UUID id,
+    public RestResponse<MotPreparationDto> choisirPictogramme(@PathParam("id") UUID id,
             @PathParam("motPreparationId") UUID motPreparationId,
             @RequestBody(required = true) PictogrammeMotPreparationDto choix) {
         if (choix == null || choix.idArasaac() == null || choix.idArasaac() <= 0) {
@@ -333,11 +340,18 @@ public class PreparationsResource {
         }
         // Préparation d'un collègue (404) ou Mot déjà illustré (409) : refus avant ARASAAC (lecture sans verrou).
         preparations.verifierMot(id, motPreparationId);
+        // Pictogramme déjà possédé pour ce Mot et ce Sens (story 2.11) : l'Image existante est liée, sans appel ARASAAC.
+        Optional<MotPreparationVue> reutilise =
+                preparations.lierImagePossedeeDuPictogramme(id, motPreparationId, choix.idArasaac());
+        if (reutilise.isPresent()) {
+            return RestResponse.ok(MotPreparationDto.de(reutilise.get()));
+        }
         // Téléchargement et réduction hors transaction (AD-9, AD-17), puis création et lien dans une transaction.
         PictogrammeTelechargeVue pictogramme = suggestionsArasaac.telecharger(choix.idArasaac());
-        return MotPreparationDto.de(preparations.televerserImage(id, motPreparationId,
-                new TeleverserImageMotCommande(pictogramme.fichier(), pictogramme.typeImage(), pictogramme.licence(),
-                        pictogramme.source(), pictogramme.auteur(), false)));
+        return RestResponse.status(RestResponse.Status.CREATED, MotPreparationDto.de(preparations.televerserImage(id,
+                motPreparationId, new TeleverserImageMotCommande(pictogramme.fichier(), pictogramme.typeImage(),
+                        pictogramme.licence(), pictogramme.source(), pictogramme.auteur(), false,
+                        pictogramme.arasaacId()))));
     }
 
     @GET

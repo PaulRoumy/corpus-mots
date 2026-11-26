@@ -200,7 +200,7 @@ class ImagesMotsPreparationResourceTest {
 
         ErreurMetier erreur = assertThrows(ErreurMetier.class, () -> images.televerser(
                 new TeleverserImageCommande(fichier, sensRetenu(citrouille), TypeImage.IMAGE_ALBUM, null, null, null,
-                        null, null)));
+                        null, null, null)));
 
         assertEquals(400, erreur.status());
         assertEquals("image.album_requis", erreur.code());
@@ -213,7 +213,7 @@ class ImagesMotsPreparationResourceTest {
 
         ErreurMetier erreur = assertThrows(ErreurMetier.class, () -> images.televerser(
                 new TeleverserImageCommande(fichier, sensRetenu(citrouille), TypeImage.IMAGE_ALBUM, null, null, null,
-                        UUID.randomUUID(), null)));
+                        UUID.randomUUID(), null, null)));
 
         assertEquals(400, erreur.status());
         assertEquals("image.album_introuvable", erreur.code());
@@ -226,7 +226,7 @@ class ImagesMotsPreparationResourceTest {
 
         UUID image = QuarkusTransaction.requiringNew().call(() -> images.televerser(
                 new TeleverserImageCommande(fichier, sensRetenu(citrouille), TypeImage.PHOTO_PERSONNELLE, null, null,
-                        null, UUID.randomUUID(), null)).id());
+                        null, UUID.randomUUID(), null, null)).id());
 
         assertTrue(ligneImage(image).startsWith("privee|photo_personnelle|droits_auteur_enseignant|null|null|null|"));
     }

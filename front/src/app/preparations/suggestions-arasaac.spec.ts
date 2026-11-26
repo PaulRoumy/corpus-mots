@@ -3,6 +3,7 @@ import { HttpTestingController, provideHttpClientTesting } from '@angular/common
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { MotPreparationDto } from '../api/models/mot-preparation-dto';
 import { SuggestionArasaacDto } from '../api/models/suggestion-arasaac-dto';
+import { provideIcones } from '../commun/icones';
 import { SuggestionsArasaac } from './suggestions-arasaac';
 
 describe('SuggestionsArasaac', () => {
@@ -36,7 +37,7 @@ describe('SuggestionsArasaac', () => {
     URL.createObjectURL = vi.fn((fichier: Blob) => `blob:http://localhost/${fichier.size}`);
     URL.revokeObjectURL = vi.fn();
     TestBed.configureTestingModule({
-      providers: [provideHttpClient(), provideHttpClientTesting()],
+      providers: [provideHttpClient(), provideHttpClientTesting(), provideIcones()],
     });
     serveur = TestBed.inject(HttpTestingController);
     fixture = TestBed.createComponent(SuggestionsArasaac);
@@ -300,6 +301,45 @@ describe('SuggestionsArasaac', () => {
       requete.flush(ILLUSTRE, { status: 201, statusText: 'Created' });
       await stabiliser();
       expect(illustres).toEqual([ILLUSTRE]);
+    });
+
+    it('pictogramme déjà possédé (story 2.11) : Marque « déjà utilisée » sous sa seule vignette, et dans son nom', async () => {
+      expect(racine.querySelector('.suggestions__marque')).toBeNull();
+
+      fixture.componentRef.setInput('idsDejaPossedes', new Set([37172]));
+      await stabiliser();
+
+      const marques = [...racine.querySelectorAll('.suggestions__element')].map(
+        (element) => element.querySelector('.suggestions__marque')?.textContent?.trim() ?? null,
+      );
+      expect(marques).toEqual([null, 'déjà utilisée', null]);
+      expect(
+        racine.querySelector('.suggestions__marque mat-icon[svgIcon="historique"]'),
+      ).not.toBeNull();
+      expect(boutons().map((bouton) => bouton.getAttribute('aria-label'))).toEqual([
+        'Illustrer « citrouille » avec le pictogramme « citrouille »',
+        'Illustrer « citrouille » avec le pictogramme « potiron », déjà utilisée',
+        'Illustrer « citrouille » avec le pictogramme « courge »',
+      ]);
+      // La recherche ARASAAC n'est pas relancée.
+      serveur.expectNone(URL_CITROUILLE);
+    });
+
+    it('pictogramme déjà possédé : même requête, le `200` du back (Image réutilisée) sort par `illustre`', async () => {
+      const illustres: MotPreparationDto[] = [];
+      fixture.componentInstance.illustre.subscribe((mot) => illustres.push(mot));
+      fixture.componentRef.setInput('idsDejaPossedes', new Set([2459]));
+      await stabiliser();
+
+      boutons()[0].click();
+      await stabiliser();
+      const requete = serveur.expectOne(URL_PICTOGRAMME);
+      expect(requete.request.body).toEqual({ idArasaac: 2459 });
+      requete.flush(ILLUSTRE, { status: 200, statusText: 'OK' });
+      await stabiliser();
+
+      expect(illustres).toEqual([ILLUSTRE]);
+      expect(boutons().some((bouton) => bouton.hasAttribute('aria-disabled'))).toBe(false);
     });
 
     it('409 « mot déjà illustré » : sortie `aRecharger` avec le message traduit, aucun message dans la Carte', async () => {

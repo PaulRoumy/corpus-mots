@@ -13,6 +13,7 @@ import {
   untracked,
 } from '@angular/core';
 import { MatButtonModule } from '@angular/material/button';
+import { MatIconModule } from '@angular/material/icon';
 import { Api } from '../api/api';
 import { pictogrammeArasaac } from '../api/fn/arasaac-resource/pictogramme-arasaac';
 import { suggestionsArasaac } from '../api/fn/arasaac-resource/suggestions-arasaac';
@@ -44,9 +45,9 @@ interface EchecChoix {
 
 /**
  * Codes d'un Mot changé ailleurs (autre onglet) : illustré entre-temps, ou retiré (Mot ou Préparation introuvable) ;
- * la page recharge alors la Préparation.
+ * la page recharge alors la Préparation. Partagés avec le choix d'une Image existante de la Carte « à illustrer ».
  */
-const CODES_A_RECHARGER: ReadonlySet<string> = new Set([
+export const CODES_A_RECHARGER: ReadonlySet<string> = new Set([
   'preparation.mot_deja_illustre',
   'ressource.introuvable',
 ]);
@@ -70,10 +71,16 @@ export const MESSAGE_AUCUN_PICTOGRAMME = 'Aucun pictogramme ARASAAC pour ce mot.
  * actifs ; échec réseau : même message avec « Réessayer », qui renvoie la même requête. Mot illustré entre-temps
  * (`409 preparation.mot_deja_illustre`) ou retiré (`404 ressource.introuvable`) : sortie `aRecharger` avec le message
  * traduit, la page l'affiche et recharge la Préparation.
+ *
+ * Pictogramme déjà possédé (story 2.11, partie 3) : une suggestion dont l'identifiant figure dans `idsDejaPossedes`
+ * (pictogrammes dont l'enseignant possède déjà l'Image pour ce Mot et son Sens retenu, fournis par la Carte) porte la
+ * Marque « déjà utilisée », avec le rendu de `VignetteProposition`, et son nom accessible le dit. Le choix envoie la même
+ * requête : c'est le back qui lie l'Image existante (`200`) ou crée l'Image (`201`), et le Mot renvoyé sort par
+ * `illustre` dans les deux cas.
  */
 @Component({
   selector: 'app-suggestions-arasaac',
-  imports: [ImageSecurisee, MatButtonModule, NgTemplateOutlet, Squelette],
+  imports: [ImageSecurisee, MatButtonModule, MatIconModule, NgTemplateOutlet, Squelette],
   changeDetection: ChangeDetectionStrategy.OnPush,
   styleUrl: './suggestions-arasaac.scss',
   template: `
@@ -86,7 +93,7 @@ export const MESSAGE_AUCUN_PICTOGRAMME = 'Aucun pictogramme ARASAAC pour ce mot.
         <ul class="suggestions__liste" [attr.aria-busy]="choixEnCours() !== null ? 'true' : null">
           @for (suggestion of suggestions(); track suggestion.idArasaac) {
             @if (choisissable()) {
-              <li>
+              <li class="suggestions__element">
                 <button
                   class="suggestions__vignette"
                   type="button"
@@ -100,6 +107,12 @@ export const MESSAGE_AUCUN_PICTOGRAMME = 'Aucun pictogramme ARASAAC pour ce mot.
                     *ngTemplateOutlet="pictogramme; context: { $implicit: suggestion }"
                   />
                 </button>
+                @if (idsDejaPossedes().has(suggestion.idArasaac)) {
+                  <span class="suggestions__marque" aria-hidden="true">
+                    <mat-icon svgIcon="historique" />
+                    déjà utilisée
+                  </span>
+                }
               </li>
             } @else {
               <li class="suggestions__vignette">
@@ -152,6 +165,11 @@ export class SuggestionsArasaac {
    */
   readonly preparationId = input<string | null>(null);
   readonly motPreparationId = input<string | null>(null);
+  /**
+   * Identifiants ARASAAC des pictogrammes dont l'enseignant possède déjà l'Image pour ce Mot et son Sens retenu :
+   * leurs suggestions portent la Marque « déjà utilisée ».
+   */
+  readonly idsDejaPossedes = input<ReadonlySet<number>>(new Set());
   /** Mot illustré par le pictogramme choisi, renvoyé par le back. */
   readonly illustre = output<MotPreparationDto>();
   /** Mot illustré ou retiré entre-temps (autre onglet), avec le message traduit : la page recharge la Préparation. */
@@ -219,9 +237,10 @@ export class SuggestionsArasaac {
     return etat.nom === 'erreur' ? etat.message : MESSAGE_AUCUN_PICTOGRAMME;
   }
 
-  /** « Illustrer « renard » avec le pictogramme « renard » ». */
+  /** « Illustrer « renard » avec le pictogramme « renard » », suivi de « , déjà utilisée » s'il est déjà possédé. */
   protected nomAccessible(suggestion: Suggestion): string {
-    return `Illustrer « ${this.mot()} » avec le pictogramme « ${suggestion.motCle} »`;
+    const marque = this.idsDejaPossedes().has(suggestion.idArasaac) ? ', déjà utilisée' : '';
+    return `Illustrer « ${this.mot()} » avec le pictogramme « ${suggestion.motCle} »${marque}`;
   }
 
   /** Illustre le Mot avec le pictogramme `idArasaac` ; sans effet pendant un autre envoi. */

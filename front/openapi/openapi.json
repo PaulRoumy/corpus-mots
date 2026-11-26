@@ -481,6 +481,11 @@
           "dejaUtilisee" : {
             "type" : "boolean",
             "description" : "Vrai si l'enseignant connecté a déjà lié cette Image dans l'une de ses Préparations"
+          },
+          "idArasaac" : {
+            "type" : [ "integer", "null" ],
+            "format" : "int64",
+            "description" : "Identifiant du pictogramme ARASAAC dont l'Image a été créée, null pour une autre Image"
           }
         }
       },
@@ -3054,7 +3059,7 @@
     },
     "/api/preparations/{id}/mots/{motPreparationId}/pictogramme" : {
       "post" : {
-        "summary" : "Illustrer un Mot d'une Préparation de l'enseignant connecté avec un pictogramme ARASAAC, téléchargé par le back",
+        "summary" : "Illustrer un Mot d'une Préparation de l'enseignant connecté avec un pictogramme ARASAAC : l'Image que l'enseignant possède déjà pour ce pictogramme et le Sens retenu est liée, sinon le back télécharge le pictogramme et crée l'Image",
         "operationId" : "choisirPictogrammeMotPreparation",
         "parameters" : [ {
           "name" : "id",
@@ -3082,6 +3087,16 @@
           }
         },
         "responses" : {
+          "200" : {
+            "description" : "Image déjà possédée par l'enseignant pour ce pictogramme et ce Sens, liée au Mot (origine reutilisee), sans téléchargement ni création",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/MotPreparationDto"
+                }
+              }
+            }
+          },
           "201" : {
             "description" : "Image créée (privee, image_libre, licence ARASAAC), réduite et liée au Mot (origine nouvelle)",
             "content" : {

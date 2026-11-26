@@ -71,6 +71,13 @@ public class Image {
     @Column(name = "retrait_admin_texte")
     private String retraitAdminTexte;
 
+    /**
+     * Identifiant du pictogramme ARASAAC dont l'Image a été créée, {@code null} pour toute autre Image (story 2.11).
+     * Posé à la création et jamais modifié ensuite : il identifie le fichier, que rien ne change.
+     */
+    @Column(name = "arasaac_id", updatable = false)
+    private Long arasaacId;
+
     @ElementCollection
     @CollectionTable(name = "image_section", joinColumns = @JoinColumn(name = "image_id"))
     @Column(name = "section", nullable = false)
@@ -97,9 +104,12 @@ public class Image {
     protected Image() {
     }
 
-    /** Nouvelle Image d'identifiant {@code id}, tiré par la base ({@link ImageRepository#nouvelIdentifiant}). */
+    /**
+     * Nouvelle Image d'identifiant {@code id}, tiré par la base ({@link ImageRepository#nouvelIdentifiant}) ;
+     * {@code arasaacId} : identifiant du pictogramme ARASAAC dont elle est créée, {@code null} pour une autre Image.
+     */
     public static Image nouvelle(UUID id, UUID proprietaireId, UUID sensId, String typeMedia, String typeImage,
-            String licence, String source, String auteur, UUID albumId, String etat) {
+            String licence, String source, String auteur, UUID albumId, String etat, Long arasaacId) {
         Image image = new Image();
         image.id = id;
         image.proprietaireId = proprietaireId;
@@ -111,6 +121,7 @@ public class Image {
         image.auteur = auteur;
         image.albumId = albumId;
         image.etat = etat;
+        image.arasaacId = arasaacId;
         return image;
     }
 
@@ -214,6 +225,11 @@ public class Image {
     /** Motif du retrait de la Banque par l'administrateur, {@code null} sans retrait. */
     public String retraitAdminMotif() {
         return retraitAdminMotif;
+    }
+
+    /** Identifiant du pictogramme ARASAAC dont l'Image a été créée, {@code null} pour une autre Image. */
+    public Long arasaacId() {
+        return arasaacId;
     }
 
     /** Module, {@code null} s'il n'y en a pas. */

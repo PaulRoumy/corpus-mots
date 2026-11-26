@@ -107,6 +107,8 @@ class PictogrammeMotPreparationResourceTest {
         assertEquals("300x300|image/png", fichierEnBase(image));
         assertEquals(preparation + "|" + image + "|" + CLAIRE + "|" + rouleGalette + "|ms|nouvelle",
                 lienEnBase(renard));
+        // L'Image garde l'identifiant du pictogramme (story 2.11).
+        assertEquals(2349L, arasaacId(image));
         BufferedImage miniature = FichiersDeTest.lire(fichier(image, "miniature"));
         assertTrue(Math.max(miniature.getWidth(), miniature.getHeight()) <= 256);
 
@@ -185,7 +187,180 @@ class PictogrammeMotPreparationResourceTest {
         rienNEstEnregistre();
     }
 
+    // --- Pictogramme déjà possédé (story 2.11, partie 3) ---
+
+    @Test
+    void unPictogrammeDejaPossedeLieLImageExistanteSansAppelerArasaac() {
+        String premiere = choisir(preparation, renard, 2349L).statusCode(201).extract().path("image.id");
+        UUID image = UUID.fromString(premiere);
+        String imageAvant = ligneImage(image);
+
+        // La démo du 25 novembre rejouée : le même pictogramme choisi pour le même Mot dans deux autres Préparations.
+        for (int fois = 0; fois < 2; fois++) {
+            UUID autre = preparation(CLAIRE);
+            UUID renardAutre = UUID.fromString(ajouter(autre, "renard"));
+            // L'Entrée a retenu l'Image en tête (partie 1) : le lien est retiré pour retrouver une Carte « à
+            // illustrer » dont le Sens retenu est celui de l'Image possédée (comme après un aller-retour de Sens).
+            delierEnBase(renardAutre);
+            if (fois == 0) {
+                // La Carte « à illustrer » voit l'identifiant ARASAAC de l'Image possédée.
+                given().when().get("/api/preparations/" + autre + "/mots/" + renardAutre + "/propositions")
+                        .then()
+                        .statusCode(200)
+                        .body("images.id", equalTo(List.of(premiere)))
+                        .body("images[0].idArasaac", equalTo(2349));
+            }
+            UUID sensAvant = sensRetenu(renardAutre);
+
+            choisir(autre, renardAutre, 2349L)
+                    .statusCode(200)
+                    .body("id", equalTo(renardAutre.toString()))
+                    .body("illustre", equalTo(true))
+                    .body("image.id", equalTo(premiere))
+                    .body("sens.id", equalTo(sensAvant.toString()));
+
+            assertEquals(autre + "|" + image + "|" + CLAIRE + "|" + rouleGalette + "|ms|reutilisee",
+                    lienEnBase(renardAutre));
+            assertEquals(sensAvant, sensRetenu(renardAutre));
+        }
+        // Une seule Image, inchangée (état, Sections, version), et ARASAAC appelé une seule fois.
+        assertEquals(List.of(2349L), source.pictogrammesDemandes);
+        assertEquals(1L, nombre("select count(*) from image"));
+        assertEquals(1L, nombre("select count(*) from image_fichier"));
+        assertEquals(3L, nombre("select count(*) from lien_image"));
+        assertEquals(imageAvant, ligneImage(image));
+        assertEquals(List.of("ms"), sectionsDe(image));
+    }
+
+    @Test
+    void parmiPlusieursImagesPossedeesDuPictogrammeLaPlusRecenteEstLiee() {
+        // La plus récente est insérée d'abord : son identifiant (uuidv7) est le plus petit, seul cree_le la désigne.
+        UUID recente = imageEnBase(CLAIRE, sensRetenu(renard), "privee", 2349L);
+        UUID ancienne = imageEnBase(CLAIRE, sensRetenu(renard), "privee", 2349L);
+        QuarkusTransaction.requiringNew().run(() -> {
+            entityManager.createNativeQuery("update image set cree_le = now() - interval '2 days' where id = :id")
+                    .setParameter("id", ancienne).executeUpdate();
+            entityManager.createNativeQuery("update image set cree_le = now() - interval '1 day' where id = :id")
+                    .setParameter("id", recente).executeUpdate();
+        });
+
+        choisir(preparation, renard, 2349L)
+                .statusCode(200)
+                .body("image.id", equalTo(recente.toString()));
+
+        assertTrue(lienEnBase(renard).contains("|" + recente + "|"));
+        assertTrue(lienEnBase(renard).endsWith("|reutilisee"));
+        assertEquals(List.of(), source.pictogrammesDemandes);
+        assertEquals(2L, nombre("select count(*) from image"));
+    }
+
+    @Test
+    void lePictogrammeDUneCollegueNeCompteJamais() {
+        UUID deZoe = imageEnBase(ZOE, sensRetenu(renard), "versee", 2349L);
+
+        String creee = choisir(preparation, renard, 2349L)
+                .statusCode(201)
+                .body("image.proprietaireId", equalTo(CLAIRE))
+                .extract().path("image.id");
+
+        UUID image = UUID.fromString(creee);
+        assertTrue(!image.equals(deZoe));
+        assertEquals(2349L, arasaacId(image));
+        assertTrue(lienEnBase(renard).endsWith("|nouvelle"));
+        assertEquals(List.of(2349L), source.pictogrammesDemandes);
+        assertEquals(2L, nombre("select count(*) from image"));
+    }
+
+    @Test
+    void lePictogrammePossedePourUnAutreSensNeCompteJamais() {
+        UUID autreSens = sens(motDe(renard), "personnage");
+        UUID ancienne = imageEnBase(CLAIRE, autreSens, "privee", 2349L);
+
+        String creee = choisir(preparation, renard, 2349L).statusCode(201).extract().path("image.id");
+
+        UUID image = UUID.fromString(creee);
+        assertTrue(!image.equals(ancienne));
+        assertEquals(sensRetenu(renard), sensDeLImage(image));
+        assertTrue(lienEnBase(renard).endsWith("|nouvelle"));
+        assertEquals(List.of(2349L), source.pictogrammesDemandes);
+    }
+
+    @Test
+    void unPictogrammePossedeAbandonneOuSupprimeNeCompteJamais() {
+        UUID abandonnee = imageEnBase(CLAIRE, sensRetenu(renard), "abandonnee", 2349L);
+        UUID supprimee = imageEnBase(CLAIRE, sensRetenu(renard), "supprimee", 2349L);
+
+        String creee = choisir(preparation, renard, 2349L).statusCode(201).extract().path("image.id");
+
+        UUID image = UUID.fromString(creee);
+        assertTrue(!image.equals(abandonnee) && !image.equals(supprimee));
+        assertTrue(lienEnBase(renard).endsWith("|nouvelle"));
+        assertEquals(List.of(2349L), source.pictogrammesDemandes);
+        assertEquals(3L, nombre("select count(*) from image"));
+    }
+
+    @Test
+    void unMotDejaIllustreEstRefuseMemeAvecUnPictogrammePossede() {
+        UUID possedee = imageEnBase(CLAIRE, sensRetenu(renard), "privee", 2349L);
+        UUID autre = imagesDeTest.image(UUID.fromString(CLAIRE), sensRetenu(renard), "privee", new byte[] { 1 },
+                new byte[] { 2 });
+        given().contentType(ContentType.JSON).body(Map.of("imageId", autre.toString()))
+                .when().put("/api/preparations/" + preparation + "/mots/" + renard + "/image")
+                .then().statusCode(200);
+
+        refus(choisir(preparation, renard, 2349L), 409, "preparation.mot_deja_illustre");
+        assertEquals(List.of(), source.pictogrammesDemandes);
+        assertTrue(lienEnBase(renard).contains("|" + autre + "|"));
+        assertTrue(!lienEnBase(renard).contains(possedee.toString()));
+        assertEquals(1L, nombre("select count(*) from lien_image"));
+    }
+
     // --- Outils ---
+
+    /** Image d'un pictogramme insérée en base, sans fichier : propriétaire, Sens, état et identifiant ARASAAC. */
+    private UUID imageEnBase(String proprietaire, UUID sensId, String etat, long arasaacId) {
+        return QuarkusTransaction.requiringNew().call(() -> (UUID) entityManager.createNativeQuery(
+                "insert into image (proprietaire_id, sens_id, type_image, licence, source, etat, arasaac_id)"
+                        + " values (:proprietaire, :sens, 'image_libre', 'arasaac_cc_by_nc_sa', :source, :etat,"
+                        + " :arasaac) returning id")
+                .setParameter("proprietaire", UUID.fromString(proprietaire))
+                .setParameter("sens", sensId)
+                .setParameter("source", "ARASAAC (https://arasaac.org), pictogramme n° " + arasaacId)
+                .setParameter("etat", etat)
+                .setParameter("arasaac", arasaacId)
+                .getSingleResult());
+    }
+
+    private void delierEnBase(UUID preparationMotId) {
+        QuarkusTransaction.requiringNew().run(() -> entityManager
+                .createNativeQuery("delete from lien_image where preparation_mot_id = :id")
+                .setParameter("id", preparationMotId)
+                .executeUpdate());
+    }
+
+    private UUID sens(UUID motId, String libelle) {
+        return QuarkusTransaction.requiringNew().call(() -> (UUID) entityManager.createNativeQuery(
+                "insert into sens (mot_id, libelle, libelle_cle) values (:mot, :libelle, :libelle) returning id")
+                .setParameter("mot", motId)
+                .setParameter("libelle", libelle)
+                .getSingleResult());
+    }
+
+    private Long arasaacId(UUID imageId) {
+        return QuarkusTransaction.requiringNew().call(() -> {
+            Object valeur = entityManager.createNativeQuery("select arasaac_id from image where id = :id")
+                    .setParameter("id", imageId)
+                    .getSingleResult();
+            return valeur == null ? null : ((Number) valeur).longValue();
+        });
+    }
+
+    private List<String> sectionsDe(UUID imageId) {
+        return QuarkusTransaction.requiringNew().call(() -> entityManager.createNativeQuery(
+                "select section from image_section where image_id = :id order by section")
+                .setParameter("id", imageId)
+                .getResultList().stream().map(String::valueOf).toList());
+    }
 
     private static String chemin(UUID preparationId, UUID motPreparationId) {
         return "/api/preparations/" + preparationId + "/mots/" + motPreparationId + "/pictogramme";

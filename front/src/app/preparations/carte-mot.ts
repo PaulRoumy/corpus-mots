@@ -2,23 +2,39 @@ import {
   ChangeDetectionStrategy,
   Component,
   computed,
+  effect,
   ElementRef,
   inject,
   input,
   linkedSignal,
   output,
+  signal,
+  untracked,
   viewChild,
 } from '@angular/core';
 import { MatButtonModule } from '@angular/material/button';
 import { MatIconModule } from '@angular/material/icon';
 import { Api } from '../api/api';
 import { fichierImage } from '../api/fn/images-resource/fichier-image';
+import { choisirImageMotPreparation } from '../api/fn/preparations-resource/choisir-image-mot-preparation';
+import { proposerImagesMotPreparation } from '../api/fn/preparations-resource/proposer-images-mot-preparation';
+import { DetectionImageDto } from '../api/models/detection-image-dto';
 import { MotPreparationDto } from '../api/models/mot-preparation-dto';
+import { Annuaire } from '../commun/annuaire';
 import { BadgeTypeImage } from '../commun/badge-type-image/badge-type-image';
 import { CompteCourant } from '../commun/compte-courant';
+import { CODES_IMAGE_INDISPONIBLE } from '../commun/erreurs/codes-image-indisponible';
+import { codeErreur, messageErreur } from '../commun/erreurs/message-erreur';
 import { ChargementImage, ImageSecurisee } from '../commun/image-securisee/image-securisee';
 import { BasculeSelection, CaseSelection } from '../commun/selection/case-selection';
-import { SuggestionsArasaac } from './suggestions-arasaac';
+import { CODES_A_RECHARGER, SuggestionsArasaac } from './suggestions-arasaac';
+import { libelleProprietaire, nomProposition, VignetteProposition } from './vignette-proposition';
+
+/** Nombre maximal d'Images existantes montrées sur une Carte « à illustrer ». */
+export const NOMBRE_MAX_IMAGES_EXISTANTES = 3;
+
+/** Message de la Carte quand l'Image existante choisie n'est plus proposable : les Images sont relues. */
+export const MESSAGE_IMAGE_EXISTANTE_INDISPONIBLE = "Cette image n'est plus disponible.";
 
 /**
  * Carte de Mot de la Grille d'une Préparation (story 2.3). Tant que le Mot n'a pas d'Image, c'est une Carte « à
@@ -28,6 +44,16 @@ import { SuggestionsArasaac } from './suggestions-arasaac';
  * illustre le Mot et émet `illustre` (ou `aRecharger` si le Mot a été illustré ou retiré entre-temps, partie 2). La page
  * lui fait occuper trois colonnes de la Grille. Sous les suggestions, le bouton texte « Téléverser » émet `televerser` : la
  * page ouvre le Dialogue « Téléverser une image » (story 2.5, partie 1).
+ *
+ * Images existantes (story 2.11, partie 3) : avant les suggestions ARASAAC, la Carte « à illustrer » montre au plus
+ * trois Images proposables du Mot, de tous ses Sens, dans l'ordre du back (`GET …/propositions`, classement de la
+ * détection, FR-9), avec le rendu du Panneau de choix (`VignetteProposition`, Marque « déjà utilisée » comprise). Chaque
+ * vignette est un bouton « Illustrer « forme » avec l'image : … » ; un clic lie l'Image au Mot (`PUT …/image`, origine
+ * `reutilisee`) et le Mot renvoyé sort par `illustre`. Image devenue indisponible : les Images sont relues, puis
+ * « Cette image n'est plus disponible. » ; Mot illustré ou retiré entre-temps : `aRecharger` ; autre échec : message
+ * sous les Images. Les pictogrammes ARASAAC dont l'enseignant possède déjà l'Image pour le Sens retenu (une Image
+ * proposable à lui, de ce Sens, portant cet `idArasaac`) sont marqués « déjà utilisée » par les suggestions ; c'est le
+ * back qui décide de réutiliser l'Image au choix du pictogramme.
  *
  * Une fois illustrée, la Carte occupe une colonne (key-preparation.html › `.wc`) : vignette de la miniature de l'Image,
  * chargée en `blob` par le client généré (`?taille=miniature`, AD-23), d'alternative « Mot, Sens » ; Badge de type
@@ -59,6 +85,7 @@ import { SuggestionsArasaac } from './suggestions-arasaac';
     MatButtonModule,
     MatIconModule,
     SuggestionsArasaac,
+    VignetteProposition,
   ],
   changeDetection: ChangeDetectionStrategy.OnPush,
   styleUrl: './carte-mot.scss',
@@ -151,10 +178,38 @@ import { SuggestionsArasaac } from './suggestions-arasaac';
     </div>
     @if (!mot().illustre) {
       <div class="carte-mot__droite">
+        @if (imagesExistantes().length > 0) {
+          <ul
+            class="carte-mot__images"
+            [attr.aria-label]="'Images existantes pour « ' + mot().forme + ' »'"
+            [attr.aria-busy]="choixImageEnCours() !== null ? 'true' : null"
+          >
+            @for (image of imagesExistantes(); track image.id) {
+              <li>
+                <button
+                  appVignetteProposition
+                  class="carte-mot__image-existante"
+                  type="button"
+                  [image]="image"
+                  [forme]="mot().forme"
+                  [afficherSens]="plusieursSens()"
+                  [choisie]="choixImageEnCours() === image.id"
+                  [attr.aria-label]="nomImageExistante(image)"
+                  [attr.aria-disabled]="choixImageEnCours() !== null ? 'true' : null"
+                  (click)="choisirImageExistante(image)"
+                ></button>
+              </li>
+            }
+          </ul>
+        }
+        @if (messageImages(); as message) {
+          <p class="carte-mot__message" role="alert">{{ message }}</p>
+        }
         <app-suggestions-arasaac
           [mot]="mot().forme"
           [preparationId]="preparationId()"
           [motPreparationId]="mot().id"
+          [idsDejaPossedes]="idsDejaPossedes()"
           (illustre)="illustre.emit($event)"
           (aRecharger)="aRecharger.emit($event)"
         />
@@ -202,7 +257,60 @@ export class CarteMot {
   protected readonly nomSelection = computed(() => `Sélectionner « ${this.mot().forme} »`);
 
   private readonly api = inject(Api);
+  private readonly annuaire = inject(Annuaire);
   private readonly compteCourant = inject(CompteCourant);
+
+  /** Images proposables du Mot, de tous ses Sens, dans l'ordre du back ; vide tant qu'elles ne sont pas lues. */
+  private readonly propositions = signal<readonly DetectionImageDto[]>([]);
+  /** Vrai si le Mot a plusieurs Sens visibles : chaque vignette montre le Sens de son Image. */
+  protected readonly plusieursSens = signal(false);
+  /** Images existantes montrées par la Carte « à illustrer », au plus trois. */
+  protected readonly imagesExistantes = computed(() =>
+    this.mot().illustre ? [] : this.propositions().slice(0, NOMBRE_MAX_IMAGES_EXISTANTES),
+  );
+  /**
+   * Identifiants ARASAAC des Images proposables de l'enseignant connecté pour le Sens retenu : leurs suggestions sont
+   * marquées « déjà utilisée ». Les Images de collègues et celles d'un autre Sens ne comptent pas.
+   */
+  protected readonly idsDejaPossedes = computed<ReadonlySet<number>>(() => {
+    const moi = this.compteCourant.compte()?.id;
+    const sensId = this.mot().sens.id;
+    const ids = new Set<number>();
+    for (const image of this.propositions()) {
+      if (image.proprietaireId === moi && image.sens.id === sensId && image.idArasaac != null) {
+        ids.add(image.idArasaac);
+      }
+    }
+    return ids;
+  });
+  /** Image existante en cours de liaison au Mot, `null` sinon : toutes les vignettes attendent. */
+  protected readonly choixImageEnCours = signal<string | null>(null);
+  /** Échec du choix d'une Image existante, `null` sans échec. */
+  protected readonly messageImages = signal<string | null>(null);
+  /** Numéro de la dernière lecture des Images : une réponse plus ancienne est ignorée. */
+  private derniereLecture = 0;
+
+  constructor() {
+    // Lecture des Images existantes à chaque Carte « à illustrer » (nouveau Mot, ou Mot redevenu « à illustrer »).
+    // Seuls l'identifiant du Mot et son état « illustré » comptent : un nouvel objet Mot égal (Thème changé,
+    // relecture de la page) ne relit rien.
+    const motPreparationIdCourant = computed(() => this.mot().id);
+    const aIllustrerCourant = computed(() => !this.mot().illustre);
+    effect(() => {
+      const preparationId = this.preparationId();
+      const motPreparationId = motPreparationIdCourant();
+      const aIllustrer = aIllustrerCourant();
+      untracked(() => {
+        this.messageImages.set(null);
+        if (aIllustrer) {
+          void this.lireImages(preparationId, motPreparationId);
+        } else {
+          this.derniereLecture++;
+          this.propositions.set([]);
+        }
+      });
+    });
+  }
 
   /** Badge « versée » : Image versée de l'enseignant connecté, jamais celle d'un collègue réutilisée. */
   protected readonly versee = computed(() => {
@@ -249,6 +357,76 @@ export class CarteMot {
   private readonly boutonTeleverser = viewChild('boutonTeleverser', {
     read: ElementRef<HTMLButtonElement>,
   });
+
+  /** « Illustrer « citrouille » avec l'image : citrouille, légume, vous, déjà utilisée, … ». */
+  protected nomImageExistante(image: DetectionImageDto): string {
+    const forme = this.mot().forme;
+    const proprietaire = libelleProprietaire(
+      image.proprietaireId,
+      this.compteCourant,
+      this.annuaire,
+    );
+    return `Illustrer « ${forme} » avec l'image : ${nomProposition(forme, image, proprietaire)}`;
+  }
+
+  /** Lie l'Image existante au Mot (origine `reutilisee`) ; sans effet pendant un autre envoi. */
+  protected async choisirImageExistante(image: DetectionImageDto): Promise<void> {
+    if (this.choixImageEnCours() !== null) {
+      return;
+    }
+    const preparationId = this.preparationId();
+    const motPreparationId = this.mot().id;
+    this.choixImageEnCours.set(image.id);
+    this.messageImages.set(null);
+    let illustre: MotPreparationDto;
+    try {
+      illustre = await this.api.invoke(choisirImageMotPreparation, {
+        id: preparationId,
+        motPreparationId,
+        body: { imageId: image.id },
+      });
+    } catch (erreur) {
+      this.choixImageEnCours.set(null);
+      const code = codeErreur(erreur) ?? '';
+      if (CODES_A_RECHARGER.has(code)) {
+        this.aRecharger.emit(messageErreur(erreur));
+      } else if (CODES_IMAGE_INDISPONIBLE.has(code)) {
+        await this.lireImages(preparationId, motPreparationId);
+        this.messageImages.set(MESSAGE_IMAGE_EXISTANTE_INDISPONIBLE);
+      } else {
+        this.messageImages.set(messageErreur(erreur));
+      }
+      return;
+    }
+    this.choixImageEnCours.set(null);
+    // Hors du try : une erreur de la page n'est pas prise pour un échec de la requête.
+    this.illustre.emit(illustre);
+  }
+
+  /** Lit les Images proposables du Mot, de tous ses Sens ; en échec, la Carte n'en montre aucune. */
+  private async lireImages(preparationId: string, motPreparationId: string): Promise<void> {
+    const numero = ++this.derniereLecture;
+    try {
+      const propositions = await this.api.invoke(proposerImagesMotPreparation, {
+        id: preparationId,
+        motPreparationId,
+      });
+      if (numero !== this.derniereLecture) {
+        return;
+      }
+      this.propositions.set(propositions.images);
+      this.plusieursSens.set(propositions.sens.length > 1);
+      const moi = this.compteCourant.compte()?.id;
+      if (propositions.images.some((image) => image.proprietaireId !== moi)) {
+        // L'Annuaire n'est lu qu'à la première Image d'un collègue.
+        void this.annuaire.charger();
+      }
+    } catch {
+      if (numero === this.derniereLecture) {
+        this.propositions.set([]);
+      }
+    }
+  }
 
   /** Donne le focus au bouton « Retirer » : après le retrait d'une Carte voisine, ou le rétablissement de celle-ci. */
   focusRetirer(): void {

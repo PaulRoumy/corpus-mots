@@ -1005,7 +1005,7 @@ class MotsPreparationResourceTest {
             ImageVue image = new ImageVue(imageId, UUID.fromString(ZOE), EtatImage.PRIVEE, null, false,
                     TypeImage.IMAGE_LIBRE, false, Versabilite.VERSABLE);
             return new MotDetecteVue(mot, true, List.of(new SensProposeVue(sens, false)), List.of(),
-                    List.of(new ImageDetecteeVue(image, List.of(), null, new SensProposeVue(sens, false), false)));
+                    List.of(new ImageDetecteeVue(image, List.of(), null, new SensProposeVue(sens, false), false, null)));
         }
     }
 }

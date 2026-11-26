@@ -75,6 +75,40 @@
     var(--cm-espace-3) var(--cm-espace-3);
 }
 
+// Images existantes du Mot (story 2.11), avant les suggestions ARASAAC : vignettes du Panneau de choix, en ligne.
+.carte-mot__images {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--cm-espace-2);
+  max-width: 100%;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+// La vignette est un bouton : ni police ni couleur du navigateur, anneau de focus du produit.
+.carte-mot__image-existante {
+  padding: 0;
+  color: inherit;
+  font: inherit;
+  text-align: start;
+
+  &:focus-visible {
+    outline: var(--cm-anneau-focus-epaisseur) solid var(--mat-sys-primary);
+    outline-offset: var(--cm-anneau-focus-decalage);
+  }
+
+  &[aria-disabled='true'] {
+    cursor: default;
+  }
+}
+
+.carte-mot__message {
+  margin: 0;
+  font: var(--cm-typo-body-sm);
+  color: var(--cm-etat-a-illustrer-texte);
+}
+
 // Bouton texte « Téléverser », à la couleur du texte « à illustrer ».
 .carte-mot__televerser {
   @include mat.button-overrides(

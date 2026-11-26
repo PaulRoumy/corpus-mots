@@ -150,6 +150,11 @@ describe('Preparation (En-tête)', () => {
   afterEach(() => {
     // Chaque Carte « à illustrer » cherche ses suggestions ARASAAC (story 2.4) : vérifié par `suggestions-arasaac.spec`.
     serveur.match((requete) => requete.url.startsWith('/api/arasaac/'));
+    // Chaque Carte « à illustrer » lit aussi les Images existantes de son Mot (story 2.11) : vérifié par
+    // `carte-mot.spec`.
+    serveur.match(
+      (requete) => requete.url.endsWith('/propositions') && !requete.params.has('sensId'),
+    );
     // L'Encart « mots déjà illustrés » lit ses candidats (story 2.9) : vérifié par `encart-mots-deja-illustres.spec`
     // et par le bloc « Encart » ci-dessous.
     serveur.match((requete) => requete.url.endsWith('/reprises'));
@@ -181,6 +186,18 @@ describe('Preparation (En-tête)', () => {
     serveur.expectOne('/api/themes').flush(themes);
     serveur.expectOne(`/api/preparations/${preparation.id}/mots`).flush(mots);
     await stabiliser();
+    lecturesDesCartes();
+  }
+
+  /**
+   * Lectures des Images existantes, en attente, des Cartes « à illustrer » (story 2.11, vérifiées par `carte-mot.spec`),
+   * toujours sans filtre de Sens : retirées de la file, pour que les lectures du Panneau de choix d'Image, à la même
+   * adresse, soient seules à attendre. À appeler quand le Panneau n'a pas de lecture sans filtre en attente.
+   */
+  function lecturesDesCartes(): void {
+    serveur.match(
+      (requete) => requete.url.endsWith('/propositions') && !requete.params.has('sensId'),
+    );
   }
 
   const champ = (etiquette: string) =>
@@ -4752,6 +4769,8 @@ describe('Preparation (En-tête)', () => {
       requete.flush({ ...FARINE, sens: CHUTE, illustre: false, image: null });
       await stabiliser();
 
+      // La Carte redevenue « à illustrer » relit ses Images existantes (story 2.11), sans filtre de Sens.
+      lecturesDesCartes();
       const relecture = serveur.expectOne(lecturePropositions(URL_PROPOSITIONS));
       expect(relecture.request.params.get('sensId')).toBe(CHUTE.id);
       relecture.flush({ ...PROPOSITIONS, images: [] });
@@ -4798,6 +4817,8 @@ describe('Preparation (En-tête)', () => {
       expect(texte('p[aria-live="polite"]')).toBe(
         'Sens de « farine » : poudre (nom). Image retirée.',
       );
+      // La Carte redevenue « à illustrer » relit ses Images existantes (story 2.11), sans filtre de Sens.
+      lecturesDesCartes();
       const relecture = serveur.expectOne(lecturePropositions(URL_PROPOSITIONS));
       expect(relecture.request.params.get('sensId')).toBe(POUDRE.id);
       relecture.flush({
@@ -5177,6 +5198,8 @@ describe('Preparation (En-tête)', () => {
         // Focus non déplacé : ni au champ, ni à un panneau rouvert.
         expect(document.activeElement).not.toBe(champSaisie());
         expect(panneau()).toBeNull();
+        // La Carte redevenue « à illustrer » relit ses Images existantes (story 2.11), sans filtre de Sens.
+        lecturesDesCartes();
         serveur.expectNone(lecturePropositions(URL_PROPOSITIONS));
       });
 
@@ -5210,6 +5233,8 @@ describe('Preparation (En-tête)', () => {
 
         expect(motsPage()[1].sens).toEqual(POUDRE);
         expect(annonce()).toBe('Sens de « farine » : poudre (nom). Image retirée.');
+        // La Carte redevenue « à illustrer » relit ses Images existantes (story 2.11), sans filtre de Sens.
+        lecturesDesCartes();
         serveur.expectNone(lecturePropositions(URL_PROPOSITIONS));
       });
 

@@ -586,7 +586,7 @@ public class PreparationsService {
         }
         ImageVue creee = images.televerser(new TeleverserImageCommande(commande.fichier(), sens.id(), commande.typeImage(),
                 commande.licence(), commande.source(), commande.auteur(), preparation.albumId(),
-                preparation.section()));
+                preparation.section(), commande.arasaacId()));
         ImageVue liee = commande.remplacer()
                 ? usages.remplacerImage(new RemplacerImageCommande(preparation.id(), ligne.id(), creee.id(),
                         preparation.albumId(), preparation.section(), OrigineLien.NOUVELLE))
@@ -612,6 +612,39 @@ public class PreparationsService {
         if (usages.imagesLiees(List.of(ligne.id())).containsKey(ligne.id())) {
             throw new ErreurMetier(409, CODE_MOT_DEJA_ILLUSTRE, "Ce mot de préparation a déjà une image");
         }
+    }
+
+    /**
+     * Illustre le Mot de Préparation {@code motPreparationId} de la Préparation {@code id} de l'enseignant courant avec
+     * l'Image qu'il possède déjà pour le pictogramme ARASAAC {@code idArasaac} et le Sens retenu du Mot
+     * ({@link Usages#imagePossedeeDuPictogramme}, story 2.11), s'il en a une : elle est liée avec l'origine
+     * {@code reutilisee}, sans copie ni création (AD-5) ; son état, ses Sections et ses Thèmes ne changent pas, ni le
+     * Sens retenu. Sans Image possédée, rien n'est écrit et le résultat est vide : l'appelant télécharge alors le
+     * pictogramme hors transaction et crée l'Image ({@link #televerserImage}). Une seule transaction, Préparation
+     * verrouillée : rien n'est écrit en cas de refus. Aucun appel sortant.
+     *
+     * @return le Mot illustré par l'Image possédée ; vide s'il n'y en a pas
+     * @throws ErreurMetier {@code 404 ressource.introuvable} si la Préparation n'existe pas ou appartient à un
+     *         collègue, ou si le Mot de Préparation n'existe pas ou appartient à une autre Préparation ;
+     *         {@code 409 preparation.mot_deja_illustre} si le Mot a déjà une Image ;
+     *         {@code 404 image.indisponible} si l'Image possédée cesse de lui être proposable avant son verrou
+     */
+    @Transactional
+    public Optional<MotPreparationVue> lierImagePossedeeDuPictogramme(UUID id, UUID motPreparationId,
+            long idArasaac) {
+        Preparation preparation = verrouillee(id);
+        PreparationMot ligne = deLaPreparation(preparation, motPreparationId);
+        if (usages.imagesLiees(List.of(ligne.id())).containsKey(ligne.id())) {
+            throw new ErreurMetier(409, CODE_MOT_DEJA_ILLUSTRE, "Ce mot de préparation a déjà une image");
+        }
+        Optional<UUID> possedee = usages.imagePossedeeDuPictogramme(ligne.id(), idArasaac);
+        if (possedee.isEmpty()) {
+            return Optional.empty();
+        }
+        ImageVue liee = usages.lierImage(new LierImageCommande(preparation.id(), ligne.id(), possedee.get(),
+                preparation.albumId(), preparation.section(), OrigineLien.REUTILISEE));
+        MotVue mot = motDe(ligne, lexique.mots(List.of(ligne.motId())));
+        return Optional.of(vue(ligne, mot, lexique.sensRetenus(List.of(ligne.id())).get(ligne.id()), liee));
     }
 
     /**

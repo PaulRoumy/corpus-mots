@@ -23,6 +23,33 @@
   list-style: none;
 }
 
+// Suggestion d'une Carte « à illustrer » : la vignette, puis la Marque « déjà utilisée » dessous s'il y a lieu.
+.suggestions__element {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--cm-espace-1);
+}
+
+// Marque « déjà utilisée » (`.used`) : badge `tertiary-container`, même rendu que dans `vignette-proposition`.
+.suggestions__marque {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--cm-espace-1);
+  height: var(--cm-hauteur-badge);
+  padding: 0 var(--cm-espace-2);
+  border-radius: var(--cm-arrondi-sm);
+  background: var(--mat-sys-tertiary-container);
+  color: var(--mat-sys-on-tertiary-container);
+  font: var(--cm-typo-label-sm);
+  white-space: nowrap;
+
+  mat-icon {
+    width: var(--cm-taille-icone-badge);
+    height: var(--cm-taille-icone-badge);
+  }
+}
+
 // Vignette de 60 px (`.aras .ph`), pictogramme de 50 px centré ; bouton qui illustre le Mot (story 2.4, partie 2).
 .suggestions__vignette {
   display: grid;

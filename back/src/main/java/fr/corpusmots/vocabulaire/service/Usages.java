@@ -166,6 +166,29 @@ public class Usages {
     }
 
     /**
+     * Image que l'enseignant courant possède déjà pour le pictogramme ARASAAC {@code arasaacId} et pour le Sens retenu
+     * du Mot de Préparation {@code preparationMotId} (story 2.11) : la plus récente de ses Images de ce Sens créées
+     * depuis ce pictogramme qui lui soient {@link VisibiliteImages#proposable proposables} (AD-2). Les Images d'un
+     * collègue ne comptent jamais, même versées. Lecture sans verrou ni écriture : {@link #lierImage} revérifie tout
+     * sous verrou. L'appelant a vérifié que ce Mot de Préparation est le sien.
+     *
+     * @return l'identifiant de l'Image possédée ; vide s'il n'y en a pas
+     * @throws IllegalStateException si le Mot de Préparation n'a pas de Sens retenu
+     */
+    @Transactional
+    public Optional<UUID> imagePossedeeDuPictogramme(UUID preparationMotId, long arasaacId) {
+        UUID enseignant = enseignantCourant.id();
+        if (enseignant == null) {
+            return Optional.empty();
+        }
+        UUID sensId = sensRetenu(preparationMotId);
+        return images.duPictogramme(enseignant, sensId, arasaacId).stream()
+                .filter(image -> visibilite.proposable(image, enseignant))
+                .map(Image::id)
+                .findFirst();
+    }
+
+    /**
      * Lie l'Image de la commande au Mot de Préparation de l'enseignant courant à la place de celle qu'il a, s'il en a
      * une (Panneau de choix d'Image, story 2.7). L'Image est verrouillée ({@code SELECT … FOR UPDATE}, après la
      * Préparation que l'appelant a verrouillée), puis doit lui être {@link VisibiliteImages#proposable proposable} et

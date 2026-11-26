@@ -289,7 +289,7 @@ public class DetectionMots {
         UUID albumOrigine = albumDOrigine(image);
         return new ImageDetecteeVue(Images.vue(image, enseignant, visibilite),
                 image.sections().stream().sorted().toList(), albumOrigine == null ? null : albums.get(albumOrigine),
-                propose(sensParId.get(image.sensId())), dejaUtilisees.contains(image.id()));
+                propose(sensParId.get(image.sensId())), dejaUtilisees.contains(image.id()), image.arasaacId());
     }
 
     private static SensProposeVue propose(Sens sens) {

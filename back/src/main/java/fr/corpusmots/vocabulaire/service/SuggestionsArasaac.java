@@ -107,7 +107,7 @@ public class SuggestionsArasaac {
             throw indisponible(new ArasaacIndisponible("pictogramme " + idArasaac + " illisible", erreur));
         }
         return new PictogrammeTelechargeVue(fichier, TypeImage.IMAGE_LIBRE, Licence.ARASAAC_CC_BY_NC_SA,
-                sourcePictogramme(idArasaac), AUTEUR_PICTOGRAMME);
+                sourcePictogramme(idArasaac), AUTEUR_PICTOGRAMME, idArasaac);
     }
 
     /** Source d'un pictogramme ARASAAC, mention exigée par sa licence. */

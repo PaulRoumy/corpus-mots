@@ -76,6 +76,21 @@ public class ImageRepository implements PanacheRepositoryBase<Image, UUID> {
     }
 
     /**
+     * Images du propriétaire {@code proprietaireId} qui illustrent le Sens {@code sensId} et ont été créées depuis le
+     * pictogramme ARASAAC {@code arasaacId}, à tous les états, la plus récente d'abord : l'appelant les filtre par
+     * {@code VisibiliteImages} (AD-2).
+     */
+    public List<Image> duPictogramme(UUID proprietaireId, UUID sensId, long arasaacId) {
+        return getEntityManager().createQuery(
+                "select i from Image i where i.proprietaireId = :proprietaire and i.arasaacId = :arasaac"
+                        + " and i.sensId = :sens order by i.creeLe desc, i.id desc", Image.class)
+                .setParameter("proprietaire", proprietaireId)
+                .setParameter("arasaac", arasaacId)
+                .setParameter("sens", sensId)
+                .getResultList();
+    }
+
+    /**
      * Images dont l'Album d'origine est {@code albumId} (images d'album seulement), avec leurs Sections chargées dans la
      * même requête, de tous les enseignants et à tous les états : l'appelant les filtre par {@code VisibiliteImages}
      * (AD-2).
