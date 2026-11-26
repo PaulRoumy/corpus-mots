@@ -2,7 +2,7 @@
 title: DESIGN — corpus-mots
 status: draft
 created: 2026-10-28
-updated: 2026-10-28
+updated: 2026-11-25
 sources:
   - docs/prd/prd-corpus-mots-2026-10-27/prd.md
   - docs/prd/prd-corpus-mots-2026-10-27/addendum.md
@@ -359,7 +359,7 @@ Noms identiques à EXPERIENCE.md › Component Patterns. « Material 3 standard,
 - **Encart « mots déjà illustrés »** — `tertiary-container`, rangée de vignettes 56 px, bouton « Tout reprendre ».
 - **Grille de Cartes de Mot** — grille à remplissage automatique (colonnes ≥ `{spacing.grid-card-min-width}`, écart `{spacing.3}`), Cartes de Mot et Cartes « à illustrer » dans l'ordre de saisie.
 - **Carte de Mot** — `surface`, vignette en haut, Mot en cursive dessous, élévation 1, Case de sélection en haut à gauche ; une Image retirée s'affiche grisée (opacité ≈ 0,4) avec badge d'état rouge.
-- **Carte « à illustrer »** — fond et bordure tirets « à illustrer », vignette vide avec « + », suggestions ARASAAC en ligne.
+- **Carte « à illustrer »** — fond et bordure tirets « à illustrer », vignette vide avec « + », Images existantes puis suggestions ARASAAC en ligne (Marque « déjà utilisée » sur celles que l'enseignant possède déjà).
 - **Panneau de choix d'Image** — panneau latéral droit, `{spacing.side-panel-width}`, élévation 2 : en tête le Mot en cursive et son Sens ; Repère de qualité ; Images proposées en vignettes dans l'ordre de détection (même rendu que le Panneau de détection) ; bouton texte « Ajouter une image ».
 - **Marque « déjà utilisée »** — badge 22 px `tertiary-container`, icône historique + libellé « déjà utilisée », sous la vignette.
 - **Repère de qualité** — une ligne `body-sm` en `on-surface-variant` au-dessus de toute liste d'images à choisir : « simple, claire, peu de détails ».
