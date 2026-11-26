@@ -110,10 +110,12 @@ class PictogrammeMotPreparationResourceTest {
         BufferedImage miniature = FichiersDeTest.lire(fichier(image, "miniature"));
         assertTrue(Math.max(miniature.getWidth(), miniature.getHeight()) <= 256);
 
-        // La Carte d'identité montre la licence ARASAAC, la source et l'auteur.
+        // La Carte d'identité montre la licence ARASAAC, la source et l'auteur, et la Section de la Préparation
+        // d'office (story 2.11).
         given().when().get("/api/images/" + image)
                 .then()
                 .statusCode(200)
+                .body("sections", equalTo(List.of("ms")))
                 .body("licence", equalTo("arasaac_cc_by_nc_sa"))
                 .body("source", equalTo("ARASAAC (https://arasaac.org), pictogramme n° 2349"))
                 .body("auteur", equalTo("Sergio Palao, propriété du Gouvernement d'Aragon"));

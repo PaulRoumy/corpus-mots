@@ -563,10 +563,11 @@ public class PreparationsService {
     /**
      * Téléverse une Image pour le Mot de Préparation {@code motPreparationId} de la Préparation {@code id} de
      * l'enseignant courant, à partir du fichier déjà réduit (hors transaction) : l'Image est créée ({@code privee},
-     * Sens retenu du Mot ; Album de la Préparation comme Album d'origine pour une image d'album seulement, règle tenue
-     * par {@link Images#televerser}) et liée au Mot avec l'origine {@code nouvelle}, dans une même transaction. Si la
-     * commande le demande ({@link TeleverserImageMotCommande#remplacer}, Panneau de choix d'Image), l'Image créée remplace
-     * l'Image déjà liée, qui est seulement déliée ({@link Usages#remplacerImage}). Rien n'est enregistré en cas de refus.
+     * Sens retenu du Mot, Section de la Préparation d'office (story 2.11) ; Album de la Préparation comme Album
+     * d'origine pour une image d'album seulement, règle tenue par {@link Images#televerser}) et liée au Mot avec
+     * l'origine {@code nouvelle}, dans une même transaction. Si la commande le demande
+     * ({@link TeleverserImageMotCommande#remplacer}, Panneau de choix d'Image), l'Image créée remplace l'Image déjà
+     * liée, qui est seulement déliée ({@link Usages#remplacerImage}). Rien n'est enregistré en cas de refus.
      *
      * @throws ErreurMetier {@code 404 ressource.introuvable} si la Préparation n'existe pas ou appartient à un
      *         collègue, ou si le Mot de Préparation n'existe pas ou appartient à une autre Préparation ;
@@ -584,7 +585,8 @@ public class PreparationsService {
             throw new IllegalStateException("Sens retenu du mot de préparation " + ligne.id() + " introuvable");
         }
         ImageVue creee = images.televerser(new TeleverserImageCommande(commande.fichier(), sens.id(), commande.typeImage(),
-                commande.licence(), commande.source(), commande.auteur(), preparation.albumId()));
+                commande.licence(), commande.source(), commande.auteur(), preparation.albumId(),
+                preparation.section()));
         ImageVue liee = commande.remplacer()
                 ? usages.remplacerImage(new RemplacerImageCommande(preparation.id(), ligne.id(), creee.id(),
                         preparation.albumId(), preparation.section(), OrigineLien.NOUVELLE))

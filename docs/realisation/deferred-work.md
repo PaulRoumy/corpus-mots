@@ -266,3 +266,6 @@
 - source_spec: none
   summary: Story 2.11 partie 3 — Carte « à illustrer » sans doublon : Images existantes classées d'abord avec la Marque « déjà utilisée », colonne `arasaac_id` par nouvelle migration remplie depuis `source`, pictogramme ARASAAC déjà possédé marqué et réutilisé (lien `reutilisee`, rien de téléchargé ni créé).
   evidence: Découpage de la story 2.11 en trois parties (choix de Paul, 2026-11-26) ; livrable back + front indépendant, le plus gros.
+- source_spec: `docs/realisation/spec-2-11-2-section-heritee.md`
+  summary: Une Image créée depuis une Préparation n'hérite ni du Module ni du Thème de la Préparation (ou du Mot), alors que le §4.4 du PRD veut une Carte d'identité « remplie automatiquement à partir du contexte (Mot, Sens, Album, Module, Thème, Section de la Préparation) » ; seule la Section l'est depuis la story 2.11, partie 2.
+  evidence: Revue de la story 2.11 partie 2 (BH-1) ; `Images.televerser` classe l'Image neuve avec Module nul et Thèmes vides, comme avant la story.

@@ -118,6 +118,9 @@ class ImagesMotsPreparationResourceTest {
         assertEquals(256, miniature.getWidth());
         assertEquals(128, miniature.getHeight());
         assertEquals(1600, FichiersDeTest.lire(fichier(image, "grande")).getWidth());
+        // Section de la Préparation d'office (story 2.11).
+        given().when().get("/api/images/" + image)
+                .then().statusCode(200).body("sections", equalTo(List.of("ms")));
 
         given().when().get("/api/preparations/" + preparation + "/mots")
                 .then()
@@ -197,7 +200,7 @@ class ImagesMotsPreparationResourceTest {
 
         ErreurMetier erreur = assertThrows(ErreurMetier.class, () -> images.televerser(
                 new TeleverserImageCommande(fichier, sensRetenu(citrouille), TypeImage.IMAGE_ALBUM, null, null, null,
-                        null)));
+                        null, null)));
 
         assertEquals(400, erreur.status());
         assertEquals("image.album_requis", erreur.code());
@@ -210,7 +213,7 @@ class ImagesMotsPreparationResourceTest {
 
         ErreurMetier erreur = assertThrows(ErreurMetier.class, () -> images.televerser(
                 new TeleverserImageCommande(fichier, sensRetenu(citrouille), TypeImage.IMAGE_ALBUM, null, null, null,
-                        UUID.randomUUID())));
+                        UUID.randomUUID(), null)));
 
         assertEquals(400, erreur.status());
         assertEquals("image.album_introuvable", erreur.code());
@@ -223,7 +226,7 @@ class ImagesMotsPreparationResourceTest {
 
         UUID image = QuarkusTransaction.requiringNew().call(() -> images.televerser(
                 new TeleverserImageCommande(fichier, sensRetenu(citrouille), TypeImage.PHOTO_PERSONNELLE, null, null,
-                        null, UUID.randomUUID())).id());
+                        null, UUID.randomUUID(), null)).id());
 
         assertTrue(ligneImage(image).startsWith("privee|photo_personnelle|droits_auteur_enseignant|null|null|null|"));
     }

@@ -93,6 +93,9 @@ class MesMotsImagesResourceTest {
         assertEquals("privee|image_libre|cc0_domaine_public|https://openclipart.org|Anne|null|" + CLAIRE + "|image|0",
                 ligneImage(image));
         assertEquals("1600x800|image/jpeg", fichierEnBase(image));
+        // Sans Préparation, aucune Section d'office (story 2.11).
+        given().when().get("/api/images/" + image)
+                .then().statusCode(200).body("sections", equalTo(List.of()));
         aucunUsage();
     }
 

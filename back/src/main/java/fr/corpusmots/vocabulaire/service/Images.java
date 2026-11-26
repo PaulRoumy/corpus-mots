@@ -395,8 +395,9 @@ public class Images {
         }
         MotVue mot = lexique.obtenirOuCreerMot(commande.mot());
         SensVue sens = usages.sensParDefaut(mot.id());
+        // Sans Préparation, aucune Section d'office (story 2.11).
         ImageVue image = televerser(new TeleverserImageCommande(commande.fichier(), sens.id(), type,
-                commande.licence(), commande.source(), commande.auteur(), commande.albumId()));
+                commande.licence(), commande.source(), commande.auteur(), commande.albumId(), null));
         return new ImageMesMotsVue(image, mot, sens);
     }
 
@@ -406,6 +407,8 @@ public class Images {
      * type inconnu, celle de la commande, facultative, parmi les six du Sélecteur de licence. Une image libre sans
      * source ou sans licence est enregistrée, marquée {@code aCompleter}. Seule une image d'album reçoit un Album
      * d'origine, qui doit exister ({@code referentiels}) ; l'Album de la commande est ignoré pour un autre type.
+     * L'Image vise d'office la Section de la commande, s'il y en a une (story 2.11), modifiable ensuite par
+     * {@link #classer}.
      *
      * @throws ErreurMetier {@code 400 requete.invalide} si le type manque, si la licence ne peut pas être choisie pour
      *         ce type, ou si la source ou l'auteur dépassent {@value #LONGUEUR_MAX_TEXTE} caractères ;
@@ -431,6 +434,9 @@ public class Images {
         Image image = Image.nouvelle(images.nouvelIdentifiant(), proprietaire, commande.sensId(), TYPE_MEDIA_IMAGE,
                 type.valeur(), licence == null ? null : licence.valeur(), source, auteur, albumId,
                 EtatImage.PRIVEE.valeur());
+        if (commande.section() != null) {
+            image.classer(Set.of(commande.section()), null, Set.of());
+        }
         images.persist(image);
         fichiers.persist(ImageFichier.nouveau(image.id(), fichier.octets(), fichier.miniature(), fichier.typeMime(),
                 fichier.largeur(), fichier.hauteur()));

@@ -290,6 +290,9 @@ class ChoixImagePreparationResourceTest {
                 .extract().path("image.id");
 
         assertNotEquals(x.toString(), nouvelle);
+        // L'Image créée en remplacement reçoit aussi la Section de la Préparation (story 2.11).
+        given().when().get("/api/images/" + nouvelle)
+                .then().statusCode(200).body("sections", equalTo(List.of("ms")));
         assertEquals(nouvelle + "|" + PAUL + "|" + pouleRousse + "|ms|nouvelle", lienEnBase(motPreparation));
         assertEquals(1L, nombre("select count(*) from lien_image"));
         assertEquals(2L, nombre("select count(*) from image"));
