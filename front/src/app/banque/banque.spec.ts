@@ -768,6 +768,17 @@ describe('Banque', () => {
       expect(panneau()!.querySelector('mat-select')).toBeNull();
     });
 
+    it('la Banque propose « Utiliser dans une préparation » dans la Carte d’identité', async () => {
+      await ouvrirPage('/banque?provenance=banque');
+      const deSophie = image({ proprietaireId: SOPHIE, etat: 'versee', versee: true });
+      await servir(requeteImages('banque'), [deSophie]);
+
+      await ouvrirCarte(0, deSophie);
+
+      const boutons = [...panneau()!.querySelectorAll('button')].map((b) => texte(b));
+      expect(boutons).toContain('Utiliser dans une préparation');
+    });
+
     it('clavier : la vignette atteinte par Tab s’active (bouton natif), le focus passe au panneau', async () => {
       await ouvrirPage();
       const loup = image();

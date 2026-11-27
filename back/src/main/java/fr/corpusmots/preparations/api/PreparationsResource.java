@@ -7,6 +7,7 @@ import fr.corpusmots.preparations.service.AjouterMotCommande;
 import fr.corpusmots.preparations.service.MotPreparationVue;
 import fr.corpusmots.preparations.service.PreparationsService;
 import fr.corpusmots.preparations.service.TeleverserImageMotCommande;
+import fr.corpusmots.preparations.service.UtilisationImageVue;
 import fr.corpusmots.vocabulaire.service.CategorieGrammaticale;
 import fr.corpusmots.vocabulaire.service.FichierTeleverseVue;
 import fr.corpusmots.vocabulaire.service.PictogrammeTelechargeVue;
@@ -239,6 +240,30 @@ public class PreparationsResource {
             throw new ErreurMetier(400, "requete.invalide", "Le mot et l'image sont obligatoires");
         }
         return MotPreparationDto.de(preparations.reutiliserImage(id, reutilisation.enCommande()));
+    }
+
+    @POST
+    @Path("/{id}/utilisations")
+    @Consumes(MediaType.APPLICATION_JSON)
+    @Operation(operationId = "utiliserImagePreparation",
+            summary = "Utiliser une Image de la Banque dans une Préparation de l'enseignant connecté : le Mot qu'elle"
+                    + " illustre est ajouté au besoin, avec le Sens de l'Image, et l'Image lui est liée sans copie"
+                    + " (origine reutilisee)")
+    @APIResponse(responseCode = "200",
+            description = "Mot déjà présent, désormais illustré par l'Image ; son Sens retenu est celui de l'Image",
+            content = @Content(mediaType = MediaType.APPLICATION_JSON,
+                    schema = @Schema(implementation = MotPreparationDto.class)))
+    @APIResponse(responseCode = "201", description = "Mot ajouté en fin de Préparation, illustré par l'Image",
+            content = @Content(mediaType = MediaType.APPLICATION_JSON,
+                    schema = @Schema(implementation = MotPreparationDto.class)))
+    public RestResponse<MotPreparationDto> utiliserImage(@PathParam("id") UUID id,
+            @RequestBody(required = true) UtilisationImagePreparationDto utilisation) {
+        if (utilisation == null || utilisation.imageId() == null) {
+            throw new ErreurMetier(400, "requete.invalide", "L'image est obligatoire");
+        }
+        UtilisationImageVue resultat = preparations.utiliserImage(id, utilisation.enCommande());
+        return RestResponse.status(resultat.ajoute() ? RestResponse.Status.CREATED : RestResponse.Status.OK,
+                MotPreparationDto.de(resultat.mot()));
     }
 
     @GET

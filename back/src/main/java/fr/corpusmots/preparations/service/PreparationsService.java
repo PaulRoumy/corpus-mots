@@ -473,6 +473,50 @@ public class PreparationsService {
     }
 
     /**
+     * « Utiliser dans une préparation » depuis la Banque (story 3.4) : l'Image {@code imageId}, proposable à
+     * l'enseignant courant (la sienne ou celle, versée, d'un collègue), est liée avec l'origine {@code reutilisee},
+     * sans copie (AD-5), au Mot qu'elle illustre dans la Préparation {@code id}. Le Mot est déduit de l'Image (Mot de son
+     * Sens) :
+     * <ul>
+     * <li>absent de la Préparation, il est ajouté en fin, comme {@link #reutiliserImage}, avec le Sens de l'Image
+     * retenu ;</li>
+     * <li>présent et « à illustrer », l'Image lui est liée et le Sens retenu devient celui de l'Image
+     * ({@link Usages#remplacerImage}) ;</li>
+     * <li>présent et déjà illustré, la commande doit demander de remplacer l'Image : l'ancienne est seulement
+     * déliée, jamais modifiée. Déjà illustré par cette même Image, rien ne change.</li>
+     * </ul>
+     * Un Mot écarté de l'Encart le reste : l'ajout explicite l'emporte, comme {@link #ajouterMot}. Une seule
+     * transaction, Préparation verrouillée : rien n'est écrit en cas de refus.
+     *
+     * @return le Mot illustré, et s'il vient d'être ajouté
+     * @throws ErreurMetier {@code 404 ressource.introuvable} si la Préparation n'existe pas ou appartient à un
+     *         collègue ; {@code 404 image.indisponible} si l'Image n'existe pas ou ne lui est pas proposable, y compris
+     *         si elle change avant son verrou ; {@code 400 image.sens_different} si son Sens change entre la lecture
+     *         qui en déduit le Mot et son verrou ; {@code 409 preparation.mot_deja_illustre} si le Mot a déjà une
+     *         autre Image et que la commande ne demande pas de la remplacer
+     */
+    @Transactional
+    public UtilisationImageVue utiliserImage(UUID id, UtiliserImageCommande commande) {
+        Preparation preparation = verrouillee(id);
+        UUID sensId = usages.sensDImageProposable(commande.imageId())
+                .orElseThrow(() -> new ErreurMetier(404, CODE_IMAGE_INDISPONIBLE,
+                        "Aucune image proposable ne porte cet identifiant"));
+        UUID motId = lexique.sens(sensId).map(SensVue::motId)
+                .orElseThrow(() -> new IllegalStateException("Sens " + sensId + " introuvable"));
+        Optional<PreparationMot> present = preparationMots.duMot(preparation.id(), motId);
+        if (present.isEmpty()) {
+            return new UtilisationImageVue(reutiliserImage(id, new ReutiliserImageCommande(motId,
+                    commande.imageId())), true);
+        }
+        PreparationMot ligne = present.get();
+        ImageVue actuelle = usages.imagesLiees(List.of(ligne.id())).get(ligne.id());
+        if (actuelle != null && !actuelle.id().equals(commande.imageId()) && !commande.remplacer()) {
+            throw new ErreurMetier(409, CODE_MOT_DEJA_ILLUSTRE, "Ce mot de préparation a déjà une image");
+        }
+        return new UtilisationImageVue(remplacerImage(id, ligne.id(), commande.imageId()), false);
+    }
+
+    /**
      * Mots déjà illustrés pour l'Album de la Préparation {@code id} de l'enseignant courant (Encart, story 2.9), calculés
      * par {@code vocabulaire} seul ({@link DetectionMots#motsDejaIllustres}, AD-2), sans les Mots déjà dans la
      * Préparation ni ceux qui en ont été écartés. Lecture seule, sans verrou : rien n'est écrit.

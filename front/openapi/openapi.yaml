@@ -1526,6 +1526,20 @@ components:
       type: string
       format: uuid
       pattern: "[a-fA-F0-9]{8}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{12}"
+    UtilisationImagePreparationDto:
+      type: object
+      required:
+      - imageId
+      properties:
+        imageId:
+          description: "Image proposable à l'enseignant connecté : la sienne ou celle,\
+            \ versée, d'un collègue"
+          type: string
+          $ref: "#/components/schemas/UUID"
+        remplacer:
+          type: boolean
+          description: "Vrai pour remplacer l'Image déjà liée au Mot, qui est seulement\
+            \ déliée ; faux ou absent, un Mot déjà illustré est refusé (409 preparation.mot_deja_illustre)"
     VersementLotImagesDto:
       type: object
       required:
@@ -2999,6 +3013,42 @@ paths:
                 type: array
                 items:
                   $ref: "#/components/schemas/MotPreparationDto"
+        "400":
+          description: Bad Request
+      tags:
+      - Preparations Resource
+  /api/preparations/{id}/utilisations:
+    post:
+      summary: "Utiliser une Image de la Banque dans une Préparation de l'enseignant\
+        \ connecté : le Mot qu'elle illustre est ajouté au besoin, avec le Sens de\
+        \ l'Image, et l'Image lui est liée sans copie (origine reutilisee)"
+      operationId: utiliserImagePreparation
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          $ref: "#/components/schemas/UUID"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UtilisationImagePreparationDto"
+      responses:
+        "200":
+          description: "Mot déjà présent, désormais illustré par l'Image ; son Sens\
+            \ retenu est celui de l'Image"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MotPreparationDto"
+        "201":
+          description: "Mot ajouté en fin de Préparation, illustré par l'Image"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MotPreparationDto"
         "400":
           description: Bad Request
       tags:

@@ -27,11 +27,14 @@ import { reutiliserImageMotPreparation } from '../api/fn/preparations-resource/r
 import { DetectionImageDto } from '../api/models/detection-image-dto';
 import { MotPreparationDto } from '../api/models/mot-preparation-dto';
 import { RepriseMotPreparationDto } from '../api/models/reprise-mot-preparation-dto';
+import { Annuaire } from '../commun/annuaire';
 import { BandeauAnnuler } from '../commun/bandeau-annuler/bandeau-annuler';
 import { BandeauErreur } from '../commun/bandeau-erreur/bandeau-erreur';
 import { CODES_IMAGE_INDISPONIBLE } from '../commun/erreurs/codes-image-indisponible';
 import { codeErreur, erreurPassagere, messageErreur } from '../commun/erreurs/message-erreur';
+import { CompteCourant } from '../commun/compte-courant';
 import { ChargementImage, ImageSecurisee } from '../commun/image-securisee/image-securisee';
+import { libelleProprietaire } from './vignette-proposition';
 
 /** « 9 mots déjà illustrés pour cet album », « 1 mot déjà illustré pour cet album ». */
 export function titreEncart(nombre: number): string {
@@ -137,7 +140,8 @@ export class VignetteReprise {
  * `tertiary-container`, arrondi `lg` (jeton `encart-mots-deja-illustres` de DESIGN.md). Région nommée par son titre
  * (« 9 mots déjà illustrés pour cet album »), mis à jour à chaque geste et annoncé poliment (`annonce`, par la
  * région `aria-live` de la page) ; l'Encart disparaît quand
- * il est vide. Un Mot ajouté entre-temps à la Préparation (`motsPresents`) n'y est plus montré.
+ * il est vide. Un Mot ajouté entre-temps à la Préparation (`motsPresents`) n'y est plus montré. Chaque Image proposée
+ * montre son auteur (story 3.4), « vous » ou le nom de la collègue lu dans l'Annuaire, comme le Panneau de choix.
  *
  * « Reprendre » ajoute le Mot avec son Image (`POST …/mots/reutilisation`, origine `reutilisee`) ; « Tout reprendre »
  * envoie les Mots affichés (`POST …/reprises`) : le back ajoute ceux qui sont encore candidats, et si certains sont
@@ -181,6 +185,10 @@ export class VignetteReprise {
               <span class="encart__texte">
                 <span class="encart__forme">{{ reprise.forme }}</span>
                 <span class="encart__sens">{{ libelleSens(reprise) }}</span>
+                <span class="encart__auteur"
+                  ><span class="cm-visuellement-masque">Propriétaire : </span
+                  >{{ auteur(reprise) }}</span
+                >
                 @if (reprise.image.dejaUtilisee) {
                   <span class="encart__marque">
                     <mat-icon svgIcon="historique" aria-hidden="true" />
@@ -229,10 +237,15 @@ export class EncartMotsDejaIllustres {
 
   private readonly api = inject(Api);
   private readonly bandeauAnnuler = inject(BandeauAnnuler);
+  private readonly annuaire = inject(Annuaire);
+  private readonly compteCourant = inject(CompteCourant);
   private readonly injecteur = inject(Injector);
   private readonly destruction = inject(DestroyRef);
 
   protected readonly libelleSens = libelleSensReprise;
+  /** Auteur de l'Image proposée : « vous », ou le nom de la collègue dans l'Annuaire. */
+  protected readonly auteur = (reprise: RepriseMotPreparationDto): string =>
+    libelleProprietaire(reprise.image.proprietaireId, this.compteCourant, this.annuaire);
   protected readonly idTitre = `encart-titre-${++prochainEncart}`;
 
   /** Mots candidats renvoyés par le back, dans l'ordre de l'Encart. */
@@ -283,6 +296,9 @@ export class EncartMotsDejaIllustres {
       const reprises = await this.api.invoke(listerReprisesPreparation, { id });
       if (numero === this.chargement) {
         this.reprises.set(reprises);
+        if (reprises.length > 0) {
+          void this.annuaire.charger();
+        }
       }
     } catch (erreur) {
       if (numero === this.chargement) {

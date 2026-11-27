@@ -1,6 +1,7 @@
 import { LiveAnnouncer } from '@angular/cdk/a11y';
 import {
   afterNextRender,
+  booleanAttribute,
   ChangeDetectionStrategy,
   Component,
   computed,
@@ -89,6 +90,7 @@ import {
 } from '../repere-section/repere-section';
 import { Squelette } from '../squelette/squelette';
 import { estRefusVersement, phraseVersementIndisponible } from '../versement/raisons-versement';
+import { UtiliserDansPreparation } from './utiliser-dans-preparation';
 import { VersementImage } from './versement-image';
 
 /** Valeur affichée d'un champ vide. */
@@ -307,6 +309,9 @@ function texte(saisie: string): string | null {
  * même panneau fermé (pour `appliquer`), sans toucher aux saisies non enregistrées ; le refus est annoncé, le conflit
  * affiché dans le Bandeau d'erreur. Toute autre erreur s'affiche dans le Bandeau ; « Réessayer » reprend l'action
  * échouée (versement, relecture ou champ).
+ *
+ * Dans la Banque seulement (`utilisable`, story 3.4), la section `UtiliserDansPreparation` propose « Utiliser dans
+ * une préparation » pour toute Image affichée, au propriétaire comme en lecture seule.
  */
 @Component({
   selector: 'app-carte-identite',
@@ -327,6 +332,7 @@ function texte(saisie: string): string | null {
     ReactiveFormsModule,
     RepereSection,
     Squelette,
+    UtiliserDansPreparation,
     VersementImage,
   ],
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -760,6 +766,13 @@ function texte(saisie: string): string | null {
             <dd class="carte-identite__proprietaire">{{ proprietaire() }}</dd>
           </dl>
         }
+        @if (utilisable()) {
+          <app-utiliser-dans-preparation
+            class="carte-identite__utiliser"
+            [imageId]="carte.id"
+            [forme]="carte.forme"
+          />
+        }
       } @else if (erreur(); as affichee) {
         <app-bandeau-erreur
           class="carte-identite__erreur"
@@ -820,6 +833,8 @@ export class CarteIdentite {
    * Cartes de Mot ; appelée même si le panneau a été fermé ou remplacé pendant la requête.
    */
   readonly appliquer = input<(carte: CarteIdentiteImageDto) => void>();
+  /** Vrai dans la Banque : « Utiliser dans une préparation » est proposé ; jamais dans une Préparation. */
+  readonly utilisable = input(false, { transform: booleanAttribute });
 
   private readonly api = inject(Api);
   private readonly annuaire = inject(Annuaire);

@@ -350,6 +350,7 @@ function imageVersee(image: ImageBanqueDto): ImageBanqueDto {
           class="disposition__panneau"
           [id]="idPanneau"
           [imageId]="imageId"
+          utilisable
           (fermer)="fermerCarteIdentite()"
           [appliquer]="appliquerCarteIdentite"
         />

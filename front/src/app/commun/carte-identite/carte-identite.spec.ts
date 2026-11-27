@@ -3,6 +3,7 @@ import { provideHttpClient } from '@angular/common/http';
 import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { MATERIAL_ANIMATIONS } from '@angular/material/core';
+import { provideRouter } from '@angular/router';
 import { AlbumDto } from '../../api/models/album-dto';
 import { CarteIdentiteImageDto } from '../../api/models/carte-identite-image-dto';
 import { DELAI_RECHERCHE_ALBUMS_MS } from '../../preparations/recherche-albums';
@@ -16,6 +17,7 @@ import {
   MESSAGE_VERSEMENT,
 } from '../versement/raisons-versement';
 import { CarteIdentite, CONFIRMATION_IMAGE_ALBUM, MESSAGE_SENS_FIGE } from './carte-identite';
+import { LIBELLE_UTILISER } from './utiliser-dans-preparation';
 
 const MOI = '0190f0a0-0000-7000-8000-00000000e001';
 const ZOE = '0190f0a0-0000-7000-8000-00000000e002';
@@ -82,6 +84,7 @@ describe('CarteIdentite', () => {
         provideHttpClient(),
         provideHttpClientTesting(),
         provideIcones(),
+        provideRouter([]),
         { provide: MATERIAL_ANIMATIONS, useValue: { animationsDisabled: true } },
         { provide: DialogueConfirmation, useValue: { confirmer: (confirmer = vi.fn()) } },
       ],
@@ -1856,6 +1859,37 @@ describe('CarteIdentite', () => {
         serveur.expectNone(`/api/images/${IMAGE}`);
         await servir({ ...CARTE, id: AUTRE }, AUTRE);
       });
+    });
+  });
+
+  describe('« Utiliser dans une préparation » (story 3.4)', () => {
+    const section = () => racine.querySelector('app-utiliser-dans-preparation');
+    const bouton = () =>
+      [...racine.querySelectorAll<HTMLButtonElement>('button')].find(
+        (element) => element.textContent?.trim() === LIBELLE_UTILISER,
+      );
+
+    it('absent sans `utilisable` (Carte d’une Préparation), propriétaire ou lecture seule', async () => {
+      await servir(CARTE);
+      expect(section()).toBeNull();
+      expect(bouton()).toBeUndefined();
+
+      fixture.componentRef.setInput('imageId', AUTRE);
+      await stabiliser();
+      await servir({ ...CARTE, id: AUTRE, proprietaireId: ZOE, etat: 'versee' }, AUTRE);
+      expect(section()).toBeNull();
+    });
+
+    it('présent avec `utilisable` (Banque) : mon Image comme l’Image versée d’une collègue', async () => {
+      fixture.componentRef.setInput('utilisable', true);
+      await servir(CARTE);
+      expect(bouton()).toBeDefined();
+
+      fixture.componentRef.setInput('imageId', AUTRE);
+      await stabiliser();
+      await servir({ ...CARTE, id: AUTRE, proprietaireId: ZOE, etat: 'versee' }, AUTRE);
+      expect(texte('.carte-identite__lecture-seule')).toBe('lecture seule');
+      expect(bouton()).toBeDefined();
     });
   });
 });

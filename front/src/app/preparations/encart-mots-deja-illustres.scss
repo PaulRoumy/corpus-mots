@@ -81,7 +81,9 @@
   font: var(--cm-typo-word-cursive);
 }
 
-.encart__sens {
+// Auteur de l'Image proposée (story 3.4) : « vous » ou le nom de la collègue, après le Sens.
+.encart__sens,
+.encart__auteur {
   font: var(--cm-typo-body-sm);
 }
 

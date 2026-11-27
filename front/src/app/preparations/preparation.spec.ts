@@ -158,6 +158,8 @@ describe('Preparation (En-tête)', () => {
     // L'Encart « mots déjà illustrés » lit ses candidats (story 2.9) : vérifié par `encart-mots-deja-illustres.spec`
     // et par le bloc « Encart » ci-dessous.
     serveur.match((requete) => requete.url.endsWith('/reprises'));
+    // L'Encart lit l'Annuaire pour l'auteur de ses Images (story 3.4) : vérifié par `encart-mots-deja-illustres.spec`.
+    serveur.match('/api/enseignants');
     serveur.verify();
   });
 

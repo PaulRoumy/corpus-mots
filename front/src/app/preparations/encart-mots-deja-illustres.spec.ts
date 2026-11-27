@@ -6,6 +6,7 @@ import { DetectionImageDto } from '../api/models/detection-image-dto';
 import { MotPreparationDto } from '../api/models/mot-preparation-dto';
 import { RepriseMotPreparationDto } from '../api/models/reprise-mot-preparation-dto';
 import { BandeauAnnuler } from '../commun/bandeau-annuler/bandeau-annuler';
+import { CompteCourant } from '../commun/compte-courant';
 import { MESSAGE_RESEAU } from '../commun/erreurs/message-erreur';
 import { provideIcones } from '../commun/icones';
 import {
@@ -15,6 +16,7 @@ import {
 } from './encart-mots-deja-illustres';
 
 const PAUL = '0190f0a0-0000-7000-8000-000000000891';
+const ZOE = '0190f0a0-0000-7000-8000-000000000892';
 const URL_REPRISES = '/api/preparations/p1/reprises';
 const URL_REUTILISATION = '/api/preparations/p1/mots/reutilisation';
 
@@ -153,6 +155,7 @@ describe('EncartMotsDejaIllustres', () => {
 
   afterEach(() => {
     serveur.match((requete) => requete.url.endsWith('/fichier'));
+    serveur.match('/api/enseignants');
     serveur.verify();
     racine.remove();
     URL.createObjectURL = original.creer;
@@ -173,6 +176,25 @@ describe('EncartMotsDejaIllustres', () => {
     expect(bouton('Reprendre « étalé »').textContent?.trim()).toBe('Reprendre');
     expect(bouton('Écarter « étalé »').textContent?.trim()).toBe('Écarter');
     expect(boutonTexte('Tout reprendre')).toBeTruthy();
+  });
+
+  it('chaque vignette montre son auteur : « vous » pour mes Images, le nom de la collègue sinon', async () => {
+    TestBed.inject(CompteCourant).mettreAJour({
+      id: PAUL,
+      nomAffiche: 'Paul',
+      email: 'paul@ecole.fr',
+      administrateur: false,
+    });
+    const deZoe = { ...RENARD, image: { ...RENARD.image, proprietaireId: ZOE } };
+    await ouvrir([GALETTE, deZoe]);
+    serveur.expectOne('/api/enseignants').flush([
+      { id: PAUL, nomAffiche: 'Paul', statut: 'actif' },
+      { id: ZOE, nomAffiche: 'Zoé Martin', statut: 'actif' },
+    ]);
+    await stabiliser();
+
+    expect(texte('.encart__mot:nth-child(1) .encart__auteur')).toBe('Propriétaire : vous');
+    expect(texte('.encart__mot:nth-child(2) .encart__auteur')).toBe('Propriétaire : Zoé Martin');
   });
 
   it('aucun candidat : pas d’Encart', async () => {

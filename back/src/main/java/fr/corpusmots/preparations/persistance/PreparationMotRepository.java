@@ -27,6 +27,11 @@ public class PreparationMotRepository implements PanacheRepositoryBase<Preparati
         return find("id = ?1 and preparationId = ?2", id, preparationId).firstResultOptional();
     }
 
+    /** Mot de Préparation du Mot du Lexique {@code motId} dans la Préparation {@code preparationId}, s'il y figure. */
+    public Optional<PreparationMot> duMot(UUID preparationId, UUID motId) {
+        return find("preparationId = ?1 and motId = ?2", preparationId, motId).firstResultOptional();
+    }
+
     /** Vrai si un Mot de la Préparation occupe déjà la place {@code ordre}. */
     public boolean ordreOccupe(UUID preparationId, int ordre) {
         return count("preparationId = ?1 and ordre = ?2", preparationId, ordre) > 0;
