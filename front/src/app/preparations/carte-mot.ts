@@ -27,6 +27,7 @@ import { CODES_IMAGE_INDISPONIBLE } from '../commun/erreurs/codes-image-indispon
 import { codeErreur, messageErreur } from '../commun/erreurs/message-erreur';
 import { ChargementImage, ImageSecurisee } from '../commun/image-securisee/image-securisee';
 import { BasculeSelection, CaseSelection } from '../commun/selection/case-selection';
+import { LIBELLE_IMAGE_RETIREE } from '../commun/versement/raisons-versement';
 import { CODES_A_RECHARGER, SuggestionsArasaac } from './suggestions-arasaac';
 import { libelleProprietaire, nomProposition, VignetteProposition } from './vignette-proposition';
 
@@ -58,9 +59,11 @@ export const MESSAGE_IMAGE_EXISTANTE_INDISPONIBLE = "Cette image n'est plus disp
  * Une fois illustrée, la Carte occupe une colonne (key-preparation.html › `.wc`) : vignette de la miniature de l'Image,
  * chargée en `blob` par le client généré (`?taille=miniature`, AD-23), d'alternative « Mot, Sens » ; Badge de type
  * d'image, suivi du Badge d'état « versée » pour une Image versée dont l'enseignant connecté est le propriétaire
- * (story 3.3 ; FR-18) ; Mot en cursive. Une miniature qui ne se charge pas laisse voir l'icône d'image. La vignette est
- * un bouton « Changer l'image de « forme » », qui émet `choisirImage` : la page ouvre le Panneau de choix d'Image
- * (story 2.7, partie 3), d'où l'on ouvre la Carte d'identité (story 2.6).
+ * (story 3.3 ; FR-18) ; Mot en cursive. Une Image liée que son propriétaire ne verse plus (`aRemplacer = retiree`,
+ * story 3.5) est grisée et porte le badge « image retirée de la banque » (triangle d'alerte) ; sa vignette ouvre le
+ * Panneau de choix comme toute autre, pour en choisir une autre. Une miniature qui ne se charge pas laisse voir l'icône
+ * d'image. La vignette est un bouton « Changer l'image de « forme » », qui émet `choisirImage` : la page ouvre le
+ * Panneau de choix d'Image (story 2.7, partie 3), d'où l'on ouvre la Carte d'identité (story 2.6).
  *
  * Le bouton icône « Retirer « forme » de la préparation » (croix), toujours visible, émet `retirer` : le retrait se
  * fait sans confirmation et s'annule par le Bandeau « Annuler » (story 2.3, partie 2).
@@ -93,6 +96,7 @@ export const MESSAGE_IMAGE_EXISTANTE_INDISPONIBLE = "Cette image n'est plus disp
     '[class.carte-mot--a-illustrer]': '!mot().illustre',
     '[class.carte-mot--selectionnee]': 'selectionnee()',
     '[class.carte-mot--selection-active]': 'selectionActive()',
+    '[class.carte-mot--retiree]': 'retiree()',
   },
   template: `
     <app-case-selection
@@ -154,6 +158,12 @@ export const MESSAGE_IMAGE_EXISTANTE_INDISPONIBLE = "Cette image n'est plus disp
           <span class="carte-mot__versee">
             <mat-icon svgIcon="coche" aria-hidden="true" />
             versée
+          </span>
+        }
+        @if (retiree()) {
+          <span class="carte-mot__retiree">
+            <mat-icon svgIcon="alerte" aria-hidden="true" />
+            {{ libelleRetiree }}
           </span>
         }
       }
@@ -317,6 +327,10 @@ export class CarteMot {
     const image = this.mot().image;
     return image?.etat === 'versee' && image.proprietaireId === this.compteCourant.compte()?.id;
   });
+
+  /** Image liée que son propriétaire ne verse plus : vignette grisée et badge « image retirée de la banque ». */
+  protected readonly retiree = computed(() => this.mot().image?.aRemplacer === 'retiree');
+  protected readonly libelleRetiree = LIBELLE_IMAGE_RETIREE;
 
   /** Image liée, par son seul identifiant : la vignette ne se recharge que si l'Image change. */
   private readonly imageId = computed(() => this.mot().image?.id ?? null);

@@ -46,6 +46,22 @@ class VisibiliteImagesTest {
         assertEquals(proposable, visibilite.proposable(CLAIRE, etat, enseignant));
     }
 
+    @ParameterizedTest(name = "{0}, propriétaire {1} : à remplacer {2}")
+    @CsvSource({
+            // état, lecteur propriétaire, aRemplacer (vide : null)
+            "PRIVEE,     true,  ",
+            "PRIVEE,     false, retiree",
+            "VERSEE,     true,  ",
+            "VERSEE,     false, ",
+            "ABANDONNEE, false, ",
+            "SUPPRIMEE,  false, ",
+    })
+    void aRemplacer(EtatImage etat, boolean proprietaire, String aRemplacer) {
+        UUID enseignant = proprietaire ? CLAIRE : ZOE;
+
+        assertEquals(aRemplacer, visibilite.aRemplacer(CLAIRE, etat, enseignant));
+    }
+
     @ParameterizedTest(name = "{0} : modérable {1}")
     @CsvSource({ "PRIVEE, false", "VERSEE, true", "ABANDONNEE, true", "SUPPRIMEE, false" })
     void moderable(EtatImage etat, boolean moderable) {

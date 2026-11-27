@@ -2431,6 +2431,38 @@
           }
         },
         "tags" : [ "Images Resource" ]
+      },
+      "delete" : {
+        "summary" : "Ne plus verser une Image de l'enseignant connecté (son seul propriétaire) : elle redevient privée ; refusé si des collègues la lient, sauf confirmation ; sans effet si elle est privée",
+        "operationId" : "nePlusVerserImage",
+        "parameters" : [ {
+          "name" : "id",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "$ref" : "#/components/schemas/UUID"
+          }
+        }, {
+          "description" : "vrai pour confirmer malgré les collègues qui utilisent l'image",
+          "name" : "confirme",
+          "in" : "query",
+          "schema" : {
+            "type" : "boolean"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "description" : "Carte d'identité à jour de l'Image, privée",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/CarteIdentiteImageDto"
+                }
+              }
+            }
+          }
+        },
+        "tags" : [ "Images Resource" ]
       }
     },
     "/api/modules/{id}" : {

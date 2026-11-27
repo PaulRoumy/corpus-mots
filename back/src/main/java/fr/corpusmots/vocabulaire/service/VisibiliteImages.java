@@ -7,7 +7,8 @@ import java.util.Map;
 import java.util.UUID;
 
 /**
- * Seul arbitre de ce qu'un enseignant voit d'une Image (AD-2) : trois prédicats, et aucun autre. Le rôle {@code admin}
+ * Seul arbitre de ce qu'un enseignant voit d'une Image (AD-2) : trois prédicats, et aucun autre, plus l'état
+ * « à remplacer » ({@link #aRemplacer}) sous lequel il voit une Image liée. Le rôle {@code admin}
  * n'élargit aucun d'eux : ils ne le reçoivent même pas. Ne jamais filtrer les Images ailleurs.
  *
  * <ul>
@@ -34,6 +35,17 @@ public class VisibiliteImages {
     public boolean proposable(UUID proprietaireId, EtatImage etat, UUID enseignantId) {
         boolean proprietaire = proprietaireId != null && proprietaireId.equals(enseignantId);
         return etat == EtatImage.VERSEE || (proprietaire && etat == EtatImage.PRIVEE);
+    }
+
+    /**
+     * État « à remplacer » de l'Image de propriétaire {@code proprietaireId} et d'état {@code etat} lue par
+     * l'enseignant {@code enseignantId}, calculé à la lecture, jamais stocké : {@code retiree} pour une Image
+     * {@code privee} lue par un autre que son propriétaire (il ne la voit que par son propre lien, après « Ne plus
+     * verser »), {@code null} sinon.
+     */
+    public String aRemplacer(UUID proprietaireId, EtatImage etat, UUID enseignantId) {
+        boolean proprietaire = proprietaireId != null && proprietaireId.equals(enseignantId);
+        return !proprietaire && etat == EtatImage.PRIVEE ? "retiree" : null;
     }
 
     /** Vrai si une Image d'état {@code etat} relève de la modération. */

@@ -29,7 +29,8 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 /**
- * {@code POST /images/{id}/versement} et {@code POST /images/versements} (story 3.3, partie 1) : le propriétaire verse
+ * {@code POST /images/{id}/versement} et {@code POST /images/versements} (story 3.3, partie 1), puis
+ * {@code DELETE /images/{id}/versement} (story 3.5, partie 1) : le propriétaire verse
  * une Image ou un lot dans la Banque de l'école, si elle est versable (AD-4) ; {@code 403} pour l'Image d'un collègue,
  * administrateur compris, {@code 404 image.indisponible} pour une Image invisible. La Carte d'identité et la Banque
  * exposent la versabilité. Une ligne de test par ligne de la matrice de la spec ; Mots « toupie » et « bilboquet »
@@ -257,6 +258,113 @@ class VersementImagesResourceTest {
         assertEquals("privee", images.etat(priveeDeZoe));
         assertEquals("abandonnee", images.etat(abandonnee));
         assertEquals("supprimee", images.etat(supprimee));
+    }
+
+    // --- Ne plus verser une Image ---
+
+    @Test
+    @TestSecurity(user = CLAIRE)
+    @OidcSecurity(claims = @Claim(key = "sub", value = CLAIRE))
+    void sansReutilisationLImageRedevientPrivee() {
+        UUID personne = versee(claire);
+        UUID lieeParMoi = versee(claire);
+        images.lien(lieeParMoi, claire, album);
+
+        for (UUID image : List.of(personne, lieeParMoi)) {
+            nePlusVerser(image, null).statusCode(200)
+                    .body("id", equalTo(image.toString()))
+                    .body("etat", equalTo("privee"))
+                    .body("aRemplacer", nullValue())
+                    .body("reutilisable", equalTo(true))
+                    .body("versabilite", equalTo("versable"));
+            assertEquals("privee", images.etat(image));
+        }
+    }
+
+    @Test
+    @TestSecurity(user = CLAIRE)
+    @OidcSecurity(claims = @Claim(key = "sub", value = CLAIRE))
+    void reutiliseeSansConfirmationRienNEstEcrit() {
+        UUID image = versee(claire);
+        images.lien(image, claire, album);
+        images.lien(image, zoe, album);
+        long version = images.version(image);
+
+        refus(nePlusVerser(image, null), 409, "image.versement.reutilisee");
+        refus(nePlusVerser(image, false), 409, "image.versement.reutilisee");
+        assertEquals("versee", images.etat(image));
+        assertEquals(version, images.version(image));
+    }
+
+    @Test
+    @TestSecurity(user = CLAIRE)
+    @OidcSecurity(claims = @Claim(key = "sub", value = CLAIRE))
+    void reutiliseeAvecConfirmationLImageRedevientPriveeEtLeLienDuCollegueReste() {
+        UUID image = versee(claire);
+        images.lien(image, zoe, album);
+
+        nePlusVerser(image, true).statusCode(200).body("etat", equalTo("privee")).body("aRemplacer", nullValue());
+        assertEquals("privee", images.etat(image));
+        assertEquals(1L, images.nombreLiens(image, zoe));
+    }
+
+    @Test
+    @TestSecurity(user = CLAIRE)
+    @OidcSecurity(claims = @Claim(key = "sub", value = CLAIRE))
+    void uneImageDejaPriveeNeChangePas() {
+        UUID photo = photo(claire);
+        images.lien(photo, zoe, album);
+        long version = images.version(photo);
+
+        nePlusVerser(photo, null).statusCode(200).body("etat", equalTo("privee"));
+        assertEquals("privee", images.etat(photo));
+        assertEquals(version, images.version(photo));
+    }
+
+    @Test
+    @TestSecurity(user = CLAIRE)
+    @OidcSecurity(claims = @Claim(key = "sub", value = CLAIRE))
+    void nePlusVerserLImageDUnCollegueEstReserveeAuProprietaire() {
+        UUID deZoe = versee(zoe);
+
+        refus(nePlusVerser(deZoe, true), 403, "image.reservee_au_proprietaire");
+        assertEquals("versee", images.etat(deZoe));
+    }
+
+    @Test
+    @TestSecurity(user = ZOE, roles = "admin")
+    @OidcSecurity(claims = @Claim(key = "sub", value = ZOE))
+    void lAdministrateurNonProprietaireNePeutPasNePlusVerser() {
+        UUID deClaire = versee(claire);
+
+        refus(nePlusVerser(deClaire, true), 403, "image.reservee_au_proprietaire");
+        assertEquals("versee", images.etat(deClaire));
+    }
+
+    @Test
+    @TestSecurity(user = CLAIRE)
+    @OidcSecurity(claims = @Claim(key = "sub", value = CLAIRE))
+    void nePlusVerserUneImageInvisibleEstIndisponible() {
+        UUID priveeDeZoe = photo(zoe);
+
+        for (UUID image : List.of(priveeDeZoe, UUID.randomUUID())) {
+            refus(nePlusVerser(image, true), 404, "image.indisponible");
+        }
+        assertEquals("privee", images.etat(priveeDeZoe));
+    }
+
+    @Test
+    @TestSecurity(user = ZOE)
+    @OidcSecurity(claims = @Claim(key = "sub", value = ZOE))
+    void leCollegueLitLImageRedevenuePriveeCommeRetiree() {
+        UUID deClaire = photo(claire);
+        images.lien(deClaire, zoe, album);
+
+        carte(deClaire).statusCode(200)
+                .body("etat", equalTo("privee"))
+                .body("aRemplacer", equalTo("retiree"))
+                .body("reutilisable", equalTo(false));
+        given().when().get("/api/images?provenance=tout").then().statusCode(200).body("total", equalTo(0));
     }
 
     // --- Retrait admin vidé par chaque modification de la Carte d'identité ---
@@ -517,6 +625,18 @@ class VersementImagesResourceTest {
         given().when().post("/api/images/" + UUID.randomUUID() + "/versement").then().statusCode(401);
         given().contentType(ContentType.JSON).body(Map.of("imageIds", List.of(UUID.randomUUID().toString())))
                 .when().post("/api/images/versements").then().statusCode(401);
+        given().when().delete("/api/images/" + UUID.randomUUID() + "/versement").then().statusCode(401);
+    }
+
+    /** Photo personnelle versée de ce propriétaire, sur « toupie (jouet) ». */
+    private UUID versee(UUID proprietaire) {
+        return images.image(proprietaire, jouet, "versee", "photo_personnelle", "droits_auteur_enseignant", null, null,
+                null);
+    }
+
+    private static ValidatableResponse nePlusVerser(UUID image, Boolean confirme) {
+        return (confirme == null ? given() : given().queryParam("confirme", confirme))
+                .when().delete("/api/images/" + image + "/versement").then();
     }
 
     /** Photo personnelle privée de ce propriétaire, sur « toupie (jouet) ». */

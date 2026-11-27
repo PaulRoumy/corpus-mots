@@ -7,13 +7,18 @@ import { provideRouter } from '@angular/router';
 import { AlbumDto } from '../../api/models/album-dto';
 import { CarteIdentiteImageDto } from '../../api/models/carte-identite-image-dto';
 import { DELAI_RECHERCHE_ALBUMS_MS } from '../../preparations/recherche-albums';
+import { BandeauAnnuler } from '../bandeau-annuler/bandeau-annuler';
 import { CompteCourant } from '../compte-courant';
 import { DialogueConfirmation } from '../dialogue-confirmation/dialogue-confirmation';
 import { MESSAGE_RESEAU, MESSAGES_PAR_CODE } from '../erreurs/message-erreur';
 import { provideIcones } from '../icones';
 import {
+  CONFIRMATION_NE_PLUS_VERSER,
+  LIBELLE_IMAGE_RETIREE,
+  LIBELLE_NE_PLUS_VERSER,
   LIBELLE_VERSEMENT_EN_COURS,
   LIBELLE_VERSER,
+  MESSAGE_NE_PLUS_VERSEE,
   MESSAGE_VERSEMENT,
 } from '../versement/raisons-versement';
 import { CarteIdentite, CONFIRMATION_IMAGE_ALBUM, MESSAGE_SENS_FIGE } from './carte-identite';
@@ -1537,10 +1542,12 @@ describe('CarteIdentite', () => {
       expect(texte('.carte-identite__lecture-seule')).toBe('lecture seule');
     });
 
-    it('déjà versée : pas de section Verser, repère « versée »', async () => {
+    it('déjà versée : message de partage et « Ne plus verser » à la place de « Verser », repère « versée »', async () => {
       await servir(VERSEE);
 
-      expect(racine.querySelector('app-versement-image')).toBeNull();
+      expect(bouton()).toBeNull();
+      expect(message()?.textContent?.trim()).toBe(MESSAGE_VERSEMENT);
+      expect(texte('app-versement-image .versement__ne-plus-verser')).toBe(LIBELLE_NE_PLUS_VERSER);
       expect(repereVersee()).toBe('versée');
     });
 
@@ -1664,7 +1671,7 @@ describe('CarteIdentite', () => {
       serveur.expectOne(`/api/images/${IMAGE}`).flush(VERSEE);
       await stabiliser();
 
-      expect(racine.querySelector('app-versement-image')).toBeNull();
+      expect(bouton()).toBeNull();
       expect(document.activeElement).toBe(racine.querySelector('aside'));
     });
 
@@ -1805,6 +1812,281 @@ describe('CarteIdentite', () => {
       expect(message()).toBeNull();
       expect(repereVersee()).toBeUndefined();
       expect(bouton()?.textContent?.trim()).toBe(LIBELLE_VERSER);
+    });
+
+    describe('« Ne plus verser » (story 3.5)', () => {
+      const PRIVEE: CarteIdentiteImageDto = VERSABLE;
+      const nePlusVerser = () =>
+        racine.querySelector<HTMLButtonElement>('app-versement-image .versement__ne-plus-verser');
+      let afficher: ReturnType<typeof vi.fn>;
+
+      beforeEach(() => {
+        afficher = vi
+          .spyOn(TestBed.inject(BandeauAnnuler), 'afficher')
+          .mockImplementation(() => undefined) as never;
+      });
+
+      async function retirer() {
+        nePlusVerser()!.click();
+        await stabiliser();
+      }
+
+      it('sans réutilisation : DELETE sans confirmation, Carte à jour, Bandeau « Annuler », focus sur « Verser »', async () => {
+        await servir(VERSEE);
+        const emises = appliquees();
+
+        await retirer();
+        const requete = serveur.expectOne(URL_VERSEMENT);
+        expect(requete.request.method).toBe('DELETE');
+        expect(requete.request.params.has('confirme')).toBe(false);
+        expect(nePlusVerser()?.getAttribute('aria-disabled')).toBe('true');
+        // Un second clic pendant l'envoi n'envoie rien.
+        await retirer();
+        serveur.expectNone(URL_VERSEMENT);
+
+        requete.flush(PRIVEE);
+        await stabiliser();
+
+        expect(emises).toEqual([PRIVEE]);
+        expect(confirmer).not.toHaveBeenCalled();
+        expect(nePlusVerser()).toBeNull();
+        expect(message()).toBeNull();
+        expect(repereVersee()).toBeUndefined();
+        expect(bouton()?.textContent?.trim()).toBe(LIBELLE_VERSER);
+        expect(document.activeElement).toBe(bouton());
+        expect(afficher).toHaveBeenCalledTimes(1);
+        expect(afficher.mock.calls[0][0]).toBe(MESSAGE_NE_PLUS_VERSEE);
+      });
+
+      it('« Annuler » du Bandeau verse l’Image à nouveau', async () => {
+        await servir(VERSEE);
+        const emises = appliquees();
+        await retirer();
+        serveur.expectOne(URL_VERSEMENT).flush(PRIVEE);
+        await stabiliser();
+
+        (afficher.mock.calls[0][1] as () => void)();
+        await stabiliser();
+        const requete = serveur.expectOne(URL_VERSEMENT);
+        expect(requete.request.method).toBe('POST');
+        expect(bouton()?.textContent?.trim()).toBe(LIBELLE_VERSEMENT_EN_COURS);
+        requete.flush(VERSEE);
+        await stabiliser();
+
+        expect(emises).toEqual([PRIVEE, VERSEE]);
+        expect(repereVersee()).toBe('versée');
+        expect(nePlusVerser()).not.toBeNull();
+        expect(document.activeElement).toBe(message());
+      });
+
+      it('« Annuler » du Bandeau en échec réseau : Bandeau d’erreur, l’Image reste privée', async () => {
+        await servir(VERSEE);
+        const emises = appliquees();
+        await retirer();
+        serveur.expectOne(URL_VERSEMENT).flush(PRIVEE);
+        await stabiliser();
+
+        (afficher.mock.calls[0][1] as () => void)();
+        await stabiliser();
+        serveur.expectOne(URL_VERSEMENT).error(new ProgressEvent('error'));
+        await stabiliser();
+
+        expect(emises).toEqual([PRIVEE]);
+        expect(bandeau()).toBe(MESSAGE_RESEAU);
+        expect(repereVersee()).toBeUndefined();
+        expect(bouton()?.getAttribute('aria-disabled')).not.toBe('true');
+      });
+
+      it('« Annuler » du Bandeau après un changement d’Image : Carte passée à `appliquer`, Carte affichée inchangée', async () => {
+        await servir(VERSEE);
+        const emises = appliquees();
+        await retirer();
+        serveur.expectOne(URL_VERSEMENT).flush(PRIVEE);
+        await stabiliser();
+        fixture.componentRef.setInput('imageId', AUTRE);
+        await stabiliser();
+        await servir({ ...VERSABLE, id: AUTRE, forme: 'galette' }, AUTRE);
+
+        (afficher.mock.calls[0][1] as () => void)();
+        await stabiliser();
+        serveur.expectOne(URL_VERSEMENT).flush(VERSEE);
+        await stabiliser();
+
+        expect(emises).toEqual([PRIVEE, VERSEE]);
+        expect(champs()[0]).toBe('Mot : galette');
+        expect(repereVersee()).toBeUndefined();
+        expect(bouton()?.textContent?.trim()).toBe(LIBELLE_VERSER);
+      });
+
+      it('« Annuler » du Bandeau en échec, panneau fermé : l’échec est annoncé', async () => {
+        await servir(VERSEE);
+        await retirer();
+        serveur.expectOne(URL_VERSEMENT).flush(PRIVEE);
+        await stabiliser();
+        const annonce = annonces();
+        fixture.destroy();
+
+        (afficher.mock.calls[0][1] as () => void)();
+        await new Promise((fin) => setTimeout(fin));
+        serveur.expectOne(URL_VERSEMENT).error(new ProgressEvent('error'));
+        await new Promise((fin) => setTimeout(fin));
+
+        expect(annonce).toHaveBeenCalledWith(MESSAGE_RESEAU, 'assertive');
+      });
+
+      it('409 image.versement.reutilisee : Dialogue, « Ne plus verser » renvoie avec confirme=true, sans Bandeau', async () => {
+        await servir(VERSEE);
+        const emises = appliquees();
+        confirmer.mockResolvedValue(true);
+
+        await retirer();
+        serveur
+          .expectOne(URL_VERSEMENT)
+          .flush(
+            { status: 409, code: 'image.versement.reutilisee' },
+            { status: 409, statusText: 'Conflict' },
+          );
+        await stabiliser();
+
+        expect(confirmer).toHaveBeenCalledWith(CONFIRMATION_NE_PLUS_VERSER);
+        const confirmee = serveur.expectOne(
+          (requete) => requete.url === URL_VERSEMENT && requete.params.get('confirme') === 'true',
+        );
+        expect(confirmee.request.method).toBe('DELETE');
+        confirmee.flush(PRIVEE);
+        await stabiliser();
+
+        expect(emises).toEqual([PRIVEE]);
+        expect(repereVersee()).toBeUndefined();
+        expect(afficher).not.toHaveBeenCalled();
+        expect(racine.querySelector('app-bandeau-erreur')).toBeNull();
+        expect(document.activeElement).toBe(bouton());
+      });
+
+      it('échec réseau de l’envoi confirmé : « Réessayer » renvoie avec confirme=true, sans second Dialogue', async () => {
+        await servir(VERSEE);
+        confirmer.mockResolvedValue(true);
+        const confirmee = () =>
+          serveur.expectOne(
+            (requete) => requete.url === URL_VERSEMENT && requete.params.get('confirme') === 'true',
+          );
+
+        await retirer();
+        serveur
+          .expectOne(URL_VERSEMENT)
+          .flush(
+            { status: 409, code: 'image.versement.reutilisee' },
+            { status: 409, statusText: 'Conflict' },
+          );
+        await stabiliser();
+        confirmee().error(new ProgressEvent('error'));
+        await stabiliser();
+        expect(bandeau()).toBe(MESSAGE_RESEAU);
+
+        await reessayer();
+        const requete = confirmee();
+        expect(requete.request.method).toBe('DELETE');
+        requete.flush(PRIVEE);
+        await stabiliser();
+
+        expect(confirmer).toHaveBeenCalledTimes(1);
+        expect(afficher).not.toHaveBeenCalled();
+        expect(repereVersee()).toBeUndefined();
+      });
+
+      it('fermé pendant l’envoi : la Carte passe par `appliquer`, le Bandeau « Annuler » s’affiche', async () => {
+        await servir(VERSEE);
+        const emises = appliquees();
+
+        await retirer();
+        const requete = serveur.expectOne(URL_VERSEMENT);
+        fixture.destroy();
+        requete.flush(PRIVEE);
+        await new Promise((fin) => setTimeout(fin));
+
+        expect(emises).toEqual([PRIVEE]);
+        expect(afficher).toHaveBeenCalledTimes(1);
+        expect(afficher.mock.calls[0][0]).toBe(MESSAGE_NE_PLUS_VERSEE);
+      });
+
+      it('autre Image pendant l’envoi : la Carte passe par `appliquer`, la nouvelle Image reste affichée', async () => {
+        await servir(VERSEE);
+        const emises = appliquees();
+
+        await retirer();
+        const requete = serveur.expectOne(URL_VERSEMENT);
+        fixture.componentRef.setInput('imageId', AUTRE);
+        await stabiliser();
+        await servir({ ...VERSEE, id: AUTRE, forme: 'galette' }, AUTRE);
+        requete.flush(PRIVEE);
+        await stabiliser();
+
+        expect(emises).toEqual([PRIVEE]);
+        expect(champs()[0]).toBe('Mot : galette');
+        expect(repereVersee()).toBe('versée');
+        expect(nePlusVerser()?.getAttribute('aria-disabled')).not.toBe('true');
+      });
+
+      it('409 puis « Annuler » du Dialogue : rien ne change', async () => {
+        await servir(VERSEE);
+        const emises = appliquees();
+        confirmer.mockResolvedValue(false);
+
+        await retirer();
+        serveur
+          .expectOne(URL_VERSEMENT)
+          .flush(
+            { status: 409, code: 'image.versement.reutilisee' },
+            { status: 409, statusText: 'Conflict' },
+          );
+        await stabiliser();
+
+        serveur.expectNone(URL_VERSEMENT);
+        expect(emises).toEqual([]);
+        expect(repereVersee()).toBe('versée');
+        expect(nePlusVerser()?.getAttribute('aria-disabled')).not.toBe('true');
+        expect(afficher).not.toHaveBeenCalled();
+        expect(racine.querySelector('app-bandeau-erreur')).toBeNull();
+      });
+
+      it('échec réseau : Bandeau d’erreur, « Réessayer » relance « Ne plus verser »', async () => {
+        await servir(VERSEE);
+
+        await retirer();
+        serveur.expectOne(URL_VERSEMENT).error(new ProgressEvent('error'));
+        await stabiliser();
+        expect(bandeau()).toBe(MESSAGE_RESEAU);
+
+        await reessayer();
+        const requete = serveur.expectOne(URL_VERSEMENT);
+        expect(requete.request.method).toBe('DELETE');
+        requete.flush(PRIVEE);
+        await stabiliser();
+
+        expect(racine.querySelector('app-bandeau-erreur')).toBeNull();
+        expect(repereVersee()).toBeUndefined();
+      });
+
+      it('collègue : ni « Ne plus verser », ni badge retirée pour une Image versée', async () => {
+        await servir({ ...VERSEE, proprietaireId: ZOE });
+
+        expect(racine.querySelector('app-versement-image')).toBeNull();
+        expect(racine.querySelector('.carte-identite__retiree')).toBeNull();
+      });
+
+      it('Image retirée de la banque (collègue) : badge « image retirée de la banque », triangle d’alerte', async () => {
+        await servir({ ...CARTE, proprietaireId: ZOE, aRemplacer: 'retiree', reutilisable: false });
+
+        expect(texte('.carte-identite__reperes .carte-identite__retiree')).toBe(
+          LIBELLE_IMAGE_RETIREE,
+        );
+        expect(
+          racine
+            .querySelector('.carte-identite__retiree mat-icon')
+            ?.getAttribute('data-mat-icon-name'),
+        ).toBe('alerte');
+        expect(racine.querySelector('app-versement-image')).toBeNull();
+      });
     });
 
     describe('actualiser', () => {

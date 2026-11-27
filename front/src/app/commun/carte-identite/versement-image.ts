@@ -10,6 +10,7 @@ import {
 import { MatButtonModule } from '@angular/material/button';
 import { CarteIdentiteImageDto } from '../../api/models/carte-identite-image-dto';
 import {
+  LIBELLE_NE_PLUS_VERSER,
   LIBELLE_VERSEMENT_EN_COURS,
   LIBELLE_VERSER,
   MESSAGE_VERSEMENT,
@@ -24,9 +25,10 @@ let compteur = 0;
  * Avec `versabilite = "versable"`, bouton tonal « Verser dans la banque de l'école », qui émet `verser`. Avec un code
  * de refus, le bouton reste visible mais indisponible (`aria-disabled`, toujours focusable), suivi de la raison
  * exacte, liée par `aria-describedby` : « Verser indisponible : source à préciser. ». Pendant l'envoi, le bouton est
- * indisponible et indique « Versement… ». Après un versement réussi (`versee`), le bouton laisse place au message de
- * partage, que la Carte focalise par `focusMessage()` : le focus le fait lire, sans région vive qui l'annoncerait une
- * seconde fois.
+ * indisponible et indique « Versement… ». Une Image versée (`versee`) montre le message de partage, que la Carte
+ * focalise par `focusMessage()` après un versement (le focus le fait lire, sans région vive qui l'annoncerait une
+ * seconde fois), suivi du bouton « Ne plus verser » (story 3.5), qui émet `nePlusVerser` et reste indisponible, mais
+ * focusable, pendant l'envoi.
  */
 @Component({
   selector: 'app-versement-image',
@@ -63,8 +65,19 @@ let compteur = 0;
   template: `
     @if (versee()) {
       <p #message class="versement__message" tabindex="-1">{{ messageVersement }}</p>
+      <button
+        matButton="outlined"
+        class="versement__ne-plus-verser"
+        type="button"
+        disabledInteractive
+        [disabled]="enCours()"
+        (click)="choisirNePlusVerser()"
+      >
+        {{ libelleNePlusVerser }}
+      </button>
     } @else if (versabilite() !== null) {
       <button
+        #bouton
         matButton="tonal"
         class="versement__bouton"
         type="button"
@@ -86,18 +99,21 @@ export class VersementImage {
   readonly versabilite = input.required<Versabilite | null>();
   /** Licence de la Carte, qui distingue « licence à préciser » de « licence non partageable ». */
   readonly licence = input<CarteIdentiteImageDto['licence']>(null);
-  /** Vrai pendant l'envoi du versement. */
+  /** Vrai pendant l'envoi du versement ou de « Ne plus verser ». */
   readonly enCours = input(false);
-  /** Vrai après un versement réussi de l'Image affichée : le message de partage remplace le bouton. */
+  /** Vrai pour une Image versée : le message de partage et « Ne plus verser » remplacent « Verser ». */
   readonly versee = input(false);
   readonly verser = output<void>();
+  readonly nePlusVerser = output<void>();
 
   protected readonly messageVersement = MESSAGE_VERSEMENT;
   protected readonly libelleVerser = LIBELLE_VERSER;
   protected readonly libelleEnCours = LIBELLE_VERSEMENT_EN_COURS;
+  protected readonly libelleNePlusVerser = LIBELLE_NE_PLUS_VERSER;
   protected readonly idRaison = `versement-image-raison-${++compteur}`;
 
   private readonly message = viewChild<ElementRef<HTMLElement>>('message');
+  private readonly bouton = viewChild('bouton', { read: ElementRef<HTMLElement> });
 
   /** Phrase « Verser indisponible : … . » d'un refus, `null` pour une Image versable. */
   protected readonly raison = computed(() => {
@@ -114,6 +130,18 @@ export class VersementImage {
   /** Donne le focus au message de partage, s'il est affiché. */
   focusMessage(): void {
     this.message()?.nativeElement.focus();
+  }
+
+  /** Donne le focus au bouton « Verser », s'il est affiché. */
+  focusBouton(): void {
+    this.bouton()?.nativeElement.focus();
+  }
+
+  /** Pendant l'envoi, « Ne plus verser » reste focusable et cliquable : son clic n'émet rien. */
+  protected choisirNePlusVerser(): void {
+    if (!this.enCours()) {
+      this.nePlusVerser.emit();
+    }
   }
 
   /** Le bouton indisponible reste focusable et cliquable : son clic n'émet rien. */

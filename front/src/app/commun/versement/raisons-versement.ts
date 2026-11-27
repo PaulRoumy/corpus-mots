@@ -21,6 +21,23 @@ export const LIBELLE_VERSER = "Verser dans la banque de l'école";
 /** Libellé du bouton pendant l'envoi du versement. */
 export const LIBELLE_VERSEMENT_EN_COURS = 'Versement…';
 
+/** Libellé du bouton « Ne plus verser » d'une Image versée, pour son propriétaire (story 3.5). */
+export const LIBELLE_NE_PLUS_VERSER = 'Ne plus verser';
+
+/** Message du Bandeau « Annuler » après « Ne plus verser » une Image qu'aucun collègue n'utilise. */
+export const MESSAGE_NE_PLUS_VERSEE = "L'image n'est plus dans la banque.";
+
+/** Dialogue de confirmation de « Ne plus verser » une Image que des collègues utilisent. */
+export const CONFIRMATION_NE_PLUS_VERSER = {
+  titre: 'Ne plus verser cette image ?',
+  phrase:
+    "Des collègues l'utilisent : leurs préparations afficheront « image retirée de la banque ».",
+  libelleConfirmer: LIBELLE_NE_PLUS_VERSER,
+} as const;
+
+/** Libellé du badge d'une Image liée que son propriétaire ne verse plus (`aRemplacer = retiree`). */
+export const LIBELLE_IMAGE_RETIREE = 'image retirée de la banque';
+
 /** Message affiché après un versement réussi. */
 export const MESSAGE_VERSEMENT =
   "L'image reste la vôtre. Les collègues peuvent l'utiliser, personne ne peut la modifier.";

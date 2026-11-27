@@ -143,6 +143,11 @@
   width: 100%;
   height: 100%;
   object-fit: contain;
+
+  // Image retirée de la banque : vignette grisée, toujours cliquable pour en choisir une autre.
+  :host(.carte-mot--retiree) & {
+    opacity: var(--cm-opacite-image-retiree);
+  }
 }
 
 .carte-mot__repli {
@@ -205,8 +210,10 @@
   }
 }
 
-// Badge d'état « versée » (DESIGN.md › badge-etat `versee`) : coche et libellé, jamais la couleur seule.
-.carte-mot__versee {
+// Badges d'état « versée » et « image retirée de la banque » (DESIGN.md › badge-etat `versee`, `retiree`) : icône et
+// libellé, jamais la couleur seule.
+.carte-mot__versee,
+.carte-mot__retiree {
   display: inline-flex;
   align-items: center;
   gap: var(--cm-espace-1);
@@ -223,6 +230,11 @@
     width: var(--cm-taille-icone-badge);
     height: var(--cm-taille-icone-badge);
   }
+}
+
+.carte-mot__retiree {
+  background: var(--cm-etat-retiree-fond);
+  color: var(--cm-etat-retiree-texte);
 }
 
 // Bouton « Retirer » (croix), toujours visible, dans le coin haut droit de la Carte ; sur fond carte, pour rester

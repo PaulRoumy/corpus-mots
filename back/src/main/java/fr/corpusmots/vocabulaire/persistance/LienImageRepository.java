@@ -39,6 +39,12 @@ public class LienImageRepository implements PanacheRepositoryBase<LienImage, UUI
         return count("imageId", imageId) > 0;
     }
 
+    /** Vrai si un autre enseignant que {@code proprietaireId} a un lien vers cette Image (lien de collègue). */
+    public boolean existeHorsEnseignant(UUID imageId, UUID proprietaireId) {
+        return find("imageId = ?1 and enseignantId <> ?2", imageId, proprietaireId).firstResultOptional()
+                .isPresent();
+    }
+
     /** Celles de ces Images qui ont un lien, de n'importe quel enseignant, dans un autre Album que {@code albumId}. */
     public Set<UUID> lieesHorsAlbum(Collection<UUID> imageIds, UUID albumId) {
         if (imageIds.isEmpty()) {

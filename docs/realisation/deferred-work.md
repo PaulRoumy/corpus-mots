@@ -278,3 +278,6 @@
 - source_spec: `docs/realisation/spec-3-7-1-filtre-album-par-usage.md`
   summary: Dans la Banque, Album + Module ne retient que les Images dont le Module est celui du filtre (`i.module_id`) : une Image retenue par l'Album grâce à mon lien (pictogramme, photo, souvent sans Module) disparaît dès qu'on choisit un Module de cet Album.
   evidence: Revue de la story 3.7 partie 1 (BH-1) ; la barre de filtres n'offre le Module qu'après l'Album (`barre-filtres.ts`), le lien `lien_image` n'a pas de colonne Module, et une Image créée depuis une Préparation n'hérite pas du Module (entrée de la story 2.11 partie 2). Décider si le Module d'une Préparation doit compter via le lien.
+- source_spec: none
+  summary: Story 3.5 partie 2 — module `notifications` : table et instantané (`type`, `image_id`, `mot_forme`, `sens_libelle`, `cree_le`, `lue_le`, jamais le fichier ni le nom de l'acteur), une Notification par enseignant distinct qui a un lien, créée dans la transaction `versee → privee` de « Ne plus verser » (AD-3, AD-17), et cloche de la barre supérieure (pastille, menu déroulant marqué lu à l'ouverture, « Aucune notification », UX-DR-7).
+  evidence: Découpage de la story 3.5 en deux parties (choix de Paul, 2026-11-27) ; la partie 1 livre « Ne plus verser » et l'état « image retirée de la banque », la partie 2 y branche les Notifications.

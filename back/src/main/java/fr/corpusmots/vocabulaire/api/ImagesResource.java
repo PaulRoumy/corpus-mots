@@ -23,6 +23,7 @@ import fr.corpusmots.vocabulaire.service.UsageFichierImage;
 import fr.corpusmots.vocabulaire.service.Versements;
 import jakarta.inject.Inject;
 import jakarta.ws.rs.Consumes;
+import jakarta.ws.rs.DELETE;
 import jakarta.ws.rs.GET;
 import jakarta.ws.rs.POST;
 import jakarta.ws.rs.PUT;
@@ -70,9 +71,11 @@ import org.jboss.resteasy.reactive.ResponseStatus;
  * refus. {@code POST /images/{id}/versement} verse une Image de son propriétaire dans la Banque de l'école (FR-19) :
  * {@code 404 image.indisponible} pour une Image absente ou invisible, {@code 403 image.reservee_au_proprietaire} pour
  * l'Image d'un collègue, {@code 400} avec le code du motif pour une Image non versable (AD-4) ; une Image déjà versée ne
- * change pas. {@code POST /images/versements} verse un lot de 1 à 500 Images, chacune selon la même règle, et rend les
- * versées, les déjà versées et les refusées avec leur raison ; une liste vide, trop longue, avec un doublon, un nul ou
- * un identifiant mal formé répond {@code 400 requete.invalide}.
+ * change pas. {@code DELETE /images/{id}/versement?confirme=} la rend de nouveau privée (FR-21), avec les mêmes
+ * {@code 404} et {@code 403}, et {@code 409 image.versement.reutilisee} si un collègue la lie et que {@code confirme}
+ * est faux ; une Image déjà privée ne change pas. {@code POST /images/versements} verse un lot de 1 à 500 Images,
+ * chacune selon la même règle, et rend les versées, les déjà versées et les refusées avec leur raison ; une liste vide,
+ * trop longue, avec un doublon, un nul ou un identifiant mal formé répond {@code 400 requete.invalide}.
  *
  * <p>Fichiers des Images (AD-23) : servis uniquement par {@link FichiersImages#lire}, qui applique la visibilité (AD-2).
  * Une Image que l'enseignant connecté ne peut pas consulter répond {@code 404 ressource.introuvable}, comme une Image
@@ -356,6 +359,21 @@ public class ImagesResource {
                     schema = @Schema(implementation = CarteIdentiteImageDto.class)))
     public CarteIdentiteImageDto verser(@PathParam("id") UUID id) {
         return CarteIdentiteImageDto.de(versements.verser(id, acteur()));
+    }
+
+    @DELETE
+    @Path("/{id}/versement")
+    @Produces(MediaType.APPLICATION_JSON)
+    @Operation(operationId = "nePlusVerserImage",
+            summary = "Ne plus verser une Image de l'enseignant connecté (son seul propriétaire) : elle redevient"
+                    + " privée ; refusé si des collègues la lient, sauf confirmation ; sans effet si elle est privée")
+    @APIResponse(responseCode = "200", description = "Carte d'identité à jour de l'Image, privée",
+            content = @Content(mediaType = MediaType.APPLICATION_JSON,
+                    schema = @Schema(implementation = CarteIdentiteImageDto.class)))
+    public CarteIdentiteImageDto nePlusVerser(@PathParam("id") UUID id,
+            @Parameter(description = "vrai pour confirmer malgré les collègues qui utilisent l'image")
+            @QueryParam("confirme") boolean confirme) {
+        return CarteIdentiteImageDto.de(versements.nePlusVerser(id, confirme, acteur()));
     }
 
     @GET

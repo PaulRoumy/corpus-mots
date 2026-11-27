@@ -7,6 +7,9 @@ import { HttpErrorResponse } from '@angular/common/http';
  */
 
 const SERVICE_INDISPONIBLE = 'Le service ne répond pas comme prévu. Réessayez dans un instant.';
+// Messages communs à plusieurs codes, écrits une seule fois (paquet initial au bord du budget).
+const ALBUM_DISPARU = "Cet album n'existe plus. Choisissez-en un autre.";
+const MOT_INVALIDE = 'Saisissez un mot de 1 à 100 caractères.';
 
 /** Statut `0` : la requête n'a pas atteint le serveur (réseau coupé, serveur arrêté). */
 export const MESSAGE_RESEAU =
@@ -28,24 +31,25 @@ export const MESSAGES_PAR_CODE: Readonly<Record<string, string>> = {
   'compte.nom_affiche_invalide': 'Saisissez un nom de 1 à 100 caractères.',
   'compte.statut_incompatible': 'Ce compte a changé entre-temps. La liste est rechargée.',
   'preparation.section_invalide': 'Choisissez la section : PS, MS ou GS.',
-  'preparation.album_introuvable': "Cet album n'existe plus. Choisissez-en un autre.",
+  'preparation.album_introuvable': ALBUM_DISPARU,
   'preparation.module_invalide': "Ce module n'appartient plus à l'album. Choisissez-en un autre.",
   'preparation.theme_introuvable': "Ce thème n'existe plus. Choisissez-en un autre.",
   'preparation.temps_passe_invalide':
     "Saisissez un nombre d'heures entre 0 et 100, par demi-heure.",
-  'preparation.mot_invalide': 'Saisissez un mot de 1 à 100 caractères.',
+  'preparation.mot_invalide': MOT_INVALIDE,
   'preparation.mot_deja_present': 'Ce mot est déjà dans la préparation.',
   'preparation.sens_invalide': "Ce sens n'appartient pas à ce mot.",
   'preparation.mot_deja_illustre': 'Ce mot a déjà une image dans la préparation.',
   'preparation.nom_trop_long': 'Le nom ne doit pas dépasser 100 caractères.',
   'image.album_requis': "Album d'origine requis.",
-  'image.album_introuvable': "Cet album n'existe plus. Choisissez-en un autre.",
-  'image.mot_invalide': 'Saisissez un mot de 1 à 100 caractères.',
+  'image.album_introuvable': ALBUM_DISPARU,
+  'image.mot_invalide': MOT_INVALIDE,
   'image.sens_different': 'Cette image illustre un autre sens ou un autre mot.',
   'image.indisponible':
     "Cette image n'est plus disponible. Choisissez-en une autre, ou appuyez sur Entrée pour ajouter le mot sans image.",
   'image.reservee_au_proprietaire':
     "Seul le propriétaire de l'image peut modifier sa carte d'identité.",
+  'image.versement.reutilisee': 'Des collègues utilisent cette image.',
   'image.theme_introuvable': "Un de ces thèmes n'existe plus. Retirez-le, puis réessayez.",
   'image.module_introuvable': "Ce module n'existe plus. Choisissez-en un autre.",
   'image.sens_invalide': "Ce sens n'est plus proposé pour ce mot. Choisissez-en un autre.",

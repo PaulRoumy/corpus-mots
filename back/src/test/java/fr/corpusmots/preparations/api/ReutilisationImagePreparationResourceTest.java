@@ -2,6 +2,8 @@ package fr.corpusmots.preparations.api;
 
 import static io.restassured.RestAssured.given;
 import static org.hamcrest.Matchers.equalTo;
+import static org.hamcrest.Matchers.hasItem;
+import static org.hamcrest.Matchers.not;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
@@ -11,11 +13,13 @@ import fr.corpusmots.commun.api.ProblemeDto;
 import fr.corpusmots.commun.service.Section;
 import fr.corpusmots.referentiels.api.ReferentielsDeTest;
 import fr.corpusmots.vocabulaire.api.ImagesDeTest;
+import fr.corpusmots.vocabulaire.service.Acteur;
 import fr.corpusmots.vocabulaire.service.Lexique;
 import fr.corpusmots.vocabulaire.service.LierImageCommande;
 import fr.corpusmots.vocabulaire.service.MotVue;
 import fr.corpusmots.vocabulaire.service.OrigineLien;
 import fr.corpusmots.vocabulaire.service.Usages;
+import fr.corpusmots.vocabulaire.service.Versements;
 import io.quarkus.narayana.jta.QuarkusTransaction;
 import io.quarkus.test.junit.QuarkusTest;
 import io.quarkus.test.security.TestSecurity;
@@ -59,6 +63,9 @@ class ReutilisationImagePreparationResourceTest {
 
     @Inject
     Usages usages;
+
+    @Inject
+    Versements versements;
 
     @Inject
     EntityManager entityManager;
@@ -147,6 +154,47 @@ class ReutilisationImagePreparationResourceTest {
                 .extract().path("id");
 
         assertEquals(metier, sensRetenu(UUID.fromString(id)));
+    }
+
+    /**
+     * Story 3.5, partie 1 : Zoé ne verse plus son Image que Paul a réutilisée. Le lien de Paul reste ; il lit l'Image
+     * {@code retiree}, non réutilisable, dans sa Préparation et sa Carte d'identité, et ne la voit plus proposée.
+     */
+    @Test
+    void lImageQuUnCollegueNeVersePlusEstLueRetireeDansLaPreparation() {
+        MotVue farine = mot("farine");
+        UUID image = image(ZOE, sens(farine, "farine", "nom"), "versee");
+        String motPreparation = reutiliser(preparation, farine.id(), image).statusCode(201)
+                .body("image.aRemplacer", equalTo(null))
+                .body("image.reutilisable", equalTo(true))
+                .extract().path("id");
+
+        versements.nePlusVerser(image, true, new Acteur.Proprietaire(UUID.fromString(ZOE)));
+
+        assertEquals(ZOE + "|privee", proprietaireEtEtat(image));
+        assertEquals(image + "|" + PAUL + "|" + pouleRousse + "|ms|reutilisee",
+                lienEnBase(UUID.fromString(motPreparation)));
+        given().when().get("/api/preparations/" + preparation + "/mots")
+                .then().statusCode(200)
+                .body("[0].illustre", equalTo(true))
+                .body("[0].image.id", equalTo(image.toString()))
+                .body("[0].image.etat", equalTo("privee"))
+                .body("[0].image.aRemplacer", equalTo("retiree"))
+                .body("[0].image.reutilisable", equalTo(false));
+        given().when().get("/api/images/" + image)
+                .then().statusCode(200)
+                .body("aRemplacer", equalTo("retiree"))
+                .body("reutilisable", equalTo(false));
+        given().queryParam("saisie", "farine")
+                .when().get("/api/preparations/" + preparation + "/detection")
+                .then().statusCode(200)
+                .body("mots.images.flatten().id", not(hasItem(image.toString())));
+        given().when().get("/api/preparations/" + preparation + "/mots/" + motPreparation + "/propositions")
+                .then().statusCode(200)
+                .body("images.id", not(hasItem(image.toString())));
+        given().when().get("/api/images?provenance=tout")
+                .then().statusCode(200)
+                .body("elements.id", not(hasItem(image.toString())));
     }
 
     @Test

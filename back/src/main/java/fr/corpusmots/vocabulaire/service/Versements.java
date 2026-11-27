@@ -3,6 +3,7 @@ package fr.corpusmots.vocabulaire.service;
 import fr.corpusmots.commun.api.ErreurMetier;
 import fr.corpusmots.vocabulaire.persistance.Image;
 import fr.corpusmots.vocabulaire.persistance.ImageRepository;
+import fr.corpusmots.vocabulaire.persistance.LienImageRepository;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 import jakarta.transaction.Transactional;
@@ -18,10 +19,10 @@ import java.util.function.Function;
 import java.util.stream.Collectors;
 
 /**
- * Versement d'Images dans la Banque de l'école (FR-19), transition {@code privee → versee} d'AD-3, au nom d'un
- * {@link Acteur} explicite, le propriétaire. La versabilité est celle de {@link Versabilite#de} (AD-4). Aucune
- * Notification n'est créée : AD-3 n'en prévoit pas pour {@code privee → versee}. Rejoint la transaction de l'appelant
- * (AD-17).
+ * Versement d'Images dans la Banque de l'école (FR-19), transition {@code privee → versee} d'AD-3, et retour
+ * {@code versee → privee} (« Ne plus verser », FR-21), au nom d'un {@link Acteur} explicite, le propriétaire. La
+ * versabilité est celle de {@link Versabilite#de} (AD-4). Aucune Notification n'est encore créée. Rejoint la
+ * transaction de l'appelant (AD-17).
  */
 @ApplicationScoped
 public class Versements {
@@ -29,6 +30,7 @@ public class Versements {
     static final String CODE_IMAGE_INDISPONIBLE = "image.indisponible";
     static final String CODE_RESERVEE_AU_PROPRIETAIRE = "image.reservee_au_proprietaire";
     static final String CODE_REQUETE_INVALIDE = "requete.invalide";
+    static final String CODE_REUTILISEE = "image.versement.reutilisee";
 
     /** Nombre maximal d'Images d'un versement en lot. */
     public static final int TAILLE_MAX_LOT = 500;
@@ -41,6 +43,9 @@ public class Versements {
 
     @Inject
     Images cartes;
+
+    @Inject
+    LienImageRepository liens;
 
     /**
      * Verse l'Image {@code imageId} de son propriétaire {@code acteur}, verrouillée ({@code SELECT … FOR UPDATE},
@@ -61,6 +66,41 @@ public class Versements {
         }
         images.flush();
         return cartes.carteIdentite(image.orElseThrow(), acteur.id());
+    }
+
+    /**
+     * Ne plus verser l'Image {@code imageId} de son propriétaire {@code acteur} : elle repasse de {@code versee} à
+     * {@code privee}, verrouillée ({@code SELECT … FOR UPDATE}, AD-17). Une Image déjà privée ne change pas. Les liens
+     * des collègues restent intacts : seule leur lecture change ({@code aRemplacer = retiree}). Rien n'est modifié en
+     * cas de refus.
+     *
+     * @param confirme vrai si le propriétaire a confirmé malgré les liens de collègues
+     * @return la Carte d'identité à jour, lue par l'acteur
+     * @throws ErreurMetier {@code 404 image.indisponible} si l'Image n'existe pas ou n'est pas proposable à l'acteur ;
+     *         {@code 403 image.reservee_au_proprietaire} s'il n'en est pas le propriétaire ;
+     *         {@code 409 image.versement.reutilisee} si un collègue a un lien vers l'Image et que {@code confirme} est
+     *         faux
+     */
+    @Transactional
+    public CarteIdentiteImageVue nePlusVerser(UUID imageId, boolean confirme, Acteur.Proprietaire acteur) {
+        Objects.requireNonNull(acteur, "acteur");
+        Image image = (imageId == null ? Optional.<Image>empty() : images.verrouillee(imageId))
+                .filter(verrouillee -> visibilite.proposable(verrouillee, acteur.id()))
+                .orElseThrow(() -> new ErreurMetier(404, CODE_IMAGE_INDISPONIBLE,
+                        "Aucune image disponible ne porte cet identifiant"));
+        if (!image.proprietaireId().equals(acteur.id())) {
+            throw new ErreurMetier(403, CODE_RESERVEE_AU_PROPRIETAIRE,
+                    "Seul le propriétaire de l'image peut ne plus la verser");
+        }
+        if (VisibiliteImages.etat(image) == EtatImage.VERSEE) {
+            if (!confirme && liens.existeHorsEnseignant(image.id(), image.proprietaireId())) {
+                throw new ErreurMetier(409, CODE_REUTILISEE,
+                        "Des collègues utilisent cette image : confirmez pour ne plus la verser");
+            }
+            image.changerEtat(EtatImage.PRIVEE.valeur());
+            images.flush();
+        }
+        return cartes.carteIdentite(image, acteur.id());
     }
 
     /**

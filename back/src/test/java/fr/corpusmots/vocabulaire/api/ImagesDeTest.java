@@ -103,6 +103,15 @@ public class ImagesDeTest {
                 .executeUpdate());
     }
 
+    /** Nombre de liens de cet enseignant vers cette Image. */
+    public long nombreLiens(UUID imageId, UUID enseignant) {
+        return QuarkusTransaction.requiringNew().call(() -> ((Number) entityManager.createNativeQuery(
+                "select count(*) from lien_image where image_id = :image and enseignant_id = :enseignant")
+                .setParameter("image", imageId)
+                .setParameter("enseignant", enseignant)
+                .getSingleResult()).longValue());
+    }
+
     /** Efface tous les Sens retenus. */
     public void effacerSensRetenus() {
         QuarkusTransaction.requiringNew().run(

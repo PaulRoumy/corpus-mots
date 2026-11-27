@@ -171,6 +171,8 @@ $typographie-material: (
   --cm-largeur-squelette-texte-courte: 60%;
   --cm-duree-pulsation-squelette: 1.6s;
   --cm-opacite-pulsation-squelette: 0.45;
+  // Vignette grisée d'une Image « image retirée de la banque » (DESIGN.md › badge-etat `retiree`).
+  --cm-opacite-image-retiree: 0.4;
 
   // Repère de Section (forme ● ▲ ■ + couleur + libellé, `.sb` de key-accueil.html), Dialogue « Nouvelle préparation »,
   // Cartes de Préparation de l'accueil et couverture de l'En-tête de Préparation (key-preparation.html, `.hero`).

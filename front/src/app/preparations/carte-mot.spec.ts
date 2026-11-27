@@ -7,6 +7,7 @@ import { MotPreparationDto } from '../api/models/mot-preparation-dto';
 import { CompteCourant } from '../commun/compte-courant';
 import { messageErreur } from '../commun/erreurs/message-erreur';
 import { provideIcones } from '../commun/icones';
+import { LIBELLE_IMAGE_RETIREE } from '../commun/versement/raisons-versement';
 import { CarteMot } from './carte-mot';
 
 describe('CarteMot', () => {
@@ -337,6 +338,36 @@ describe('CarteMot illustrée', () => {
     });
     await stabiliser();
     expect(versee()).toBeUndefined();
+  });
+
+  it('Image retirée de la banque : vignette grisée, badge « image retirée de la banque », clic vers le Panneau de choix', async () => {
+    miniature().flush(new Blob(['png'], { type: 'image/png' }));
+    await stabiliser();
+    const retiree = () => racine.querySelector('.carte-mot__retiree')?.textContent?.trim();
+    expect(retiree()).toBeUndefined();
+    expect(racine.classList).not.toContain('carte-mot--retiree');
+
+    fixture.componentRef.setInput('mot', {
+      ...MOT_ILLUSTRE,
+      image: {
+        ...MOT_ILLUSTRE.image!,
+        proprietaireId: ZOE,
+        etat: 'privee',
+        aRemplacer: 'retiree',
+        reutilisable: false,
+      },
+    });
+    await stabiliser();
+
+    expect(retiree()).toBe(LIBELLE_IMAGE_RETIREE);
+    expect(racine.querySelector('.carte-mot__retiree mat-icon')?.getAttribute('svgicon')).toBe(
+      'alerte',
+    );
+    expect(racine.classList).toContain('carte-mot--retiree');
+    let ouvertures = 0;
+    fixture.componentInstance.choisirImage.subscribe(() => ouvertures++);
+    racine.querySelector<HTMLButtonElement>('button.carte-mot__image')!.click();
+    expect(ouvertures).toBe(1);
   });
 });
 

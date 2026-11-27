@@ -44,6 +44,7 @@ import { classerImage } from '../../api/fn/images-resource/classer-image';
 import { fichierImage } from '../../api/fn/images-resource/fichier-image';
 import { listerSensImage } from '../../api/fn/images-resource/lister-sens-image';
 import { modifierDescriptionImage } from '../../api/fn/images-resource/modifier-description-image';
+import { nePlusVerserImage } from '../../api/fn/images-resource/ne-plus-verser-image';
 import { verserImage } from '../../api/fn/images-resource/verser-image';
 import { creerTheme } from '../../api/fn/themes-resource/creer-theme';
 import { listerThemes } from '../../api/fn/themes-resource/lister-themes';
@@ -60,6 +61,7 @@ import {
 } from '../../preparations/recherche-albums';
 import { Annuaire } from '../annuaire';
 import { BadgeTypeImage } from '../badge-type-image/badge-type-image';
+import { BandeauAnnuler } from '../bandeau-annuler/bandeau-annuler';
 import { BandeauErreur } from '../bandeau-erreur/bandeau-erreur';
 import { ChampThemes, themesParNom } from '../champ-themes/champ-themes';
 import { CompteCourant } from '../compte-courant';
@@ -89,7 +91,13 @@ import {
   SECTIONS,
 } from '../repere-section/repere-section';
 import { Squelette } from '../squelette/squelette';
-import { estRefusVersement, phraseVersementIndisponible } from '../versement/raisons-versement';
+import {
+  CONFIRMATION_NE_PLUS_VERSER,
+  estRefusVersement,
+  LIBELLE_IMAGE_RETIREE,
+  MESSAGE_NE_PLUS_VERSEE,
+  phraseVersementIndisponible,
+} from '../versement/raisons-versement';
 import { UtiliserDansPreparation } from './utiliser-dans-preparation';
 import { VersementImage } from './versement-image';
 
@@ -121,6 +129,8 @@ const CODE_SENS_INVALIDE = 'image.sens_invalide';
 
 /** Refus d'une écriture concurrente (`@Version`) : la Carte a changé ailleurs. */
 const CODE_MODIFIEE_ENTRE_TEMPS = 'ressource.modifiee_entre_temps';
+/** Refus de « Ne plus verser » une Image que des collègues utilisent, sans confirmation. */
+const CODE_VERSEMENT_REUTILISE = 'image.versement.reutilisee';
 
 /** Nombre de suggestions d'Albums demandées. */
 const NOMBRE_SUGGESTIONS = 20;
@@ -304,11 +314,19 @@ function texte(saisie: string): string | null {
  * tous. Pour le propriétaire d'une Image privée (`versabilite` non nulle), la section `VersementImage` propose « Verser
  * dans la banque de l'école », ou le montre indisponible avec la raison exacte ; chaque Carte renvoyée met
  * `versabilite` à jour. Le versement (`POST /images/{id}/versement`) part dans la file des enregistrements ; la Carte
- * renvoyée est passée à `appliquer` puis affichée, le message de partage remplace le bouton et prend le focus, jusqu'au
- * changement d'Image ou à la fermeture. Un refus de versabilité (`400`) ou un conflit (`409`) fait relire la Carte,
+ * renvoyée est passée à `appliquer` puis affichée, le message de partage remplace le bouton et prend le focus, tant
+ * que l'Image reste versée. Un refus de versabilité (`400`) ou un conflit (`409`) fait relire la Carte,
  * même panneau fermé (pour `appliquer`), sans toucher aux saisies non enregistrées ; le refus est annoncé, le conflit
  * affiché dans le Bandeau d'erreur. Toute autre erreur s'affiche dans le Bandeau ; « Réessayer » reprend l'action
  * échouée (versement, relecture ou champ).
+ *
+ * « Ne plus verser » (story 3.5, partie 1) : une Image versée du propriétaire montre le message de partage et le
+ * bouton « Ne plus verser ». Le premier envoi (`DELETE /images/{id}/versement`, dans la file des enregistrements) part
+ * sans confirmation ; réussi, le Bandeau « Annuler » affiche « L'image n'est plus dans la banque. » pendant 8 s, et
+ * « Annuler » la verse à nouveau. Un refus `409 image.versement.reutilisee` ouvre le Dialogue de confirmation : « Ne
+ * plus verser » renvoie la requête avec `confirme=true`, sans Bandeau « Annuler » ensuite ; « Annuler » ne change rien.
+ * La Carte renvoyée passe par `appliquer` et le focus va au bouton « Verser ». Une Image liée que son propriétaire ne
+ * verse plus (`aRemplacer = retiree`) porte le badge « image retirée de la banque ».
  *
  * Dans la Banque seulement (`utilisable`, story 3.4), la section `UtiliserDansPreparation` propose « Utiliser dans
  * une préparation » pour toute Image affichée, au propriétaire comme en lecture seule.
@@ -375,6 +393,12 @@ function texte(saisie: string): string | null {
             <span class="carte-identite__versee">
               <mat-icon svgIcon="coche" aria-hidden="true" />
               versée
+            </span>
+          }
+          @if (carte.aRemplacer === 'retiree') {
+            <span class="carte-identite__retiree">
+              <mat-icon svgIcon="alerte" aria-hidden="true" />
+              {{ libelleRetiree }}
             </span>
           }
           @if (carte.typeImage === 'image_album') {
@@ -711,14 +735,15 @@ function texte(saisie: string): string | null {
               <dd class="carte-identite__proprietaire">{{ proprietaire() }}</dd>
             </dl>
           </div>
-          @if (carte.versabilite || versementReussi()) {
+          @if (carte.versabilite || carte.etat === 'versee') {
             <app-versement-image
               class="carte-identite__versement"
               [versabilite]="carte.versabilite ?? null"
               [licence]="carte.licence ?? null"
               [enCours]="versementEnCours()"
-              [versee]="versementReussi()"
+              [versee]="carte.etat === 'versee'"
               (verser)="verser()"
+              (nePlusVerser)="nePlusVerser()"
             />
           }
         } @else {
@@ -840,6 +865,7 @@ export class CarteIdentite {
   private readonly annuaire = inject(Annuaire);
   private readonly compteCourant = inject(CompteCourant);
   private readonly confirmation = inject(DialogueConfirmation);
+  private readonly bandeauAnnuler = inject(BandeauAnnuler);
   private readonly injecteur = inject(Injector);
   private readonly annonceur = inject(LiveAnnouncer);
 
@@ -852,6 +878,7 @@ export class CarteIdentite {
   protected readonly messageAucunAlbum = MESSAGE_AUCUN_ALBUM;
   protected readonly messageNonEnregistre = MESSAGE_NON_ENREGISTRE;
   protected readonly messageSensFige = MESSAGE_SENS_FIGE;
+  protected readonly libelleRetiree = LIBELLE_IMAGE_RETIREE;
 
   /** Vue du propriétaire : type, Album d'origine, source, licence et auteur modifiables. */
   protected readonly typeImage = new FormControl<TypeImage>('inconnu', { nonNullable: true });
@@ -918,10 +945,8 @@ export class CarteIdentite {
   protected readonly carte = signal<CarteIdentiteImageDto | null>(null);
   protected readonly erreur = signal<ErreurAffichee | null>(null);
 
-  /** Vrai pendant l'envoi du versement de l'Image affichée. */
+  /** Vrai pendant l'envoi du versement de l'Image affichée, ou de « Ne plus verser ». */
   protected readonly versementEnCours = signal(false);
-  /** Vrai après le versement réussi de l'Image affichée : le message de partage reste jusqu'au changement d'Image. */
-  protected readonly versementReussi = signal(false);
   private readonly versement = viewChild(VersementImage);
 
   private readonly panneau = viewChild.required<ElementRef<HTMLElement>>('panneau');
@@ -1078,7 +1103,6 @@ export class CarteIdentite {
     this.carte.set(null);
     this.erreur.set(null);
     this.versementEnCours.set(false);
-    this.versementReussi.set(false);
     try {
       const carte = await this.api.invoke(carteIdentiteImage, { id });
       if (numero === this.derniereLecture) {
@@ -1472,12 +1496,135 @@ export class CarteIdentite {
     }
     this.carte.set(maj);
     this.versementEnCours.set(false);
-    this.versementReussi.set(true);
     if (this.erreurEnregistrement()?.reprendre !== undefined) {
       this.erreurEnregistrement.set(null);
     }
     // Le bouton disparaît : le focus passe au message de partage.
     afterNextRender(() => this.versement()?.focusMessage(), { injector: this.injecteur });
+  }
+
+  /**
+   * « Ne plus verser » : l'envoi part dans la file des enregistrements, sans confirmation d'abord ; `confirme` est
+   * vrai pour « Réessayer » après l'échec d'un envoi déjà confirmé.
+   */
+  protected nePlusVerser(confirme = false): void {
+    const carte = this.carte();
+    if (
+      carte === null ||
+      !this.modifiable() ||
+      carte.etat !== 'versee' ||
+      this.versementEnCours()
+    ) {
+      return;
+    }
+    const numero = this.derniereLecture;
+    this.versementEnCours.set(true);
+    this.fileEnregistrements = this.fileEnregistrements
+      .then(() => this.envoyerNePlusVerser(carte.id, numero, confirme))
+      .catch(() => undefined)
+      .finally(() => {
+        if (numero === this.derniereLecture) {
+          this.versementEnCours.set(false);
+        }
+      });
+  }
+
+  /**
+   * Envoie « Ne plus verser » ; sans confirmation, un refus `409 image.versement.reutilisee` demande la confirmation
+   * puis renvoie avec `confirme=true`. Réussi sans confirmation, le Bandeau « Annuler » propose de verser à nouveau.
+   */
+  private async envoyerNePlusVerser(id: string, numero: number, confirme: boolean): Promise<void> {
+    const actuelle = this.carte();
+    if (numero !== this.derniereLecture || actuelle?.id !== id || actuelle.etat !== 'versee') {
+      return;
+    }
+    let maj: CarteIdentiteImageDto;
+    try {
+      maj = await this.api.invoke(nePlusVerserImage, confirme ? { id, confirme } : { id });
+    } catch (erreur) {
+      if (confirme || codeErreur(erreur) !== CODE_VERSEMENT_REUTILISE) {
+        if (numero === this.derniereLecture) {
+          this.afficherErreur(erreur, () => this.nePlusVerser(confirme));
+        }
+      } else if (
+        numero === this.derniereLecture &&
+        (await this.confirmation.confirmer(CONFIRMATION_NE_PLUS_VERSER))
+      ) {
+        await this.envoyerNePlusVerser(id, numero, true);
+      }
+      return;
+    }
+    // La page reçoit la Carte même si le panneau a été fermé ou remplacé entre-temps.
+    this.transmettre(maj);
+    if (!confirme) {
+      // Pas de DestroyRef : fermer le panneau laisse le Bandeau, dont « Annuler » passe encore par `appliquer`.
+      this.bandeauAnnuler.afficher(MESSAGE_NE_PLUS_VERSEE, () =>
+        this.annulerNePlusVerser(id, numero),
+      );
+    }
+    if (numero !== this.derniereLecture) {
+      return;
+    }
+    this.carte.set(maj);
+    this.versementEnCours.set(false);
+    if (this.erreurEnregistrement()?.reprendre !== undefined) {
+      this.erreurEnregistrement.set(null);
+    }
+    // Le bouton « Ne plus verser » disparaît : le focus passe au bouton « Verser ».
+    afterNextRender(
+      () => {
+        this.versement()?.focusBouton();
+        if (!this.panneau().nativeElement.contains(document.activeElement)) {
+          this.focus();
+        }
+      },
+      { injector: this.injecteur },
+    );
+  }
+
+  /**
+   * « Annuler » du Bandeau après « Ne plus verser » : verse l'Image à nouveau, dans la file des enregistrements, comme
+   * « Verser ». La Carte renvoyée passe par `appliquer` ; si le panneau montre encore cette Image (lecture `numero`),
+   * elle la remplace et le message de partage prend le focus. Un échec suit `echecVersement` ; panneau fermé ou sur
+   * une autre Image, il est en outre annoncé aux lecteurs d'écran.
+   */
+  private annulerNePlusVerser(id: string, numero: number): void {
+    const affichee = () => numero === this.derniereLecture && this.carte()?.id === id;
+    if (affichee()) {
+      this.versementEnCours.set(true);
+    }
+    this.fileEnregistrements = this.fileEnregistrements
+      .then(async () => {
+        let maj: CarteIdentiteImageDto;
+        try {
+          maj = await this.api.invoke(verserImage, { id });
+        } catch (erreur) {
+          if (!affichee()) {
+            const code = codeErreur(erreur);
+            void this.annonceur.announce(
+              estRefusVersement(code)
+                ? phraseVersementIndisponible(code, null)
+                : messageErreur(erreur),
+              'assertive',
+            );
+          }
+          await this.echecVersement(erreur, id, numero);
+          return;
+        }
+        this.transmettre(maj);
+        if (!affichee()) {
+          return;
+        }
+        this.carte.set(maj);
+        this.versementEnCours.set(false);
+        afterNextRender(() => this.versement()?.focusMessage(), { injector: this.injecteur });
+      })
+      .catch(() => undefined)
+      .finally(() => {
+        if (affichee()) {
+          this.versementEnCours.set(false);
+        }
+      });
   }
 
   /**

@@ -97,8 +97,10 @@
   }
 }
 
-// Repère « versée » (DESIGN.md › badge-etat `versee`) : coche et libellé, jamais la couleur seule.
-.carte-identite__versee {
+// Repères « versée » et « image retirée de la banque » (DESIGN.md › badge-etat `versee`, `retiree`) : icône et libellé,
+// jamais la couleur seule.
+.carte-identite__versee,
+.carte-identite__retiree {
   display: inline-flex;
   align-items: center;
   gap: var(--cm-espace-1);
@@ -115,6 +117,11 @@
     width: var(--cm-taille-icone-badge);
     height: var(--cm-taille-icone-badge);
   }
+}
+
+.carte-identite__retiree {
+  background: var(--cm-etat-retiree-fond);
+  color: var(--cm-etat-retiree-texte);
 }
 
 .carte-identite__champs {

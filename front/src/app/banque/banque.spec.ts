@@ -2280,7 +2280,7 @@ describe('Banque', () => {
 
       const panneau = racine.querySelector('app-carte-identite aside')!;
       expect(texte(panneau)).toContain('versée');
-      expect(panneau.querySelector('app-versement-image button')).toBeNull();
+      expect(panneau.querySelector('app-versement-image .versement__bouton')).toBeNull();
       expect(texte(vignettes()[0].querySelector('.vignette__meta'))).toContain('versée');
     });
 

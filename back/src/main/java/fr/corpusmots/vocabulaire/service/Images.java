@@ -646,7 +646,8 @@ public class Images {
 
     /**
      * Image vue par l'enseignant {@code enseignantId} : {@code reutilisable} vient de {@link VisibiliteImages},
-     * {@code versabilite} de {@link Versabilite#de}, pour le propriétaire d'une Image {@code privee} seulement.
+     * {@code versabilite} de {@link Versabilite#de}, pour le propriétaire d'une Image {@code privee} seulement ;
+     * {@code aRemplacer} de {@link VisibiliteImages#aRemplacer}.
      */
     static ImageVue vue(Image image, UUID enseignantId, VisibiliteImages visibilite) {
         return vue(image.id(), image.proprietaireId(), image.etat(), image.typeImage(), image.licence(),
@@ -664,7 +665,8 @@ public class Images {
         Versabilite versabilite = proprietaire && etat == EtatImage.PRIVEE
                 ? versabilite(type, licence, source, retraitAdmin, id)
                 : null;
-        return new ImageVue(id, proprietaireId, etat, null, visibilite.proposable(proprietaireId, etat, enseignantId),
+        return new ImageVue(id, proprietaireId, etat, visibilite.aRemplacer(proprietaireId, etat, enseignantId),
+                visibilite.proposable(proprietaireId, etat, enseignantId),
                 type, aCompleter, versabilite);
     }
 
