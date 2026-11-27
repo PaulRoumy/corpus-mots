@@ -106,6 +106,32 @@ class VersementImagesResourceTest {
         assertEquals("versee", images.etat(photo));
     }
 
+    /**
+     * Un Sens « à compléter » ne bloque pas le versement d'une Image versable par ailleurs ; la Carte d'identité le
+     * garde mis en avant (story 3.7).
+     */
+    @Test
+    @TestSecurity(user = CLAIRE)
+    @OidcSecurity(claims = @Claim(key = "sub", value = CLAIRE))
+    void unSensACompleterNeBloquePasLeVersement() {
+        MotVue toupie = QuarkusTransaction.requiringNew().call(() -> lexique.obtenirOuCreerMot("toupie"));
+        UUID aCompleter = QuarkusTransaction.requiringNew()
+                .call(() -> lexique.obtenirOuCreerSens(toupie.id(), "à compléter", null)).id();
+        UUID image = images.image(claire, aCompleter, "privee", "image_libre", "cc0_domaine_public", "Wikimedia",
+                null, null);
+
+        verser(image).statusCode(200)
+                .body("etat", equalTo("versee"))
+                .body("versabilite", nullValue());
+        assertEquals("versee", images.etat(image));
+        given().when().get("/api/images/" + image)
+                .then()
+                .statusCode(200)
+                .body("etat", equalTo("versee"))
+                .body("sens.libelle", equalTo("à compléter"))
+                .body("sens.aCompleter", equalTo(true));
+    }
+
     @Test
     @TestSecurity(user = CLAIRE)
     @OidcSecurity(claims = @Claim(key = "sub", value = CLAIRE))

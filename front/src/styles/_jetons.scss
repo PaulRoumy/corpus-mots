@@ -186,7 +186,8 @@ $typographie-material: (
   --cm-hauteur-couverture-entete: 90px;
   // Champs de l'En-tête de Préparation : Module, Thème par défaut, Temps passé (story 2.2)
   --cm-largeur-champ-entete: 220px;
-  --cm-largeur-champ-temps: 200px;
+  // Assez large pour « Temps passé (facultatif) » en entier, à côté de l'icône horloge (écart E-3, story 3.7).
+  --cm-largeur-champ-temps: 264px;
   // Largeur minimale de la saisie d'un Champ à étiquettes des Thèmes, à côté des puces (story 2.2, partie 3).
   --cm-largeur-saisie-etiquette: 120px;
   // Carte « à illustrer » (key-preparation.html › `.todo`) : bordure tirets, vignette vide, badge d'état (`.st`).
