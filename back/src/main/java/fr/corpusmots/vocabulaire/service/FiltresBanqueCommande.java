@@ -11,7 +11,7 @@ import java.util.UUID;
  *        initial) ; vide ou réduite à un article seul, elle ne filtre pas
  * @param sensId Sens de l'Image
  * @param section Section cochée ; sous Mes mots, aussi Section d'une Préparation de l'enseignant qui lie l'Image
- * @param albumId Album d'origine (image d'album seulement)
+ * @param albumId Album d'origine d'une image d'album, ou Album d'une Préparation de l'enseignant qui lie l'Image
  * @param moduleId Module de l'Image
  * @param themeId Thème parmi ceux de l'Image
  * @param categorie catégorie grammaticale du Sens de l'Image

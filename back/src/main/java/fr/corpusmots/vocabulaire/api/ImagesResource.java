@@ -157,7 +157,8 @@ public class ImagesResource {
                     + " Préparations qui utilise l'Image",
                     schema = @Schema(type = SchemaType.STRING, enumeration = { "ps", "ms", "gs" }))
             @QueryParam("section") String section,
-            @Parameter(description = "Album d'origine de l'Image (image d'album)",
+            @Parameter(description = "Album d'origine de l'Image (image d'album) ou Album d'une Préparation de"
+                    + " l'enseignant qui lie l'Image",
                     schema = @Schema(type = SchemaType.STRING, format = "uuid"))
             @QueryParam("albumId") String albumId,
             @Parameter(description = "Module de l'Image", schema = @Schema(type = SchemaType.STRING, format = "uuid"))

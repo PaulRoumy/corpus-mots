@@ -347,6 +347,66 @@ class BanqueImagesResourceTest {
         assertEquals(Set.of(lieeParZoe), identifiants(filtrer("mes-mots", Map.of("section", "ms")).statusCode(200)));
     }
 
+    /**
+     * Le filtre Album retient aussi, sous toute provenance, une Image de n'importe quel type liée dans une de mes
+     * Préparations de cet Album (story 3.7), en plus de l'image d'album dont c'est l'album d'origine.
+     */
+    @ParameterizedTest
+    @ValueSource(strings = { "mes-mots", "banque", "tout" })
+    void leFiltreAlbumRetientLesImagesLieesDansUneDeMesPreparationsDeLAlbum(String provenance) {
+        UUID claire = UUID.fromString(CLAIRE);
+        UUID sens = sens("ornithorynque", "animal", "nom");
+        UUID dAlbum = images.image(claire, sens, "versee", "image_album", "usage_pedagogique_album", null, null,
+                ALBUM_ORIGINE);
+        UUID libreLiee = images.image(claire, sens, "versee", new byte[] { 1 }, new byte[] { 2 });
+        images.lien(libreLiee, claire, ALBUM_ORIGINE);
+        // Deux liens vers la même Image dans des Préparations de l'Album : l'Image n'est comptée qu'une fois.
+        images.lien(libreLiee, claire, ALBUM_ORIGINE, "gs");
+        UUID libreLieeAilleurs = images.image(claire, sens, "versee", new byte[] { 1 }, new byte[] { 2 });
+        images.lien(libreLieeAilleurs, claire, ALBUM);
+        images.image(claire, sens, "versee", new byte[] { 1 }, new byte[] { 2 });
+
+        assertEquals(Set.of(dAlbum, libreLiee), identifiants(filtrer(provenance,
+                Map.of("albumId", ALBUM_ORIGINE.toString())).statusCode(200).body("total", equalTo(2))));
+    }
+
+    /** Le lien d'un collègue dans une Préparation de l'Album ne retient jamais l'Image (comme pour la Section). */
+    @ParameterizedTest
+    @ValueSource(strings = { "mes-mots", "banque", "tout" })
+    void leLienDUnCollegueNeRetientPasLImagePourLAlbum(String provenance) {
+        UUID claire = UUID.fromString(CLAIRE);
+        UUID sens = sens("ornithorynque", "animal", "nom");
+        UUID lieeParZoe = images.image(claire, sens, "versee", new byte[] { 1 }, new byte[] { 2 });
+        images.lien(lieeParZoe, UUID.fromString(ZOE), ALBUM_ORIGINE);
+
+        filtrer(provenance, Map.of("albumId", ALBUM_ORIGINE.toString())).statusCode(200).body("total", equalTo(0));
+        // Sans filtre, l'Image est bien montrée par cette provenance.
+        assertTrue(identifiants(lister(provenance).statusCode(200)).contains(lieeParZoe));
+    }
+
+    /**
+     * Mon lien vers l'Image privée d'un collègue ne la montre jamais, même filtrée par Album (AD-2) ; mon lien
+     * vers l'Image versée d'un collègue la retient là où la provenance la montre (Banque de l'école, Tout), quelle
+     * que soit l'origine de l'Image.
+     */
+    @ParameterizedTest
+    @ValueSource(strings = { "mes-mots", "banque", "tout" })
+    void leFiltreAlbumNeMontreJamaisUnePriveeDunCollegue(String provenance) {
+        UUID claire = UUID.fromString(CLAIRE);
+        UUID zoe = UUID.fromString(ZOE);
+        UUID sens = sens("ornithorynque", "animal", "nom");
+        UUID colleguePrivee = images.image(zoe, sens, "privee", new byte[] { 1 }, new byte[] { 2 });
+        images.lien(colleguePrivee, claire, ALBUM_ORIGINE);
+        UUID collegueVersee = images.image(zoe, sens, "versee", new byte[] { 1 }, new byte[] { 2 });
+        images.lien(collegueVersee, claire, ALBUM_ORIGINE);
+        UUID mienne = images.image(claire, sens, "versee", new byte[] { 1 }, new byte[] { 2 });
+        images.lien(mienne, claire, ALBUM_ORIGINE);
+
+        Set<UUID> attendues = "mes-mots".equals(provenance) ? Set.of(mienne) : Set.of(mienne, collegueVersee);
+        assertEquals(attendues, identifiants(filtrer(provenance, Map.of("albumId", ALBUM_ORIGINE.toString()))
+                .statusCode(200)));
+    }
+
     /** Le filtre propriétaire ne montre que ce que la provenance montre : les seules Images versées d'un collègue. */
     @Test
     void leFiltreProprietaireNeMontreQueSesImagesVisibles() {
@@ -365,7 +425,10 @@ class BanqueImagesResourceTest {
         filtrer("mes-mots", Map.of("proprietaireId", ZOE)).statusCode(200).body("total", equalTo(0));
     }
 
-    /** Chaque autre filtre (Sens, Album d'origine, Module, Thème, type, catégorie) ne retient que ses Images. */
+    /**
+     * Chaque autre filtre (Sens, Album d'origine sans lien, Module, Thème, type, catégorie) ne retient que ses
+     * Images.
+     */
     @Test
     void chaqueFiltreNeRetientQueSesImages() {
         UUID claire = UUID.fromString(CLAIRE);

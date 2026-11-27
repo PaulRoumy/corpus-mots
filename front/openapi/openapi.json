@@ -1946,7 +1946,7 @@
         "summary" : "Images de la Banque pour une provenance : Mes mots (par défaut), Banque de l'école ou Tout ; par forme du Mot, puis Sens, puis les plus récentes d'abord",
         "operationId" : "listerImagesBanque",
         "parameters" : [ {
-          "description" : "Album d'origine de l'Image (image d'album)",
+          "description" : "Album d'origine de l'Image (image d'album) ou Album d'une Préparation de l'enseignant qui lie l'Image",
           "schema" : {
             "format" : "uuid",
             "type" : "string"

@@ -1885,7 +1885,8 @@ paths:
         \ d'abord"
       operationId: listerImagesBanque
       parameters:
-      - description: Album d'origine de l'Image (image d'album)
+      - description: Album d'origine de l'Image (image d'album) ou Album d'une Préparation
+          de l'enseignant qui lie l'Image
         schema:
           format: uuid
           type: string

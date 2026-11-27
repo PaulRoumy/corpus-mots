@@ -561,8 +561,9 @@ public class Images {
      *       pas.</li>
      *   <li>Section : cochée sur l'Image ; sous Mes mots, ou celle d'un lien de l'enseignant vers l'Image (Préparation
      *       de cette Section). Le lien d'un collègue ne compte jamais.</li>
-     *   <li>Album : Album d'origine d'une image d'album. Module, Thème, type, propriétaire, Sens et catégorie du Sens :
-     *       égalité.</li>
+     *   <li>Album : Album d'origine d'une image d'album, ou celui d'un lien de l'enseignant vers l'Image (Préparation
+     *       de cet Album), sous toute provenance (story 3.7). Le lien d'un collègue ne compte jamais.</li>
+     *   <li>Module, Thème, type, propriétaire, Sens et catégorie du Sens : égalité.</li>
      * </ul>
      */
     static ConditionFiltres conditionFiltres(ProvenanceImages provenance, FiltresBanqueCommande filtres,
@@ -591,7 +592,12 @@ public class Images {
             parametres.put("filtreSection", filtres.section().valeur());
         }
         if (filtres.albumId() != null) {
-            conditions.add("(i.album_id = :filtreAlbum and i.type_image = :filtreTypeAlbum)");
+            // Album d'origine d'une image d'album, ou lien de l'enseignant dans une Préparation de cet Album, quelle
+            // que soit la provenance (story 3.7) ; le lien d'un collègue ne compte jamais.
+            conditions.add("((i.album_id = :filtreAlbum and i.type_image = :filtreTypeAlbum)"
+                    + " or exists (select 1 from lien_image fla where fla.image_id = i.id"
+                    + " and fla.enseignant_id = :filtreEnseignant and fla.album_id = :filtreAlbum))");
+            parametres.put("filtreEnseignant", enseignantId);
             parametres.put("filtreAlbum", filtres.albumId());
             parametres.put("filtreTypeAlbum", TypeImage.IMAGE_ALBUM.valeur());
         }

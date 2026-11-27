@@ -269,3 +269,12 @@
 - source_spec: `docs/realisation/spec-2-11-2-section-heritee.md`
   summary: Une Image créée depuis une Préparation n'hérite ni du Module ni du Thème de la Préparation (ou du Mot), alors que le §4.4 du PRD veut une Carte d'identité « remplie automatiquement à partir du contexte (Mot, Sens, Album, Module, Thème, Section de la Préparation) » ; seule la Section l'est depuis la story 2.11, partie 2.
   evidence: Revue de la story 2.11 partie 2 (BH-1) ; `Images.televerser` classe l'Image neuve avec Module nul et Thèmes vides, comme avant la story.
+- source_spec: none
+  summary: Story 3.7 partie 2 — Bandeau « Annuler » sans minuterie pour un geste en lot (« Retirer de la Préparation » sur plusieurs Mots) : il reste jusqu'au geste suivant qui modifie des données, à un autre bandeau ou à sa fermeture, et se ferme sans annuler quand l'enseignant quitte la page ; un geste unitaire garde 8 s, décompte suspendu au survol et au focus (UX-DR-13).
+  evidence: Découpage de la story 3.7 en trois parties (choix de Paul, 2026-11-27) ; livrable front indépendant du filtre Album.
+- source_spec: none
+  summary: Story 3.7 partie 3 — Verser une Image versable dont le Sens est « à compléter » (versée, Sens toujours mis en avant dans la Carte d'identité, test dédié) et finitions de la Banque et de la Carte d'identité (libellé « Temps passé (facultatif) » lisible en entier, pas de fond de focus résiduel sur une puce de provenance après un clic, cartes avec et sans badge « versée » alignées).
+  evidence: Découpage de la story 3.7 en trois parties (choix de Paul, 2026-11-27) ; petits livrables indépendants du filtre Album, regroupés.
+- source_spec: `docs/realisation/spec-3-7-1-filtre-album-par-usage.md`
+  summary: Dans la Banque, Album + Module ne retient que les Images dont le Module est celui du filtre (`i.module_id`) : une Image retenue par l'Album grâce à mon lien (pictogramme, photo, souvent sans Module) disparaît dès qu'on choisit un Module de cet Album.
+  evidence: Revue de la story 3.7 partie 1 (BH-1) ; la barre de filtres n'offre le Module qu'après l'Album (`barre-filtres.ts`), le lien `lien_image` n'a pas de colonne Module, et une Image créée depuis une Préparation n'hérite pas du Module (entrée de la story 2.11 partie 2). Décider si le Module d'une Préparation doit compter via le lien.
