@@ -3,7 +3,9 @@ import { DestroyRef, ErrorHandler } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { MATERIAL_ANIMATIONS } from '@angular/material/core';
 import { provideRouter, Router } from '@angular/router';
+import { provideIcones } from '../icones';
 import { BandeauAnnuler, DUREE_BANDEAU_ANNULER_MS } from './bandeau-annuler';
+import { ecrituresApi } from './geste-suivant';
 
 describe('BandeauAnnuler', () => {
   let bandeau: BandeauAnnuler;
@@ -19,6 +21,7 @@ describe('BandeauAnnuler', () => {
       rethrowApplicationErrors: false,
       providers: [
         { provide: MATERIAL_ANIMATIONS, useValue: { animationsDisabled: true } },
+        provideIcones(),
         provideRouter([
           { path: 'preparations', children: [] },
           { path: 'preparations/:id', children: [] },
@@ -161,6 +164,77 @@ describe('BandeauAnnuler', () => {
     expect(annulerSecond).toHaveBeenCalledTimes(1);
     expect(annulerPremier).not.toHaveBeenCalled();
     expect(bandeaux()).toHaveLength(0);
+  });
+
+  describe('geste en lot (story 3.7)', () => {
+    function afficherLot(message: string, annuler: () => void) {
+      bandeau.afficher(message, annuler, undefined, { lot: true });
+      TestBed.tick();
+    }
+    const boutonFermer = (element: HTMLElement) =>
+      element.querySelector<HTMLButtonElement>('button[aria-label="Fermer"]');
+
+    it('aucune minuterie : toujours affiché après 10 min, « Annuler » fonctionne', async () => {
+      const annuler = vi.fn();
+      afficherLot('3 mots retirés.', annuler);
+      await avancer(10 * 60 * 1000);
+
+      expect(bandeaux()).toHaveLength(1);
+      boutonAnnuler(bandeaux()[0]).click();
+      await avancer(500);
+      expect(annuler).toHaveBeenCalledTimes(1);
+      expect(bandeaux()).toHaveLength(0);
+    });
+
+    it('« Fermer » : bandeau fermé sans annuler ; absent d’un geste unitaire', async () => {
+      afficher('Mot retiré.', vi.fn());
+      expect(boutonFermer(bandeaux()[0])).toBeNull();
+
+      const annuler = vi.fn();
+      afficherLot('3 mots retirés.', annuler);
+      await avancer(500);
+      boutonFermer(bandeaux()[0])!.click();
+      await avancer(500);
+      expect(bandeaux()).toHaveLength(0);
+      expect(annuler).not.toHaveBeenCalled();
+    });
+
+    it('geste suivant (écriture vers l’API signalée) : le bandeau de lot se ferme sans annuler', async () => {
+      const annuler = vi.fn();
+      afficherLot('3 mots retirés.', annuler);
+      ecrituresApi.next();
+      await avancer(500);
+      expect(bandeaux()).toHaveLength(0);
+      expect(annuler).not.toHaveBeenCalled();
+    });
+
+    it('geste suivant (fermerLot) : un bandeau unitaire garde ses 8 s', async () => {
+      afficher('Mot retiré.', vi.fn());
+      bandeau.fermerLot();
+      await avancer(5000);
+      expect(bandeaux()).toHaveLength(1);
+      await avancer(3000);
+      expect(bandeaux()).toHaveLength(0);
+    });
+
+    it('autre bandeau : le bandeau de lot disparaît sans annuler', async () => {
+      const annuler = vi.fn();
+      afficherLot('3 mots retirés.', annuler);
+      afficher('Mot retiré.', vi.fn());
+      await avancer(500);
+      expect(bandeaux()).toHaveLength(1);
+      expect(bandeaux()[0].textContent).toContain('Mot retiré.');
+      expect(annuler).not.toHaveBeenCalled();
+    });
+
+    it('navigation : le bandeau de lot se ferme sans annuler', async () => {
+      const annuler = vi.fn();
+      afficherLot('3 mots retirés.', annuler);
+      await TestBed.inject(Router).navigateByUrl('/preparations');
+      await avancer(500);
+      expect(bandeaux()).toHaveLength(0);
+      expect(annuler).not.toHaveBeenCalled();
+    });
   });
 
   describe('navigation', () => {

@@ -5430,10 +5430,10 @@ describe('Preparation (En-tête)', () => {
       };
     }
 
-    let afficher: ReturnType<typeof vi.fn<(message: string, annuler: () => unknown) => void>>;
+    let afficher: ReturnType<typeof vi.fn<BandeauAnnuler['afficher']>>;
 
     beforeEach(() => {
-      afficher = vi.fn<(message: string, annuler: () => unknown) => void>();
+      afficher = vi.fn<BandeauAnnuler['afficher']>();
       vi.spyOn(TestBed.inject(BandeauAnnuler), 'afficher').mockImplementation(afficher);
       TestBed.inject(CompteCourant).mettreAJour({
         id: MOI,
@@ -5673,6 +5673,8 @@ describe('Preparation (En-tête)', () => {
 
       expect(afficher).toHaveBeenCalledTimes(1);
       expect(afficher.mock.lastCall![0]).toBe('3 mots retirés de la préparation.');
+      // Plus d'un Mot retiré : geste en lot, sans minuterie (story 3.7).
+      expect(afficher.mock.lastCall![3]).toEqual({ lot: true });
       expect(cartes()).toEqual(['renard']);
     });
 
@@ -5758,6 +5760,15 @@ describe('Preparation (En-tête)', () => {
       await stabiliser();
       await repondreRetablissements([GALETTE]);
       expect(texte('p[aria-live="polite"]')).toBe('« galette » rétabli.');
+    });
+
+    it('Retirer en lot un seul Mot : Bandeau unitaire de 8 s (story 3.7)', async () => {
+      await ouvrirAvec([GALETTE, CITROUILLE]);
+      await retirerEnLot(['galette']);
+      await repondreRetraits([GALETTE], [GALETTE.id]);
+
+      expect(afficher).toHaveBeenCalledTimes(1);
+      expect(afficher.mock.lastCall![3]).toEqual({ lot: false });
     });
 
     it('retrait en lot puis navigation : le Bandeau se ferme, rien n’est rétabli', async () => {

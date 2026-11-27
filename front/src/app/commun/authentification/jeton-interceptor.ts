@@ -12,7 +12,8 @@ export const jetonInterceptor: HttpInterceptorFn = (requete, suivant) => {
     return suivant(requete);
   }
   const authentification = inject(Authentification);
-  const avecJeton = (jeton: string) => requete.clone({ setHeaders: { Authorization: `Bearer ${jeton}` } });
+  const avecJeton = (jeton: string) =>
+    requete.clone({ setHeaders: { Authorization: `Bearer ${jeton}` } });
 
   return from(authentification.jeton()).pipe(
     switchMap((jeton) => suivant(avecJeton(jeton))),
@@ -20,12 +21,18 @@ export const jetonInterceptor: HttpInterceptorFn = (requete, suivant) => {
       if (!(erreur instanceof HttpErrorResponse) || erreur.status !== 401) {
         return throwError(() => erreur);
       }
-      return from(authentification.jetonRenouvele()).pipe(switchMap((jeton) => suivant(avecJeton(jeton))));
+      return from(authentification.jetonRenouvele()).pipe(
+        switchMap((jeton) => suivant(avecJeton(jeton))),
+      );
     }),
   );
 };
 
-function estUnAppelApi(requete: HttpRequest<unknown>): boolean {
+/** Requête vers l'API de l'application (même origine, chemin /api). */
+export function estUnAppelApi(requete: HttpRequest<unknown>): boolean {
   const chemin = new URL(requete.url, window.location.origin);
-  return chemin.origin === window.location.origin && (chemin.pathname === '/api' || chemin.pathname.startsWith('/api/'));
+  return (
+    chemin.origin === window.location.origin &&
+    (chemin.pathname === '/api' || chemin.pathname.startsWith('/api/'))
+  );
 }

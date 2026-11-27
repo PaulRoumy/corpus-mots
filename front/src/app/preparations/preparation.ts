@@ -1588,6 +1588,8 @@ export class Preparation {
           ? void this.retablirMot(preparationId, retires[0], numero)
           : void this.retablirLot(preparationId, retires, numero),
       this.destruction,
+      // Plus d'un Mot retiré : geste en lot, sans minuterie (UX-DR-13, story 3.7).
+      { lot: retires.length > 1 },
     );
   }
 

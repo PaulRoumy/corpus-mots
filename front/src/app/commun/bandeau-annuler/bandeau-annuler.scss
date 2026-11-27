@@ -9,3 +9,10 @@
 .bandeau-annuler__message {
   font: var(--cm-typo-body);
 }
+
+// « Fermer » d'un bandeau de geste en lot : même couleur que le texte, sur le fond encre ; survol et focus
+// dans cette couleur claire, pour rester visibles sur le fond sombre.
+.bandeau-annuler__fermer {
+  color: var(--mat-sys-background);
+  --mat-icon-button-state-layer-color: var(--mat-sys-background);
+}
